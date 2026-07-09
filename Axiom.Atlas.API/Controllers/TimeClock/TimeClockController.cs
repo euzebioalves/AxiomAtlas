@@ -496,13 +496,14 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
                     unjustifiedAbsences))
                 .ToList();
 
+            var accountedDays = days.Where(x => !x.IsFuture).ToList();
             var summary = new TimeClockSummaryDto
             {
-                WorkedMinutes = days.Sum(x => x.WorkedMinutes),
-                ExpectedMinutes = days.Sum(x => x.ExpectedMinutes),
-                BalanceMinutes = days.Sum(x => x.BalanceMinutes),
-                AbsenceDays = days.Count(x => x.Absences.Count > 0),
-                UnjustifiedAbsenceDays = days.Count(x => x.UnjustifiedAbsence != null)
+                WorkedMinutes = accountedDays.Sum(x => x.WorkedMinutes),
+                ExpectedMinutes = accountedDays.Sum(x => x.ExpectedMinutes),
+                BalanceMinutes = accountedDays.Sum(x => x.BalanceMinutes),
+                AbsenceDays = accountedDays.Count(x => x.Absences.Count > 0),
+                UnjustifiedAbsenceDays = accountedDays.Count(x => x.UnjustifiedAbsence != null)
             };
 
             summary.WorkedLabel = FormatMinutes(summary.WorkedMinutes);
@@ -563,6 +564,7 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
             var unjustified = monthUnjustifiedAbsences
                 .FirstOrDefault(x => x.AbsenceDate.Date == date.Date);
 
+            var isFuture = date.Date > DateTime.UtcNow.Date;
             var expectedBaseMinutes = IsWeekend(date)
                 ? 0
                 : Math.Max(0, CalculateMinutesBetween(schedule.EntryTime, schedule.ExitTime) - schedule.LunchIntervalMinutes);
@@ -592,6 +594,12 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
                 balanceMinutes = Math.Min(balanceMinutes, -penalty);
             }
 
+            if (isFuture)
+            {
+                expectedMinutes = 0;
+                balanceMinutes = 0;
+            }
+
             balanceMinutes = ApplyTolerance(balanceMinutes, toleranceMinutes);
 
             var nextPunchType = GetNextPunchType(dayPunches);
@@ -600,6 +608,7 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
             {
                 Date = FormatDate(date),
                 Day = date.Day,
+                IsFuture = isFuture,
                 IsWeekend = IsWeekend(date),
                 IsHoliday = false,
                 HolidayName = null,

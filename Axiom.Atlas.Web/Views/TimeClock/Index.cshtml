@@ -2,77 +2,46 @@
     ViewData["Title"] = "Ponto Eletrônico";
 }
 
-<style>
-    .time-clock-hero {
-        background:
-            radial-gradient(circle at 18% 20%, rgba(80, 151, 255, .18), transparent 28%),
-            radial-gradient(circle at 92% 15%, rgba(24, 196, 138, .16), transparent 24%),
-            linear-gradient(135deg, rgba(20, 24, 36, .98), rgba(16, 18, 27, .98));
-        border: 1px solid rgba(255, 255, 255, .08);
-    }
-
-    .clock-calendar {
-        display: grid;
-        grid-template-columns: repeat(7, minmax(0, 1fr));
-        gap: .85rem;
-    }
-
-    .clock-weekday {
-        color: var(--bs-gray-600);
-        font-size: .8rem;
-        font-weight: 700;
-        letter-spacing: .04em;
-        text-transform: uppercase;
-    }
-
-    .clock-day {
-        min-height: 190px;
-        border: 1px solid var(--bs-border-color);
-        border-radius: 1rem;
-        background: var(--bs-card-bg);
+@section Styles {
+    <link href="~/metronic8/css/fullcalendar.bundle.css" rel="stylesheet" type="text/css" />
+    <style>
+    #clockCalendar .fc-daygrid-day {
         cursor: pointer;
-        transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease;
+        transition: background-color .18s ease;
     }
 
-    .clock-day:hover {
-        border-color: var(--bs-primary);
-        box-shadow: 0 12px 30px rgba(40, 98, 255, .12);
-        transform: translateY(-2px);
+    #clockCalendar .fc-daygrid-day:hover {
+        background-color: var(--bs-primary-light);
     }
 
-    .clock-day.weekend {
-        background: linear-gradient(135deg, rgba(248, 40, 90, .08), rgba(255, 255, 255, .02));
+    #clockCalendar .time-clock-weekend {
+        background: rgba(var(--bs-danger-rgb), .06);
     }
 
-    .clock-day.has-absence {
-        border-color: rgba(24, 196, 138, .45);
+    #clockCalendar .time-clock-weekend .fc-daygrid-day-number,
+    #clockCalendar .fc-col-header-cell.time-clock-weekend .fc-col-header-cell-cushion {
+        color: var(--bs-danger);
     }
 
-    .clock-day.has-unjustified {
-        border-color: rgba(248, 40, 90, .5);
+    #clockCalendar .time-clock-has-absence {
+        box-shadow: inset 3px 0 0 var(--bs-success);
     }
 
-    .punch-pill {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: .5rem;
-        padding: .45rem .55rem;
-        border-radius: .75rem;
-        background: rgba(80, 151, 255, .1);
-        color: var(--bs-gray-800);
-        font-size: .78rem;
-        font-weight: 600;
+    #clockCalendar .time-clock-has-unjustified {
+        box-shadow: inset 3px 0 0 var(--bs-danger);
     }
 
-    .punch-pill + .punch-pill {
-        margin-top: .35rem;
+    #clockCalendar .fc-daygrid-day-events {
+        min-height: 5.5rem;
     }
 
-    .clock-day-footer {
-        border-top: 1px dashed var(--bs-border-color);
-        margin-top: .7rem;
-        padding-top: .65rem;
+    #clockCalendar .fc-event {
+        cursor: pointer;
+    }
+
+    #clockCalendar .fc-daygrid-more-link {
+        color: var(--bs-primary);
+        font-weight: 700;
     }
 
     .balance-positive {
@@ -94,24 +63,8 @@
         background: rgba(255, 255, 255, .02);
     }
 
-    .absence-strip {
-        border-radius: .75rem;
-        background: rgba(24, 196, 138, .1);
-        color: var(--bs-success);
-        font-size: .75rem;
-        font-weight: 700;
-        padding: .35rem .55rem;
-    }
-
-    .unjustified-strip {
-        border-radius: .75rem;
-        background: rgba(248, 40, 90, .1);
-        color: var(--bs-danger);
-        font-size: .75rem;
-        font-weight: 700;
-        padding: .35rem .55rem;
-    }
-</style>
+    </style>
+}
 
 <div class="d-flex flex-column flex-column-fluid">
     <div id="kt_app_toolbar" class="app-toolbar py-3 py-lg-6">
@@ -145,12 +98,12 @@
 
     <div id="kt_app_content" class="app-content flex-column-fluid">
         <div id="kt_app_content_container" class="app-container container-xxl">
-            <div class="card time-clock-hero mb-8">
+            <div class="card mb-5 mb-xl-8">
                 <div class="card-body p-8">
                     <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-6">
                         <div>
-                            <span class="badge badge-light-success fw-bold mb-4">Novo módulo</span>
-                            <h2 class="text-white fw-bold mb-3">Controle mensal de ponto</h2>
+                            <span class="badge badge-light-primary fw-bold mb-4">Ponto eletrônico</span>
+                            <h2 class="text-gray-900 fw-bold mb-3">Controle mensal de ponto</h2>
                             <div class="text-gray-500 fw-semibold fs-6">
                                 Clique em um dia para lançar uma ou várias marcações, registrar falta ou anexar uma ausência.
                             </div>
@@ -171,46 +124,58 @@
                 </div>
             </div>
 
-            <div class="row g-5 g-xl-8 mb-8">
+            <div class="row g-5 g-xl-8 mb-5 mb-xl-8">
                 <div class="col-xl-3 col-md-6">
-                    <div class="card card-xl-stretch">
-                        <div class="card-body">
-                            <i class="ki-duotone ki-wallet fs-2hx text-primary"><span class="path1"></span><span class="path2"></span></i>
-                            <div class="fw-bold fs-2 mt-5" id="summaryBalance">0h00</div>
-                            <div class="fw-semibold text-muted">Saldo do mês</div>
+                    <div class="card card-flush h-xl-100">
+                        <div class="card-body d-flex align-items-center p-6">
+                            <div class="symbol symbol-50px me-5"><span class="symbol-label bg-light-primary"><i class="ki-duotone ki-wallet fs-2x text-primary"><span class="path1"></span><span class="path2"></span></i></span></div>
+                            <div class="d-flex flex-column">
+                                <span class="fs-2hx fw-bold text-gray-900 lh-1 ls-n2" id="summaryBalance">0h00</span>
+                                <span class="text-gray-600 fw-semibold fs-6 mt-2">Saldo do mês</span>
+                                <span class="text-gray-500 fw-semibold fs-7 mt-1">Calculado até hoje</span>
+                            </div>
                         </div>
                     </div>
                 </div>
                 <div class="col-xl-3 col-md-6">
-                    <div class="card card-xl-stretch bg-light-success">
-                        <div class="card-body">
-                            <i class="ki-duotone ki-time fs-2hx text-success"><span class="path1"></span><span class="path2"></span></i>
-                            <div class="fw-bold fs-2 mt-5" id="summaryWorked">0h00</div>
-                            <div class="fw-semibold text-muted">Horas registradas</div>
+                    <div class="card card-flush h-xl-100">
+                        <div class="card-body d-flex align-items-center p-6">
+                            <div class="symbol symbol-50px me-5"><span class="symbol-label bg-light-success"><i class="ki-duotone ki-time fs-2x text-success"><span class="path1"></span><span class="path2"></span></i></span></div>
+                            <div class="d-flex flex-column">
+                                <span class="fs-2hx fw-bold text-gray-900 lh-1 ls-n2" id="summaryWorked">0h00</span>
+                                <span class="text-gray-600 fw-semibold fs-6 mt-2">Horas registradas</span>
+                                <span class="text-gray-500 fw-semibold fs-7 mt-1">Lançamentos até hoje</span>
+                            </div>
                         </div>
                     </div>
                 </div>
                 <div class="col-xl-3 col-md-6">
-                    <div class="card card-xl-stretch bg-light-info">
-                        <div class="card-body">
-                            <i class="ki-duotone ki-calendar-tick fs-2hx text-info"><span class="path1"></span><span class="path2"></span></i>
-                            <div class="fw-bold fs-2 mt-5" id="summaryExpected">0h00</div>
-                            <div class="fw-semibold text-muted">Horas previstas</div>
+                    <div class="card card-flush h-xl-100">
+                        <div class="card-body d-flex align-items-center p-6">
+                            <div class="symbol symbol-50px me-5"><span class="symbol-label bg-light-info"><i class="ki-duotone ki-calendar-tick fs-2x text-info"><span class="path1"></span><span class="path2"></span></i></span></div>
+                            <div class="d-flex flex-column">
+                                <span class="fs-2hx fw-bold text-gray-900 lh-1 ls-n2" id="summaryExpected">0h00</span>
+                                <span class="text-gray-600 fw-semibold fs-6 mt-2">Horas previstas</span>
+                                <span class="text-gray-500 fw-semibold fs-7 mt-1">Jornada até hoje</span>
+                            </div>
                         </div>
                     </div>
                 </div>
                 <div class="col-xl-3 col-md-6">
-                    <div class="card card-xl-stretch bg-light-warning">
-                        <div class="card-body">
-                            <i class="ki-duotone ki-shield-tick fs-2hx text-warning"><span class="path1"></span><span class="path2"></span></i>
-                            <div class="fw-bold fs-2 mt-5" id="summaryTolerance">0 min</div>
-                            <div class="fw-semibold text-muted">Tolerância global</div>
+                    <div class="card card-flush h-xl-100">
+                        <div class="card-body d-flex align-items-center p-6">
+                            <div class="symbol symbol-50px me-5"><span class="symbol-label bg-light-warning"><i class="ki-duotone ki-shield-tick fs-2x text-warning"><span class="path1"></span><span class="path2"></span></i></span></div>
+                            <div class="d-flex flex-column">
+                                <span class="fs-2hx fw-bold text-gray-900 lh-1 ls-n2" id="summaryTolerance">0 min</span>
+                                <span class="text-gray-600 fw-semibold fs-6 mt-2">Tolerância global</span>
+                                <span class="text-gray-500 fw-semibold fs-7 mt-1">Regra de compensação</span>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="card">
+            <div class="card mb-5 mb-xl-8">
                 <div class="card-header border-0 pt-6">
                     <h3 class="card-title align-items-start flex-column">
                         <span class="card-label fw-bold fs-3" id="calendarTitle">Calendário</span>
@@ -221,18 +186,9 @@
                         <span class="badge badge-light-success">Ausências não incidem no banco</span>
                     </div>
                 </div>
-                <div class="card-body">
-                    <div class="clock-calendar mb-4">
-                        <div class="clock-weekday">Dom</div>
-                        <div class="clock-weekday">Seg</div>
-                        <div class="clock-weekday">Ter</div>
-                        <div class="clock-weekday">Qua</div>
-                        <div class="clock-weekday">Qui</div>
-                        <div class="clock-weekday">Sex</div>
-                        <div class="clock-weekday">Sáb</div>
-                    </div>
-                    <div id="clockCalendar" class="clock-calendar">
-                        <div class="text-center text-muted py-10" style="grid-column: 1 / -1;">
+                <div class="card-body pt-0">
+                    <div id="clockCalendar" class="py-4">
+                        <div class="text-center text-muted py-10">
                             <span class="spinner-border spinner-border-sm text-primary me-2"></span>
                             Carregando calendário...
                         </div>
@@ -387,6 +343,7 @@
 </div>
 
 @section Scripts {
+    <script src="~/metronic8/js/fullcalendar.bundle.js"></script>
     <script>
         const initialYear = @DateTime.Today.Year;
         const initialMonth = @DateTime.Today.Month;
@@ -401,6 +358,7 @@
         let selectedDate = null;
         let punchModal = null;
         let absenceModal = null;
+        let fullCalendar = null;
 
         document.addEventListener('DOMContentLoaded', () => {
             punchModal = new bootstrap.Modal(document.getElementById('punchModal'));
@@ -443,11 +401,13 @@
 
         async function loadCalendar(year, month) {
             const calendarElement = document.getElementById('clockCalendar');
-            calendarElement.innerHTML = `
-                <div class="text-center text-muted py-10" style="grid-column: 1 / -1;">
-                    <span class="spinner-border spinner-border-sm text-primary me-2"></span>
-                    Carregando calendário...
-                </div>`;
+            if (!fullCalendar) {
+                calendarElement.innerHTML = `
+                    <div class="text-center text-muted py-10">
+                        <span class="spinner-border spinner-border-sm text-primary me-2"></span>
+                        Carregando calendário...
+                    </div>`;
+            }
 
             try {
                 const response = await fetch(`/TimeClock/GetCalendar?year=${year}&month=${month}`);
@@ -463,7 +423,7 @@
             document.getElementById('calendarTitle').innerText = currentCalendar.monthLabel;
             document.getElementById('calendarSubtitle').innerText = `Jornada padrão: ${currentCalendar.schedule.entryTime} às ${currentCalendar.schedule.exitTime}, intervalo de ${currentCalendar.schedule.lunchIntervalMinutes} min.`;
             document.getElementById('summaryBalance').innerText = currentCalendar.summary.balanceLabel;
-            document.getElementById('summaryBalance').className = `fw-bold fs-2 mt-5 ${getBalanceClass(currentCalendar.summary.balanceMinutes)}`;
+            document.getElementById('summaryBalance').className = `fs-2hx fw-bold lh-1 ls-n2 ${getBalanceClass(currentCalendar.summary.balanceMinutes)}`;
             document.getElementById('summaryWorked').innerText = currentCalendar.summary.workedLabel;
             document.getElementById('summaryExpected').innerText = currentCalendar.summary.expectedLabel;
             document.getElementById('summaryTolerance').innerText = `${currentCalendar.globalSettings.toleranceMinutes} min`;
@@ -471,61 +431,83 @@
 
         function renderCalendar() {
             const calendarElement = document.getElementById('clockCalendar');
-            calendarElement.innerHTML = '';
+            if (typeof FullCalendar === 'undefined') {
+                calendarElement.innerHTML = '<div class="text-center text-danger py-10">Não foi possível carregar o calendário.</div>';
+                return;
+            }
 
-            currentCalendar.days.forEach((day, index) => {
-                const dayElement = document.createElement('div');
-                dayElement.className = `clock-day p-4 ${day.isWeekend ? 'weekend' : ''} ${day.absences.length ? 'has-absence' : ''} ${day.unjustifiedAbsence ? 'has-unjustified' : ''}`;
-                if (index === 0) {
-                    dayElement.style.gridColumnStart = String(getWeekdayColumn(day.date));
-                }
-                dayElement.addEventListener('click', () => openPunchModal(day.date));
+            if (!fullCalendar) {
+                fullCalendar = new FullCalendar.Calendar(calendarElement, {
+                    initialView: 'dayGridMonth',
+                    initialDate: `${currentCalendar.year}-${String(currentCalendar.month).padStart(2, '0')}-01`,
+                    locale: 'pt-br',
+                    firstDay: 0,
+                    fixedWeekCount: false,
+                    selectable: true,
+                    selectMirror: true,
+                    dayMaxEvents: 3,
+                    moreLinkText: count => `+${count} mais`,
+                    headerToolbar: false,
+                    dateClick: info => openPunchModal(info.dateStr),
+                    select: info => {
+                        openPunchModal(info.startStr);
+                        fullCalendar.unselect();
+                    },
+                    eventClick: info => {
+                        info.jsEvent.preventDefault();
+                        openPunchModal(info.event.extendedProps.date);
+                    },
+                    dayCellClassNames: info => getDayClasses(info.date),
+                    dayHeaderClassNames: info => isWeekend(info.date) ? ['time-clock-weekend'] : []
+                });
+                fullCalendar.render();
+            }
 
-                const badges = [];
-                if (day.isWeekend) badges.push('<span class="badge badge-light-danger">Fim de semana</span>');
-                if (day.isHoliday) badges.push(`<span class="badge badge-light-warning">${escapeHtml(day.holidayName || 'Feriado')}</span>`);
-                if (day.absences.length) badges.push('<span class="badge badge-light-success">Ausência</span>');
-                if (day.unjustifiedAbsence) badges.push('<span class="badge badge-light-danger">Falta</span>');
-
-                const punchesHtml = day.punches.length
-                    ? day.punches.map(punch => `
-                        <div class="punch-pill">
-                            <span><i class="ki-duotone ${escapeAttribute(punch.typeIcon)} fs-7 me-1"></i>${escapeHtml(punch.typeLabel)}</span>
-                            <strong>${escapeHtml(punch.time)}</strong>
-                        </div>`).join('')
-                    : '<div class="text-muted fs-8 fw-semibold mt-4">Sem marcações</div>';
-
-                const absenceHtml = day.absences.map(absence =>
-                    `<div class="absence-strip mt-2">${escapeHtml(absence.typeLabel)}</div>`).join('');
-                const unjustifiedHtml = day.unjustifiedAbsence
-                    ? `<div class="unjustified-strip mt-2">${escapeHtml(day.unjustifiedAbsence.typeLabel)}</div>`
-                    : '';
-
-                dayElement.innerHTML = `
-                    <div class="d-flex align-items-start justify-content-between mb-3">
-                        <div>
-                            <div class="fw-bold fs-2">${day.day}</div>
-                            <div class="d-flex flex-wrap gap-1 mt-1">${badges.join('')}</div>
-                        </div>
-                        <div class="text-end">
-                            <div class="fw-bold ${getBalanceClass(day.balanceMinutes)}">${escapeHtml(day.balanceLabel)}</div>
-                            <div class="text-muted fs-8">saldo</div>
-                        </div>
-                    </div>
-                    <div>${punchesHtml}</div>
-                    ${absenceHtml}
-                    ${unjustifiedHtml}
-                    <div class="clock-day-footer">
-                        <div class="d-flex justify-content-between text-muted fs-8 fw-semibold">
-                            <span>Trabalho</span><span>${escapeHtml(day.workedLabel)}</span>
-                        </div>
-                        <div class="d-flex justify-content-between text-muted fs-8 fw-semibold">
-                            <span>Intervalo</span><span>${escapeHtml(day.lunchLabel)}</span>
-                        </div>
-                    </div>`;
-
-                calendarElement.appendChild(dayElement);
+            fullCalendar.batchRendering(() => {
+                fullCalendar.removeAllEvents();
+                fullCalendar.addEventSource(buildCalendarEvents());
+                fullCalendar.gotoDate(`${currentCalendar.year}-${String(currentCalendar.month).padStart(2, '0')}-01`);
             });
+        }
+
+        function buildCalendarEvents() {
+            return currentCalendar.days.flatMap(day => {
+                const punches = day.punches.map(punch => ({
+                    title: `${punch.typeLabel} · ${punch.time}`,
+                    start: day.date,
+                    allDay: true,
+                    classNames: ['fc-event-primary'],
+                    extendedProps: { date: day.date }
+                }));
+
+                const absences = day.absences.map(absence => ({
+                    title: absence.typeLabel,
+                    start: day.date,
+                    allDay: true,
+                    classNames: ['fc-event-success'],
+                    extendedProps: { date: day.date }
+                }));
+
+                const unjustified = day.unjustifiedAbsence ? [{
+                    title: day.unjustifiedAbsence.typeLabel,
+                    start: day.date,
+                    allDay: true,
+                    classNames: ['fc-event-danger'],
+                    extendedProps: { date: day.date }
+                }] : [];
+
+                return [...punches, ...absences, ...unjustified];
+            });
+        }
+
+        function getDayClasses(date) {
+            const day = getDay(toDateKey(date));
+            const classes = isWeekend(date) ? ['time-clock-weekend'] : [];
+
+            if (day?.absences.length) classes.push('time-clock-has-absence');
+            if (day?.unjustifiedAbsence) classes.push('time-clock-has-unjustified');
+
+            return classes;
         }
 
         function openPunchModal(date) {
@@ -692,9 +674,16 @@
             return currentCalendar?.days.find(day => day.date === date);
         }
 
-        function getWeekdayColumn(date) {
-            const [year, month, day] = date.split('-').map(Number);
-            return new Date(year, month - 1, day).getDay() + 1;
+        function toDateKey(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function isWeekend(date) {
+            const dayOfWeek = date.getDay();
+            return dayOfWeek === 0 || dayOfWeek === 6;
         }
 
         async function readJsonResponse(response) {

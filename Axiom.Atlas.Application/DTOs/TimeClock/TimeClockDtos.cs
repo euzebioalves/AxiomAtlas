@@ -105,6 +105,7 @@ namespace Axiom.Atlas.Application.DTOs.TimeClock
         public string Date { get; set; } = string.Empty;
         public int Day { get; set; }
         public bool IsCurrentMonth { get; set; } = true;
+        public bool IsFuture { get; set; }
         public bool IsWeekend { get; set; }
         public bool IsHoliday { get; set; }
         public string? HolidayName { get; set; }
