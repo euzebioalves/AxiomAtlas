@@ -1,0 +1,124 @@
+﻿@model Axiom.Atlas.Web.Model.Roles.EditRoleViewModel
+
+@{
+    ViewData["Title"] = $"Editar Permissões - {Model.RoleName}";
+}
+
+<div class="d-flex flex-column flex-column-fluid">
+    <div id="kt_app_toolbar" class="app-toolbar py-3 py-lg-6">
+        <div id="kt_app_toolbar_container" class="app-container container-xxl d-flex flex-stack">
+            <div class="page-title d-flex flex-column justify-content-center flex-wrap me-3">
+                <h1 class="page-heading d-flex text-gray-900 fw-bold fs-3 flex-column justify-content-center my-0">
+                    @ViewData["Title"]
+                </h1>
+                <ul class="breadcrumb breadcrumb-separatorless fw-semibold fs-7 my-0 pt-1">
+                    <li class="breadcrumb-item text-muted">
+                        <a asp-controller="Home" asp-action="Index" class="text-muted text-hover-primary"> Home </a>
+                    </li>
+                    <li class="breadcrumb-item">
+                        <i class="ki-duotone ki-double-right fs-2"></i>
+                    </li>
+                    <li class="breadcrumb-item text-muted">Administração</li>
+                    <li class="breadcrumb-item">
+                        <i class="ki-duotone ki-double-right fs-2"></i>
+                    </li>
+                    <li class="breadcrumb-item text-muted">Permissões</li>
+                    <li class="breadcrumb-item">
+                        <i class="ki-duotone ki-double-right fs-2"></i>
+                    </li>
+                    <li class="breadcrumb-item text-muted">Gerenciamento de permissões</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div id="kt_app_content" class="app-content flex-column-fluid">
+        <div id="kt_app_content_container" class="app-container container-xxl">
+            
+            <div class="card mb-5 mb-xl-8 shadow-sm">
+                <div class="card-header">
+                    <h3 class="card-title">Matriz de Acesso: <span class="badge badge-light-primary ms-2 fs-5">@Model.RoleName</span></h3>
+                    <div class="card-toolbar">
+                        <a href="@Url.Action("Index", "Roles")" class="btn btn-sm btn-light me-2">Voltar</a>
+                    </div>
+                </div>
+
+                <form asp-action="Edit" method="post">
+                    <input type="hidden" asp-for="RoleId" />
+                    <input type="hidden" asp-for="RoleName" />
+
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table align-middle table-row-dashed fs-6 gy-5">
+                                <thead>
+                                    <tr class="text-start text-muted fw-bold fs-7 text-uppercase gs-0">
+                                        <th class="min-w-200px">Módulo</th>
+                                        <th class="min-w-400px">Permissões</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="text-gray-600 fw-semibold">
+                                    @{
+                                        // Extrai os nomes únicos dos módulos
+                                        var modulos = Model.Permissions
+                                            .Select(p => p.Value.Split('.')[1])
+                                            .Distinct()
+                                            .ToList();
+                                    }
+
+                                    @foreach (var modulo in modulos)
+                                    {
+                                        <tr>
+                                            <td class="text-gray-800 fs-5 fw-bold">
+                                                @modulo
+                                            </td>
+                    
+                                            <td>
+                                                <div class="d-flex flex-wrap gap-8">
+                                                    @for (int i = 0; i < Model.Permissions.Count; i++)
+                                                    {
+                                                        // Renderiza o checkbox apenas se ele pertencer ao módulo da linha atual
+                                                        if (Model.Permissions[i].Value.Split('.')[1] == modulo)
+                                                        {
+                                                            // Pega a palavra original em inglês
+                                                            var acaoOriginal = Model.Permissions[i].Value.Split('.')[2];
+                                    
+                                                            // Faz a tradução apenas para exibição
+                                                            var acaoTraduzida = acaoOriginal switch
+                                                            {
+                                                                "View" => "Visualizar",
+                                                                "Create" => "Criar",
+                                                                "Edit" => "Editar",
+                                                                "Delete" => "Excluir",
+                                                                _ => acaoOriginal // Se vier algo novo, mantém
+                                                            };
+
+                                                            <div class="d-flex align-items-center">
+                                                                <input type="hidden" asp-for="Permissions[i].Value" />
+                                        
+                                                                <div class="form-check form-check-custom form-check-solid form-check-sm form-check-success">
+                                                                    <input class="form-check-input" type="checkbox" asp-for="Permissions[i].Selected" />
+                                            
+                                                                    <label class="form-check-label text-gray-700 ms-2 fw-bold" asp-for="Permissions[i].Selected">
+                                                                        @acaoTraduzida
+                                                                    </label>
+                                                                </div>
+                                                            </div>
+                                                        }
+                                                    }
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card-footer d-flex justify-content-end py-6 px-9">
+                        <button type="submit" class="btn btn-primary">Salvar Permissões</button>
+                    </div>
+                </form>
+            </div>
+
+        </div>
+    </div>
+</div>

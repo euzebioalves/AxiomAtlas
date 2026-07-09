@@ -1,0 +1,282 @@
+﻿@model Axiom.Atlas.Web.Model.AuditLog.AuditLogFilterViewModel
+@{
+    ViewData["Title"] = "Auditoria de Sistema";
+    // Mantenha aqui a referência ao seu Layout, se necessário
+}
+
+<div class="card mb-7">
+    <div class="card-body">
+        <div class="row align-items-center">
+            
+            <div class="col-md-2 my-2">
+                <label asp-for="DataInicio" class="fs-6 fw-semibold mb-2">Data Início</label>
+                <input asp-for="DataInicio" type="date" class="form-control form-control-solid" />
+            </div>
+            
+            <div class="col-md-2 my-2">
+                <label asp-for="DataFim" class="fs-6 fw-semibold mb-2">Data Fim</label>
+                <input asp-for="DataFim" type="date" class="form-control form-control-solid" />
+            </div>
+            
+            <div class="col-md-2 my-2">
+                <label asp-for="Tabela" class="fs-6 fw-semibold mb-2">Tabela</label>
+                <input asp-for="Tabela" type="text" class="form-control form-control-solid" placeholder="Ex: AspNetUsers" />
+            </div>
+
+            <div class="col-md-2 my-2">
+                <label asp-for="Usuario" class="fs-6 fw-semibold mb-2">Usuário</label>
+                <input asp-for="Usuario" type="text" class="form-control form-control-solid" placeholder="Nome ou E-mail" />
+            </div>
+            
+            <div class="col-md-2 my-2">
+                <label asp-for="TipoAcao" class="fs-6 fw-semibold mb-2">Ação</label>
+                <select asp-for="TipoAcao" class="form-select form-select-solid" data-control="select2" data-hide-search="true">
+                    <option value="">Todas as Ações</option>
+                    <option value="Insert">Insert</option>
+                    <option value="Update">Update</option>
+                    <option value="Delete">Delete</option>
+                    <option value="LoginSuccess">Login</option>
+                    <option value="LoginFailed">Login Falho</option>
+                </select>
+            </div>
+            
+            <div class="col-md-2 my-2 mt-auto">
+                <button type="button" id="btn_pesquisar" class="btn btn-primary w-100">
+                    <i class="ki-duotone ki-magnifier fs-2"><span class="path1"></span><span class="path2"></span></i> Pesquisar
+                </button>
+            </div>
+
+        </div>
+    </div>
+</div>
+<div class="card">
+    <div class="card-body pt-0">
+        <table class="table align-middle table-row-dashed fs-6 gy-5" id="kt_table_audit">
+            <thead>
+                <tr class="text-start text-muted fw-bold fs-7 text-uppercase gs-0">
+                    <th>ID</th>
+                    <th>Data/Hora</th>
+                    <th>Usuário</th>
+                    <th>Ação</th>
+                    <th>Tabela</th>
+                    <th>Chave / IP</th>
+                    <th class="text-end min-w-100px">Detalhes</th>
+                </tr>
+            </thead>
+            <tbody class="text-gray-600 fw-semibold">
+            </tbody>
+        </table>
+    </div>
+</div>
+<div class="modal fade" id="kt_modal_audit_details" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="fw-bold d-flex align-items-center">
+                    Detalhes da Alteração
+                    <span id="modal_badge_acao" class="badge ms-3 fs-6"></span>
+                </h2>
+                <div class="btn btn-icon btn-sm btn-active-icon-primary" data-bs-dismiss="modal">
+                    <i class="ki-duotone ki-cross fs-1"><span class="path1"></span><span class="path2"></span></i>
+                </div>
+            </div>
+            <div class="modal-body scroll-y mx-5 mx-xl-15 my-7">
+                
+                <div class="notice d-flex bg-light-dark rounded border-gray-300 border border-dashed p-6 mb-8">
+                    <div class="d-flex flex-stack flex-grow-1 flex-wrap flex-md-nowrap">
+                        <div class="row w-100">
+                            <div class="col-md-3">
+                                <div class="fs-8 text-muted fw-bold text-uppercase mb-1">Data / Hora</div>
+                                <div class="fs-3 fw-bolder text-gray-900" id="modal_lbl_datahora">--</div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="fs-8 text-muted fw-bold text-uppercase mb-1">Usuário</div>
+                                <div class="fs-3 fw-bolder text-gray-900" id="modal_lbl_usuario" style="word-break: break-all;">--</div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="fs-8 text-muted fw-bold text-uppercase mb-1">Ação</div>
+                                <div class="fs-3 fw-bolder" id="modal_lbl_acao">--</div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="fs-8 text-muted fw-bold text-uppercase mb-1">Tabela</div>
+                                <div class="fs-3 fw-bolder text-gray-900" id="modal_lbl_tabela">--</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6 border-end">
+                        <h4 class="text-danger mb-5">Valores Antigos</h4>
+                        <pre id="json_antigos" class="bg-light p-5 rounded" style="max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 13px; white-space: pre-wrap;">Nenhum valor anterior.</pre>
+                    </div>
+                    <div class="col-md-6">
+                        <h4 class="text-success mb-5">Valores Novos</h4>
+                        <pre id="json_novos" class="bg-light p-5 rounded" style="max-height: 400px; overflow-y: auto; font-family: monospace; font-size: 13px; white-space: pre-wrap;">Nenhum valor novo.</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+@section Scripts {
+    <script>
+        $(document).ready(function () {
+            var auditDataList = [];
+
+            var table = $('#kt_table_audit').DataTable({
+                responsive: true,
+                searchDelay: 500,
+                processing: true,
+                serverSide: false,
+                order: [[0, 'desc']],
+                ajax: {
+                    url: "/AuditLog/SearchData",
+                    type: "GET",
+                    data: function (d) {
+                        return {
+                            DataInicio: $('#DataInicio').val(),
+                            DataFim: $('#DataFim').val(),
+                            Tabela: $('#Tabela').val(),
+                            Usuario: $('#Usuario').val(),
+                            TipoAcao: $('#TipoAcao').val()
+                        };
+                    },
+                    dataSrc: function (json) {
+                        auditDataList = json;
+                        return json;
+                    }
+                },
+                columns: [
+                    { data: 'id' },
+                    {
+                        data: 'dataHora',
+                        render: function (data) {
+                            if (!data) return '-';
+                            return new Date(data).toLocaleString('pt-BR');
+                        }
+                    },
+                    {
+                        data: 'usuario',
+                        render: function (data) {
+                            return `<span class="text-truncate d-block" style="max-width:180px;" title="${data}">${data || '-'}</span>`;
+                        }
+                    },
+                    {
+                        data: 'tipoAcao',
+                        render: function (data) {
+                            let badgeClass = 'badge-light-primary';
+                            if (data === 'Insert') badgeClass = 'badge-light-success';
+                            if (data === 'Update') badgeClass = 'badge-light-warning';
+                            if (data === 'Delete') badgeClass = 'badge-light-danger';
+                            return `<span class="badge ${badgeClass} fw-bold">${data}</span>`;
+                        }
+                    },
+                    { data: 'tabela' },
+                    {
+                        data: null,
+                        render: function (data, type, row) {
+                            return `<div>
+                                        <span class="text-muted text-truncate d-block" style="max-width:150px;" title="${row.chavePrimaria}">${row.chavePrimaria || '-'}</span>
+                                        <span class="badge badge-light-dark fs-8 mt-1">IP: ${row.ipAddress || '-'}</span>
+                                    </div>`;
+                        }
+                    },
+                    {
+                        data: null,
+                        orderable: false,
+                        className: 'text-end',
+                        render: function (data, type, row, meta) {
+                            return `<button type="button" class="btn btn-sm btn-light btn-active-light-primary btn-ver-detalhes" data-index="${meta.row}">
+                                        Ver Detalhes
+                                    </button>`;
+                        }
+                    }
+                ],
+                language: {
+                    url: "//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json"
+                }
+            });
+
+            $('#btn_pesquisar').on('click', function () {
+                table.ajax.reload();
+            });
+
+            $('#kt_table_audit').on('click', '.btn-ver-detalhes', function () {
+                var rowIndex = $(this).data('index');
+                var rowData = auditDataList[rowIndex];
+
+                // Badges e Cores
+                let badgeClass = 'badge-light-primary';
+                let textClass = 'text-primary';
+                if (rowData.tipoAcao === 'Insert') { badgeClass = 'badge-light-success'; textClass = 'text-success'; }
+                if (rowData.tipoAcao === 'Update') { badgeClass = 'badge-light-warning'; textClass = 'text-warning'; }
+                if (rowData.tipoAcao === 'Delete') { badgeClass = 'badge-light-danger'; textClass = 'text-danger'; }
+
+                $('#modal_badge_acao').removeClass().addClass(`badge ms-3 fs-6 ${badgeClass}`).text(rowData.tipoAcao);
+
+                // Preenche o Cabeçalho de Resumo
+                let dataFormatada = rowData.dataHora ? new Date(rowData.dataHora).toLocaleString('pt-BR') : '-';
+                $('#modal_lbl_datahora').text(dataFormatada);
+                $('#modal_lbl_usuario').text(rowData.usuario || 'Sistema');
+                $('#modal_lbl_tabela').text(rowData.tabela);
+                $('#modal_lbl_acao').removeClass().addClass(`fs-5 fw-bolder ${textClass}`).text(rowData.tipoAcao);
+
+                // Identifica as chaves alteradas (para Updates)
+                let changedKeys = [];
+                if (rowData.tipoAcao === 'Update' && rowData.valoresAntigos && rowData.valoresAntigos !== "null") {
+                    try {
+                        let oldObj = JSON.parse(rowData.valoresAntigos);
+                        changedKeys = Object.keys(oldObj);
+                    } catch(e) {}
+                }
+
+                // Formatador de JSON Inteligente
+                function formatAndHighlightJson(jsonString, isOld) {
+                    if (!jsonString || jsonString === "null" || jsonString.trim() === "") {
+                        return "<span class='text-muted'>Nenhum valor registrado.</span>";
+                    }
+                    try {
+                        let obj = JSON.parse(jsonString);
+                        let html = "{\n";
+                        let keys = Object.keys(obj);
+                        
+                        for (let i = 0; i < keys.length; i++) {
+                            let key = keys[i];
+                            let isChanged = changedKeys.includes(key);
+                            let valStr = JSON.stringify(obj[key]);
+                            let comma = (i < keys.length - 1) ? "," : "";
+                            let line = `    "${key}": ${valStr}${comma}\n`;
+
+                            if (rowData.tipoAcao === 'Update' && isChanged) {
+                                let highlightClass = isOld ? "bg-light-danger text-danger fw-bold rounded px-1" : "bg-light-success text-success fw-bold rounded px-1";
+                                html += `<span class="${highlightClass}">${line}</span>`;
+                            }
+                            else if (rowData.tipoAcao === 'Insert' && !isOld) {
+                                html += `<span class="text-success">${line}</span>`;
+                            }
+                            else if (rowData.tipoAcao === 'Delete' && isOld) {
+                                html += `<span class="text-danger">${line}</span>`;
+                            }
+                            else {
+                                html += `<span>${line}</span>`;
+                            }
+                        }
+                        
+                        html += "}";
+                        return html;
+                    } catch (e) {
+                        return jsonString;
+                    }
+                }
+
+                // Injeta no HTML do modal (Importante usar .html() aqui)
+                $('#json_antigos').html(formatAndHighlightJson(rowData.valoresAntigos, true));
+                $('#json_novos').html(formatAndHighlightJson(rowData.valoresNovos, false));
+
+                var modal = new bootstrap.Modal(document.getElementById('kt_modal_audit_details'));
+                modal.show();
+            });
+        });
+    </script>
+}

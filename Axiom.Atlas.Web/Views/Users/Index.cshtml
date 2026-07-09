@@ -1,0 +1,692 @@
+﻿@model List<Axiom.Atlas.Web.Model.Users.UserViewModel>
+
+@{
+    ViewData["Title"] = "Gerenciamento de Usuários";
+}
+
+<div class="d-flex flex-column flex-column-fluid">
+    <div id="kt_app_toolbar" class="app-toolbar py-3 py-lg-6">
+        <div id="kt_app_toolbar_container" class="app-container container-xxl d-flex flex-stack">
+            <div class="page-title d-flex flex-column justify-content-center flex-wrap me-3">
+                <h1 class="page-heading d-flex text-gray-900 fw-bold fs-3 flex-column justify-content-center my-0">
+                    @ViewData["Title"]
+                </h1>
+                <ul class="breadcrumb breadcrumb-separatorless fw-semibold fs-7 my-0 pt-1">
+                    <li class="breadcrumb-item text-muted">
+                        <a asp-controller="Home" asp-action="Index" class="text-muted text-hover-primary"> Home </a>
+                    </li>
+                    <li class="breadcrumb-item">
+                        <span class="bullet bg-gray-500 w-5px h-2px"></span>
+                    </li>
+                    <li class="breadcrumb-item text-muted">Usuários</li>
+                    <li class="breadcrumb-item">
+                        <span class="bullet bg-gray-500 w-5px h-2px"></span>
+                    </li>
+                    <li class="breadcrumb-item text-muted">Gerenciamento de usuários</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+    <div id="kt_app_content" class="app-content flex-column-fluid">
+        <div id="kt_app_content_container" class="app-container container-xxl">
+            
+            <div class="card mb-5 mb-xl-8">
+                <div class="card-header border-0 pt-5">
+                    <h3 class="card-title align-items-start flex-column">
+                        <span class="card-label fw-bold fs-3 mb-1">Usuários</span>
+                        <span class="text-muted mt-1 fw-semibold fs-7" id="totalEntriesText">@(Model?.Count ?? 0) usuário(s) encontrado(s)</span>
+                    </h3>
+
+                    <div class="card-toolbar gap-3">
+                        <button type="button" class="btn btn-sm btn-primary" id="btnOpenNewModal" data-bs-toggle="modal" data-bs-target="#kt_modal_add_user">
+                            <i class="ki-duotone ki-plus fs-2"></i> Novo Usuário
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body py-3">
+                    <div class="table-responsive">
+                        <table class="table align-middle table-row-dashed fs-6 gy-5" id="kt_table_users">
+                            <thead>
+                                <tr class="text-start text-muted fw-bold fs-7 text-uppercase gs-0">
+                                    <th class="min-w-125px">Usuário</th>
+                                    <th class="min-w-125px">Cargo</th>
+                                    <th class="min-w-125px">Perfil</th>
+                                    <th class="min-w-125px">Status</th>
+                                    <th class="text-end min-w-100px">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-gray-600 fw-semibold">
+                                @if (Model != null && Model.Any())
+                                {
+                                    foreach (var user in Model)
+                                    {
+                                        <tr>
+                                            <td class="d-flex align-items-center">
+                                                <div class="symbol symbol-circle symbol-50px overflow-hidden me-3">
+                                                    <div class="symbol-label fs-3 bg-light-primary text-primary">
+                                                        @if (!string.IsNullOrEmpty(user.ProfilePictureUrl))
+                                                        {
+                                                            <div class="symbol-label">
+                                                                <img src="data:image/jpeg;base64,@user.ProfilePictureUrl" alt="@user.FullName" class="w-100" />
+                                                            </div>
+                                                        }
+                                                        else
+                                                        {
+                                                            <div class="symbol-label fs-3 bg-light-primary text-primary">
+                                                                @user.FullName.Substring(0, 1).ToUpper()
+                                                            </div>
+                                                        }
+                                                    </div>
+                                                </div>
+                                                <div class="d-flex flex-column">
+                                                    <span class="text-gray-800 text-hover-primary mb-1">@user.FullName</span>
+                                                    <span>@user.Email</span>
+                                                </div>
+                                            </td>
+                            
+                                            <td>@user.JobTitle</td>
+
+                                            <td>
+                                                @if (!string.IsNullOrWhiteSpace(user.Role))
+                                                {
+                                                    <span class="badge badge-light-primary fw-bold">@user.Role</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge badge-light fw-bold text-muted">Sem perfil</span>
+                                                }
+                                            </td>
+                            
+                                            <td>
+                                                @if (user.IsActive)
+                                                {
+                                                    <div class="badge badge-light-success fw-bold">Ativo</div>
+                                                }
+                                                else
+                                                {
+                                                    <div class="badge badge-light-danger fw-bold">Inativo</div>
+                                                }
+                                            </td>
+                            
+                                            <td class="text-end">
+                                                <div class="d-flex justify-content-end gap-2">
+                                                    <button type="button" class="btn btn-icon btn-bg-light btn-active-color-primary btn-sm btn-edit-user" data-user-id="@user.Id" title="Editar usuário" aria-label="Editar usuário">
+                                                        <i class="ki-duotone ki-pencil fs-2"><span class="path1"></span><span class="path2"></span></i>
+                                                    </button>
+                                                    <button type="button" class="btn btn-icon btn-bg-light btn-active-color-warning btn-sm btn-toggle-status" data-user-id="@user.Id" data-user-name="@user.FullName" title="Ativar/Inativar usuário" aria-label="Ativar/Inativar usuário">
+                                                        <i class="ki-duotone ki-arrows-circle fs-2"><span class="path1"></span><span class="path2"></span></i>
+                                                    </button>
+                                                    <button type="button" class="btn btn-icon btn-bg-light btn-active-color-danger btn-sm btn-delete-user" data-user-id="@user.Id" data-user-name="@user.FullName" title="Excluir usuário" aria-label="Excluir usuário">
+                                                        <i class="ki-duotone ki-trash fs-2"><span class="path1"></span><span class="path2"></span><span class="path3"></span><span class="path4"></span><span class="path5"></span></i>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                                else
+                                {
+                                    <tr>
+                                        <td colspan="5" class="text-center text-muted">Nenhum usuário encontrado.</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="kt_modal_add_user" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-650px">
+        <div class="modal-content">
+            <div class="modal-header" id="kt_modal_add_user_header">
+                <h2 class="fw-bold">Adicionar Novo Usuário</h2>
+                <div class="btn btn-icon btn-sm btn-active-icon-primary" data-bs-dismiss="modal">
+                    <i class="ki-duotone ki-cross fs-1"><span class="path1"></span><span class="path2"></span></i>
+                </div>
+            </div>
+            
+            <div class="modal-body scroll-y mx-5 mx-xl-15 my-7">
+                <form id="kt_modal_add_user_form" class="form" action="#">
+                    <div class="d-flex flex-column scroll-y me-n7 pe-7" id="kt_modal_add_user_scroll" data-kt-scroll="true" data-kt-scroll-activate="{default: false, lg: true}" data-kt-scroll-max-height="auto" data-kt-scroll-dependencies="#kt_modal_add_user_header" data-kt-scroll-wrappers="#kt_modal_add_user_scroll" data-kt-scroll-offset="300px">
+                        
+                        <div class="fv-row mb-7 text-center">
+                            <label class="d-block fw-semibold fs-6 mb-5">Foto de Perfil</label>
+                            <div class="image-input image-input-outline image-input-empty" data-kt-image-input="true" style="background-image: url('assets/media/svg/avatars/blank.svg')">
+                                <div class="image-input-wrapper w-125px h-125px"></div>
+                                <label class="btn btn-icon btn-circle btn-active-color-primary w-25px h-25px bg-body shadow" data-kt-image-input-action="change" data-bs-toggle="tooltip" title="Alterar foto">
+                                    <i class="ki-duotone ki-pencil fs-7"><span class="path1"></span><span class="path2"></span></i>
+                                    <input type="file" id="ProfilePicture" accept=".png, .jpg, .jpeg, .webp" />
+                                </label>
+                                <span class="btn btn-icon btn-circle btn-active-color-primary w-25px h-25px bg-body shadow" data-kt-image-input-action="cancel" data-bs-toggle="tooltip" title="Cancelar foto">
+                                    <i class="ki-duotone ki-cross fs-2"><span class="path1"></span><span class="path2"></span></i>
+                                </span>
+                                <span class="btn btn-icon btn-circle btn-active-color-primary w-25px h-25px bg-body shadow" data-kt-image-input-action="remove" data-bs-toggle="tooltip" title="Remover foto">
+                                    <i class="ki-duotone ki-cross fs-2"><span class="path1"></span><span class="path2"></span></i>
+                                </span>
+                            </div>
+                            <div class="form-text">Permitido: png, jpg, jpeg, webp.</div>
+                        </div>
+
+                        <div class="row g-9 mb-7">
+                            <div class="col-md-6 fv-row">
+                                <label class="required fw-semibold fs-6 mb-2">Nome Completo</label>
+                                <input type="text" id="fullName" class="form-control form-control-solid" placeholder="Ex: Euzebio Alves" />
+                            </div>
+                            <div class="col-md-6 fv-row">
+                                <label class="required fw-semibold fs-6 mb-2">Nome de Usuário (Login)</label>
+                                <input type="text" id="userName" class="form-control form-control-solid" placeholder="Ex: euzebio.alves" />
+                            </div>
+                        </div>
+
+                        <div class="row g-9 mb-7">
+                            <div class="col-md-6 fv-row">
+                                <label class="required fw-semibold fs-6 mb-2">E-mail</label>
+                                <input type="email" id="email" class="form-control form-control-solid" placeholder="Ex: email@dominio.com.br" />
+                            </div>
+                            <div class="col-md-6 fv-row">
+                                <label class="required fw-semibold fs-6 mb-2">Senha Provisória</label>
+                                <input type="password" id="password" class="form-control form-control-solid" placeholder="Senha forte" />
+                            </div>
+                        </div>
+
+                        <div class="row g-9 mb-7">
+                            <div class="col-md-4 fv-row">
+                                <label class="fw-semibold fs-6 mb-2">Cargo</label>
+                                <input type="text" id="jobTitle" class="form-control form-control-solid" placeholder="Ex: Analista" />
+                            </div>
+                            <div class="col-md-4 fv-row">
+                                <label class="fw-semibold fs-6 mb-2">Telefone</label>
+                                <input type="text" id="phoneNumber" class="form-control form-control-solid" placeholder="(00) 00000-0000" />
+                            </div>
+                            <div class="col-md-4 fv-row">
+                                <label class="required fw-semibold fs-6 mb-2">Perfil</label>
+                                <select id="roleId" class="form-select form-select-solid" data-control="select2" data-dropdown-parent="#kt_modal_add_user" data-placeholder="Selecione...">
+                                    <option value=""></option>
+                                    @if (ViewBag.Roles != null)
+                                    {
+                                        foreach (var role in ViewBag.Roles)
+                                        {
+                                            <option value="@role.Id">@role.Name</option>
+                                        }
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-center pt-15">
+                        <button type="reset" class="btn btn-light me-3" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" id="kt_modal_add_user_submit">
+                            <span class="indicator-label">Salvar Usuário</span>
+                            <span class="indicator-progress">
+                                Aguarde...
+                                <span class="spinner-border spinner-border-sm align-middle ms-2"></span>
+                            </span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="kt_modal_edit_user" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-650px">
+        <div class="modal-content">
+            <div class="modal-header" id="kt_modal_edit_user_header">
+                <h2 class="fw-bold">Editar Usuário</h2>
+                <div class="btn btn-icon btn-sm btn-active-icon-primary" data-bs-dismiss="modal">
+                    <i class="ki-duotone ki-cross fs-1"><span class="path1"></span><span class="path2"></span></i>
+                </div>
+            </div>
+            
+            <div class="modal-body scroll-y mx-5 mx-xl-15 my-7">
+                <form id="kt_modal_edit_user_form" class="form" action="#">
+                    <input type="hidden" id="editUserId" />
+
+                    <div class="d-flex flex-column scroll-y me-n7 pe-7" id="kt_modal_edit_user_scroll" data-kt-scroll="true" data-kt-scroll-activate="{default: false, lg: true}" data-kt-scroll-max-height="auto" data-kt-scroll-dependencies="#kt_modal_edit_user_header" data-kt-scroll-wrappers="#kt_modal_edit_user_scroll" data-kt-scroll-offset="300px">
+                        
+                        <div class="fv-row mb-7 text-center">
+                            <label class="d-block fw-semibold fs-6 mb-5">Foto de Perfil</label>
+                            <div class="image-input image-input-outline" id="editImageWrapper" data-kt-image-input="true" style="background-image: url('assets/media/svg/avatars/blank.svg')">
+                                <div class="image-input-wrapper w-125px h-125px" id="editImagePreview"></div>
+                                <label class="btn btn-icon btn-circle btn-active-color-primary w-25px h-25px bg-body shadow" data-kt-image-input-action="change" data-bs-toggle="tooltip" title="Alterar foto">
+                                    <i class="ki-duotone ki-pencil fs-7"><span class="path1"></span><span class="path2"></span></i>
+                                    <input type="file" id="editProfilePicture" accept=".png, .jpg, .jpeg" />
+                                </label>
+                                <span class="btn btn-icon btn-circle btn-active-color-primary w-25px h-25px bg-body shadow" data-kt-image-input-action="cancel" data-bs-toggle="tooltip" title="Cancelar foto">
+                                    <i class="ki-duotone ki-cross fs-2"><span class="path1"></span><span class="path2"></span></i>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div class="row g-9 mb-7">
+                            <div class="col-md-6 fv-row">
+                                <label class="required fw-semibold fs-6 mb-2">Nome Completo</label>
+                                <input type="text" id="editFullName" class="form-control form-control-solid" />
+                            </div>
+                            <div class="col-md-6 fv-row">
+                                <label class="required fw-semibold fs-6 mb-2">Nome de Usuário (Login)</label>
+                                <input type="text" id="editUserName" class="form-control form-control-solid" />
+                            </div>
+                        </div>
+
+                        <div class="fv-row mb-7">
+                            <label class="required fw-semibold fs-6 mb-2">E-mail</label>
+                            <input type="email" id="editEmail" class="form-control form-control-solid" />
+                        </div>
+
+                        <div class="row g-9 mb-7">
+                            <div class="col-md-4 fv-row">
+                                <label class="fw-semibold fs-6 mb-2">Cargo</label>
+                                <input type="text" id="editJobTitle" class="form-control form-control-solid" />
+                            </div>
+                            <div class="col-md-4 fv-row">
+                                <label class="fw-semibold fs-6 mb-2">Telefone</label>
+                                <input type="text" id="editPhoneNumber" class="form-control form-control-solid" />
+                            </div>
+                            <div class="col-md-4 fv-row">
+                                <label class="required fw-semibold fs-6 mb-2">Perfil</label>
+                                <select id="editRoleId" class="form-select form-select-solid" data-control="select2" data-dropdown-parent="#kt_modal_edit_user" data-placeholder="Selecione...">
+                                    <option value=""></option>
+                                    @if (ViewBag.Roles != null)
+                                    {
+                                        foreach (var role in ViewBag.Roles)
+                                        {
+                                            <option value="@role.Id">@role.Name</option>
+                                        }
+                                    }
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-center pt-15">
+                        <button type="reset" class="btn btn-light me-3" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-primary" id="kt_modal_edit_user_submit">
+                            <span class="indicator-label">Salvar Alterações</span>
+                            <span class="indicator-progress">
+                                Aguarde...
+                                <span class="spinner-border spinner-border-sm align-middle ms-2"></span>
+                            </span>
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            console.log("1. Página carregada, iniciando scripts...");
+
+            // ==========================================
+            // NOTIFICAÇÕES (TempData)
+            // ==========================================
+            @if (TempData["SuccessMessage"] != null)
+            {
+                            <text>
+                                            Swal.fire({ text: "@Html.Raw(TempData["SuccessMessage"])", icon: "success", buttonsStyling: false, confirmButtonText: "Ok, ótimo!", customClass: { confirmButton: "btn btn-primary" } });
+                            </text>
+            }
+
+            @if (TempData["ErrorMessage"] != null)
+            {
+                            <text>
+                                            Swal.fire({ text: "@Html.Raw(TempData["ErrorMessage"])", icon: "error", buttonsStyling: false, confirmButtonText: "Ok, entendi", customClass: { confirmButton: "btn btn-danger" } });
+                            </text>
+            }
+
+            // ==========================================
+            // MÁSCARA DE TELEFONE (Com trava de segurança)
+            // ==========================================
+            try {
+                if (typeof Inputmask !== "undefined") {
+                    var phoneInput = document.getElementById("phoneNumber");
+                    if (phoneInput) {
+                        Inputmask({ mask: ["(99) 9999-9999", "(99) 99999-9999"], keepStatic: true }).mask(phoneInput);
+                        console.log("2. Máscara de telefone aplicada com sucesso.");
+                    }
+                } else {
+                    console.warn("Aviso: Biblioteca Inputmask não encontrada. A máscara não será aplicada.");
+                }
+            } catch (err) {
+                console.error("Erro ao aplicar máscara:", err);
+            }
+
+            // ==========================================
+            // CRIAÇÃO DE USUÁRIO
+            // ==========================================
+            const form = document.getElementById('kt_modal_add_user_form');
+            const submitButton = document.getElementById('kt_modal_add_user_submit');
+
+            console.log("3. Formulário encontrado?", form !== null);
+            console.log("4. Botão encontrado?", submitButton !== null);
+
+            // Função de conversão Base64
+            function getBase64(file) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = () => resolve(reader.result);
+                    reader.onerror = error => reject(error);
+                });
+            }
+
+            if (form) {
+                form.addEventListener('submit', async function (e) {
+                    e.preventDefault();
+                    console.log("5. Clicou no botão de salvar!"); // Se não aparecer isso no console (F12), o problema é grave
+
+                    const fullName = document.getElementById('fullName')?.value;
+                    const userName = document.getElementById('userName')?.value;
+                    const email = document.getElementById('email')?.value;
+                    const password = document.getElementById('password')?.value;
+                    const jobTitle = document.getElementById('jobTitle')?.value;
+                    const phoneNumber = document.getElementById('phoneNumber')?.value;
+                    const roleId = document.getElementById('roleId')?.value;
+                    //const fileInput = document.getElementById('profilePicture');
+                    const fileInput = document.querySelector('.image-input input[type="file"]');
+
+                    if (!fullName || !userName || !email || !password || !roleId) {
+                        Swal.fire({ text: "Preencha todos os campos obrigatórios (Nome, E-mail, Username, Senha e Perfil).", icon: "warning", buttonsStyling: false, confirmButtonText: "Ok", customClass: { confirmButton: "btn btn-primary" } });
+                        return;
+                    }
+
+                    submitButton.setAttribute('data-kt-indicator', 'on');
+                    submitButton.disabled = true;
+
+                    try {
+                        let profilePictureBase64 = null;
+                        
+                        // Verifica se existe o input e se há um arquivo selecionado
+                        if (fileInput && fileInput.files && fileInput.files.length > 0) {
+                            console.log("6. Lendo a imagem...");
+                            const fullBase64 = await getBase64(fileInput.files[0]);
+                            
+                            if (fullBase64 && fullBase64.includes(',')) {
+                                profilePictureBase64 = fullBase64.split(',')[1];
+                            } else {
+                                profilePictureBase64 = fullBase64;
+                            }
+                            console.log("7. Imagem convertida com sucesso!");
+                        }
+
+                        const userData = {
+                            fullName: fullName,
+                            userName: userName,
+                            email: email,
+                            password: password,
+                            jobTitle: jobTitle,
+                            phoneNumber: phoneNumber,
+                            profilePicture: profilePictureBase64,
+                            roleId: roleId
+                        };
+
+                        console.log("8. Enviando para a API...", userData);
+
+                        const response = await fetch('/Users/Create', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(userData)
+                        });
+
+                        const data = await response.json();
+
+                        submitButton.removeAttribute('data-kt-indicator');
+                        submitButton.disabled = false;
+
+                        if (data.success) {
+                            location.reload();
+                        } else {
+                            Swal.fire({ text: data.message, icon: "error", buttonsStyling: false, confirmButtonText: "Ok", customClass: { confirmButton: "btn btn-danger" } });
+                        }
+
+                    } catch (error) {
+                        console.error("Erro fatal no try/catch do submit:", error);
+                        submitButton.removeAttribute('data-kt-indicator');
+                        submitButton.disabled = false;
+                        Swal.fire({ text: "Erro interno no navegador ao processar os dados.", icon: "error", buttonsStyling: false, confirmButtonText: "Ok", customClass: { confirmButton: "btn btn-danger" } });
+                    }
+                });
+            }
+
+                    // ==========================================
+        // MÁSCARA DO TELEFONE DE EDIÇÃO
+        // ==========================================
+        try {
+            if (typeof Inputmask !== "undefined") {
+                var editPhoneInput = document.getElementById("editPhoneNumber");
+                if (editPhoneInput) {
+                    Inputmask({ mask: ["(99) 9999-9999", "(99) 99999-9999"], keepStatic: true }).mask(editPhoneInput);
+                }
+            }
+        } catch (err) { console.error(err); }
+
+        // ==========================================
+        // LÓGICA DE ABRIR MODAL E CARREGAR DADOS
+        // ==========================================
+        const editButtons = document.querySelectorAll('.btn-edit-user');
+        const editModalEl = document.getElementById('kt_modal_edit_user');
+        const editModal = new bootstrap.Modal(editModalEl);
+
+        editButtons.forEach(button => {
+            button.addEventListener('click', async function (e) {
+                e.preventDefault();
+                const userId = this.getAttribute('data-user-id');
+        
+                // Coloca um loading maroto com SweetAlert enquanto busca os dados
+                Swal.fire({ text: "Carregando dados...", allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+
+                try {
+                    const response = await fetch(`/Users/GetUserForEdit/${userId}`);
+                    const data = await response.json();
+            
+                    Swal.close(); // Fecha o loading
+
+                    // Preenche os campos do formulário
+                    document.getElementById('editUserId').value = data.id;
+                    document.getElementById('editFullName').value = data.fullName || '';
+                    document.getElementById('editUserName').value = data.userName || '';
+                    document.getElementById('editEmail').value = data.email || '';
+                    document.getElementById('editJobTitle').value = data.jobTitle || '';
+                    document.getElementById('editPhoneNumber').value = data.phoneNumber || '';
+            
+                    // Preenche o Select2 (O jQuery é necessário aqui porque o Select2 do Metronic exige)
+                    if (data.roleId) {
+                        $('#editRoleId').val(data.roleId).trigger('change');
+                    } else {
+                        $('#editRoleId').val(null).trigger('change');
+                    }
+
+                    // Preenche a imagem de perfil
+                    const imagePreview = document.getElementById('editImagePreview');
+                    if (data.profilePicture) {
+                        imagePreview.style.backgroundImage = `url(data:image/jpeg;base64,${data.profilePicture})`;
+                    } else {
+                        imagePreview.style.backgroundImage = "none";
+                    }
+
+                    // Abre o modal
+                    editModal.show();
+                } catch (error) {
+                    Swal.fire({ text: "Erro ao carregar dados do usuário.", icon: "error", buttonsStyling: false, confirmButtonText: "Ok", customClass: { confirmButton: "btn btn-danger" } });
+                }
+            });
+        });
+
+        // ==========================================
+        // LÓGICA DE SALVAR A EDIÇÃO
+        // ==========================================
+        const editForm = document.getElementById('kt_modal_edit_user_form');
+        const editSubmitButton = document.getElementById('kt_modal_edit_user_submit');
+
+        if (editForm) {
+            editForm.addEventListener('submit', async function (e) {
+                e.preventDefault();
+
+                const userId = document.getElementById('editUserId').value;
+                const fullName = document.getElementById('editFullName').value;
+                const userName = document.getElementById('editUserName').value;
+                const email = document.getElementById('editEmail').value;
+                const jobTitle = document.getElementById('editJobTitle').value;
+                const phoneNumber = document.getElementById('editPhoneNumber').value;
+                const roleId = document.getElementById('editRoleId').value;
+                const fileInput = document.querySelector('#kt_modal_edit_user .image-input input[type="file"]');
+
+                if (!fullName || !userName || !email || !roleId) {
+                    Swal.fire({ text: "Preencha os campos obrigatórios.", icon: "warning", buttonsStyling: false, confirmButtonText: "Ok", customClass: { confirmButton: "btn btn-primary" } });
+                    return;
+                }
+
+                editSubmitButton.setAttribute('data-kt-indicator', 'on');
+                editSubmitButton.disabled = true;
+
+                try {
+                    let profilePictureBase64 = null;
+                    if (fileInput && fileInput.files && fileInput.files.length > 0) {
+                        const fullBase64 = await getBase64(fileInput.files[0]);
+                        profilePictureBase64 = (fullBase64 && fullBase64.includes(',')) ? fullBase64.split(',')[1] : fullBase64;
+                    }
+
+                    const userData = {
+                        id: userId,
+                        fullName: fullName,
+                        userName: userName,
+                        email: email,
+                        jobTitle: jobTitle,
+                        phoneNumber: phoneNumber,
+                        profilePicture: profilePictureBase64, // Vai null se o usuário não escolheu foto nova, a API preserva a antiga
+                        roleId: roleId
+                    };
+
+                    const response = await fetch(`/Users/Edit/${userId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(userData)
+                    });
+
+                    const data = await response.json();
+
+                    editSubmitButton.removeAttribute('data-kt-indicator');
+                    editSubmitButton.disabled = false;
+
+                    if (data.success) {
+                        location.reload();
+                    } else {
+                        Swal.fire({ text: data.message, icon: "error", buttonsStyling: false, confirmButtonText: "Ok", customClass: { confirmButton: "btn btn-danger" } });
+                    }
+
+                } catch (error) {
+                    editSubmitButton.removeAttribute('data-kt-indicator');
+                    editSubmitButton.disabled = false;
+                    Swal.fire({ text: "Erro interno ao processar os dados.", icon: "error", buttonsStyling: false, confirmButtonText: "Ok", customClass: { confirmButton: "btn btn-danger" } });
+                }
+            });
+        }
+
+        // ==========================================
+        // LÓGICA DE EXCLUSÃO DE USUÁRIO
+        // ==========================================
+        const deleteUserButtons = document.querySelectorAll('.btn-delete-user');
+
+        deleteUserButtons.forEach(button => {
+            button.addEventListener('click', function (e) {
+                e.preventDefault();
+        
+                const userId = this.getAttribute('data-user-id');
+                const userName = this.getAttribute('data-user-name');
+
+                Swal.fire({
+                    text: `Tem certeza que deseja excluir o usuário "${userName}"? Esta ação não pode ser desfeita e ele perderá o acesso ao Axiom Atlas.`,
+                    icon: "warning",
+                    showCancelButton: true,
+                    buttonsStyling: false,
+                    confirmButtonText: "Sim, excluir!",
+                    cancelButtonText: "Não, cancelar",
+                    customClass: {
+                        confirmButton: "btn fw-bold btn-danger",
+                        cancelButton: "btn fw-bold btn-active-light-primary"
+                    }
+                }).then(function (result) {
+                    if (result.value) {
+                
+                        Swal.fire({ text: "Excluindo...", allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+
+                        fetch(`/Users/Delete/${userId}`, {
+                            method: 'DELETE'
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                Swal.fire({ text: data.message, icon: "success", buttonsStyling: false, confirmButtonText: "Ok", customClass: { confirmButton: "btn btn-primary" }
+                                }).then(() => { location.reload(); });
+                            } else {
+                                Swal.fire({ text: data.message, icon: "error", buttonsStyling: false, confirmButtonText: "Ok", customClass: { confirmButton: "btn btn-danger" } });
+                            }
+                        })
+                        .catch(error => {
+                            Swal.fire({ text: "Erro de comunicação com o servidor.", icon: "error", buttonsStyling: false, confirmButtonText: "Ok", customClass: { confirmButton: "btn btn-danger" } });
+                        });
+                    }
+                });
+            });
+        });
+
+        // ==========================================
+        // LÓGICA DE ALTERAR STATUS (ATIVAR/INATIVAR)
+        // ==========================================
+        const toggleStatusButtons = document.querySelectorAll('.btn-toggle-status');
+
+        toggleStatusButtons.forEach(button => {
+            button.addEventListener('click', function (e) {
+                e.preventDefault();
+        
+                const userId = this.getAttribute('data-user-id');
+                const userName = this.getAttribute('data-user-name');
+
+                Swal.fire({
+                    text: `Deseja realmente alterar o status de acesso do usuário "${userName}"?`,
+                    icon: "question",
+                    showCancelButton: true,
+                    buttonsStyling: false,
+                    confirmButtonText: "Sim, alterar!",
+                    cancelButtonText: "Não, cancelar",
+                    customClass: {
+                        confirmButton: "btn fw-bold btn-warning",
+                        cancelButton: "btn fw-bold btn-active-light-primary"
+                    }
+                }).then(function (result) {
+                    if (result.value) {
+                
+                        Swal.fire({ text: "Processando...", allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+
+                        fetch(`/Users/ToggleStatus/${userId}`, {
+                            method: 'PUT' // Usamos PUT pois é uma atualização de registro
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                Swal.fire({ text: data.message, icon: "success", buttonsStyling: false, confirmButtonText: "Ok", customClass: { confirmButton: "btn btn-primary" }
+                                }).then(() => { location.reload(); });
+                            } else {
+                                Swal.fire({ text: data.message, icon: "error", buttonsStyling: false, confirmButtonText: "Ok", customClass: { confirmButton: "btn btn-danger" } });
+                            }
+                        })
+                        .catch(error => {
+                            Swal.fire({ text: "Erro de comunicação com o servidor.", icon: "error", buttonsStyling: false, confirmButtonText: "Ok", customClass: { confirmButton: "btn btn-danger" } });
+                        });
+                    }
+                });
+            });
+        });
+        });
+    </script>
+}

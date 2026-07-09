@@ -1,0 +1,61 @@
+﻿@model Axiom.Atlas.Web.Model.Login.ChangePasswordViewModel
+@{
+    ViewData["Title"] = "Segurança da Conta";
+}
+
+<div class="card mb-5 mb-xl-10">
+    <div class="card-header border-0 cursor-pointer">
+        <div class="card-title m-0">
+            <h3 class="fw-bold m-0">Alterar Senha</h3>
+        </div>
+    </div>
+    <div id="kt_account_settings_password" class="collapse show">
+        <form id="kt_account_profile_details_form" class="form" asp-controller="Profile" asp-action="ChangePassword" method="post">
+            <div class="card-body border-top p-9">
+                
+                @if (!ViewData.ModelState.IsValid)
+                {
+                    <div class="alert alert-danger mb-8">
+                        <div asp-validation-summary="All" class="text-danger"></div>
+                    </div>
+                }
+                
+                @if (TempData["SuccessMessage"] != null)
+                {
+                    <div class="alert alert-success mb-8">
+                        @TempData["SuccessMessage"]
+                    </div>
+                }
+
+                <div class="row mb-6">
+                    <label class="col-lg-4 col-form-label required fw-semibold fs-6">Senha Atual</label>
+                    <div class="col-lg-8 fv-row">
+                        <input asp-for="CurrentPassword" type="password" class="form-control form-control-lg form-control-solid" placeholder="Sua senha atual" />
+                        <span asp-validation-for="CurrentPassword" class="text-danger mt-2 d-block"></span>
+                    </div>
+                </div>
+                <div class="row mb-6">
+                    <label class="col-lg-4 col-form-label required fw-semibold fs-6">Nova Senha</label>
+                    <div class="col-lg-8 fv-row">
+                        <input asp-for="NewPassword" type="password" class="form-control form-control-lg form-control-solid" placeholder="Nova senha" />
+                        <span asp-validation-for="NewPassword" class="text-danger mt-2 d-block"></span>
+                    </div>
+                </div>
+                <div class="row mb-6">
+                    <label class="col-lg-4 col-form-label required fw-semibold fs-6">Confirmar Nova Senha</label>
+                    <div class="col-lg-8 fv-row">
+                        <input asp-for="ConfirmPassword" type="password" class="form-control form-control-lg form-control-solid" placeholder="Confirme a nova senha" />
+                        <span asp-validation-for="ConfirmPassword" class="text-danger mt-2 d-block"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="card-footer d-flex justify-content-end py-6 px-9">
+                <button type="reset" class="btn btn-light btn-active-light-primary me-2">Descartar</button>
+                <button type="submit" class="btn btn-primary" id="kt_account_profile_details_submit">Salvar Senha</button>
+            </div>
+        </form>
+    </div>
+</div>
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

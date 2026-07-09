@@ -1,0 +1,155 @@
+@{
+    ViewData["Title"] = "Auditoria do Ponto";
+}
+
+<div class="d-flex flex-column flex-column-fluid">
+    <div id="kt_app_toolbar" class="app-toolbar py-3 py-lg-6">
+        <div id="kt_app_toolbar_container" class="app-container container-xxl d-flex flex-stack">
+            <div class="page-title d-flex flex-column justify-content-center flex-wrap me-3">
+                <h1 class="page-heading d-flex text-gray-900 fw-bold fs-3 flex-column justify-content-center my-0">
+                    @ViewData["Title"]
+                </h1>
+                <ul class="breadcrumb breadcrumb-separatorless fw-semibold fs-7 my-0 pt-1">
+                    <li class="breadcrumb-item text-muted">
+                        <a asp-controller="TimeClock" asp-action="Index" class="text-muted text-hover-primary">Ponto Eletrônico</a>
+                    </li>
+                    <li class="breadcrumb-item">
+                        <span class="bullet bg-gray-500 w-5px h-2px"></span>
+                    </li>
+                    <li class="breadcrumb-item text-muted">Banco de horas</li>
+                </ul>
+            </div>
+            <div class="d-flex gap-3 align-items-center">
+                <input type="month" id="auditMonthPicker" class="form-control form-control-solid w-200px">
+                <a asp-controller="TimeClock" asp-action="Index" class="btn btn-sm btn-light">Voltar ao calendário</a>
+            </div>
+        </div>
+    </div>
+
+    <div id="kt_app_content" class="app-content flex-column-fluid">
+        <div id="kt_app_content_container" class="app-container container-xxl">
+            <div class="row g-5 mb-8">
+                <div class="col-xl-4">
+                    <div class="card bg-light-primary">
+                        <div class="card-body">
+                            <i class="ki-duotone ki-wallet fs-2hx text-primary"><span class="path1"></span><span class="path2"></span></i>
+                            <div class="fw-bold fs-1 mt-5" id="auditBalance">0h00</div>
+                            <div class="text-muted fw-semibold">Saldo do banco no mês selecionado</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-header border-0 pt-6">
+                    <h3 class="card-title align-items-start flex-column">
+                        <span class="card-label fw-bold fs-3">Eventos auditáveis</span>
+                        <span class="text-muted mt-1 fw-semibold fs-7" id="auditSubtitle">Carregando...</span>
+                    </h3>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-4">
+                            <thead>
+                                <tr class="fw-bold text-muted">
+                                    <th>Data</th>
+                                    <th>Origem</th>
+                                    <th>Descrição</th>
+                                    <th>Trabalhado</th>
+                                    <th>Previsto</th>
+                                    <th>Banco</th>
+                                </tr>
+                            </thead>
+                            <tbody id="auditTableBody">
+                                <tr>
+                                    <td colspan="6" class="text-center text-muted py-10">
+                                        <span class="spinner-border spinner-border-sm text-primary me-2"></span>
+                                        Carregando auditoria...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const initialAuditYear = @DateTime.Today.Year;
+        const initialAuditMonth = @DateTime.Today.Month;
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const picker = document.getElementById('auditMonthPicker');
+            picker.value = `${initialAuditYear}-${String(initialAuditMonth).padStart(2, '0')}`;
+            picker.addEventListener('change', loadAudit);
+            loadAudit();
+        });
+
+        async function loadAudit() {
+            const [year, month] = document.getElementById('auditMonthPicker').value.split('-').map(Number);
+            const tbody = document.getElementById('auditTableBody');
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-10"><span class="spinner-border spinner-border-sm text-primary me-2"></span>Carregando auditoria...</td></tr>`;
+
+            try {
+                const response = await fetch(`/TimeClock/GetAudit?year=${year}&month=${month}`);
+                const audit = await readJsonResponse(response);
+                document.getElementById('auditBalance').innerText = audit.balanceLabel;
+                document.getElementById('auditBalance').className = `fw-bold fs-1 mt-5 ${getBalanceClass(audit.balanceMinutes)}`;
+                document.getElementById('auditSubtitle').innerText = `${audit.entries.length} evento(s) encontrado(s).`;
+
+                if (!audit.entries.length) {
+                    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-10">Nenhum evento auditável no mês.</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = audit.entries.map(entry => `
+                    <tr>
+                        <td class="fw-bold text-gray-900">${formatDatePt(entry.date)}</td>
+                        <td><span class="badge badge-light-primary">${escapeHtml(entry.sourceType)}</span></td>
+                        <td>
+                            <div class="fw-semibold text-gray-800">${escapeHtml(entry.description)}</div>
+                            <div class="text-muted fs-8">${renderPunches(entry.punches)}</div>
+                        </td>
+                        <td><span class="badge badge-light-success">${escapeHtml(entry.workedLabel)}</span></td>
+                        <td><span class="badge badge-light-info">${escapeHtml(entry.expectedLabel)}</span></td>
+                        <td><span class="fw-bold ${getBalanceClass(entry.balanceMinutes)}">${escapeHtml(entry.balanceLabel)}</span></td>
+                    </tr>`).join('');
+            } catch (error) {
+                tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-10">${escapeHtml(error.message)}</td></tr>`;
+            }
+        }
+
+        function renderPunches(punches) {
+            if (!punches || !punches.length) return '';
+            return punches.map(punch => `${escapeHtml(punch.typeLabel)} ${escapeHtml(punch.time)}`).join(' | ');
+        }
+
+        async function readJsonResponse(response) {
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload.message || payload.Message || 'Não foi possível concluir a operação.');
+            }
+            return payload;
+        }
+
+        function formatDatePt(date) {
+            const [year, month, day] = date.split('-');
+            return `${day}/${month}/${year}`;
+        }
+
+        function getBalanceClass(minutes) {
+            if (minutes > 0) return 'text-success';
+            if (minutes < 0) return 'text-danger';
+            return 'text-muted';
+        }
+
+        function escapeHtml(value) {
+            const element = document.createElement('div');
+            element.textContent = value ?? '';
+            return element.innerHTML;
+        }
+    </script>
+}

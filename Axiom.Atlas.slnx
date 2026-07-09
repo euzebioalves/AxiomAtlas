@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="Axiom.Atlas.API/Axiom.Atlas.API.csproj" Id="2f8c2420-ffe5-4785-a106-5f9e7bccee74" />
+  <Project Path="Axiom.Atlas.Application/Axiom.Atlas.Application.csproj" Id="451b14a6-8041-41a6-be10-c3b685df117c" />
+  <Project Path="Axiom.Atlas.Domain/Axiom.Atlas.Domain.csproj" Id="993aaa35-d305-4d03-a0c3-7e6003593c3c" />
+  <Project Path="Axiom.Atlas.Infrastructure/Axiom.Atlas.Infrastructure.csproj" Id="7264f9a6-dd29-4587-9b49-4bdded0bbd7f" />
+  <Project Path="Axiom.Atlas.Persistence/Axiom.Atlas.Persistence.csproj" Id="1aa91ad4-83f8-451d-94ba-1b0735e57536" />
+  <Project Path="Axiom.Atlas.Web/Axiom.Atlas.Web.csproj" />
+</Solution>
