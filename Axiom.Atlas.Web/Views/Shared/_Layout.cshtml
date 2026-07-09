@@ -1,8 +1,11 @@
 @using System.Reflection
 @{
+    // A versao informativa inclui o hash do commit quando o projeto esta em um repositorio Git.
+    // O rodape deve apresentar somente a versao publicada do produto.
     var version = Assembly.GetEntryAssembly()?
-        .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?
-        .InformationalVersion;
+        .GetName()
+        .Version?
+        .ToString(3);
 
     var currentController = ViewContext.RouteData.Values["Controller"]?.ToString() ?? "";
     var currentAction = ViewContext.RouteData.Values["Action"]?.ToString() ?? "";
