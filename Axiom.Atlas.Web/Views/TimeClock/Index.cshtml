@@ -35,6 +35,11 @@
         min-height: 5.5rem;
     }
 
+    #clockCalendar .fc-daygrid-day-frame {
+        position: relative;
+        min-height: 100%;
+    }
+
     #clockCalendar .fc-event {
         cursor: pointer;
     }
@@ -45,22 +50,56 @@
     }
 
     #clockCalendar .time-clock-day-indicators {
+        position: absolute;
+        right: .45rem;
+        bottom: .45rem;
+        z-index: 3;
         display: inline-flex;
+        flex-direction: row-reverse;
         align-items: center;
-        gap: .25rem;
-        margin-left: .35rem;
+        gap: .35rem;
     }
 
     #clockCalendar .time-clock-day-indicator {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 1.5rem;
-        height: 1.5rem;
-        border: 0;
-        border-radius: .4rem;
-        background: transparent;
+        width: 1.8rem;
+        height: 1.8rem;
+        border: 1px solid transparent;
+        border-radius: .5rem;
+        box-shadow: 0 .125rem .35rem rgba(0, 0, 0, .12);
         cursor: help;
+    }
+
+    #clockCalendar .time-clock-indicator-medical {
+        color: var(--bs-danger);
+        background-color: rgba(var(--bs-danger-rgb), .18);
+        border-color: rgba(var(--bs-danger-rgb), .45);
+    }
+
+    #clockCalendar .time-clock-indicator-warning {
+        color: var(--bs-warning);
+        background-color: rgba(var(--bs-warning-rgb), .18);
+        border-color: rgba(var(--bs-warning-rgb), .45);
+    }
+
+    #clockCalendar .time-clock-indicator-primary {
+        color: var(--bs-primary);
+        background-color: rgba(var(--bs-primary-rgb), .18);
+        border-color: rgba(var(--bs-primary-rgb), .45);
+    }
+
+    #clockCalendar .time-clock-indicator-success {
+        color: var(--bs-success);
+        background-color: rgba(var(--bs-success-rgb), .18);
+        border-color: rgba(var(--bs-success-rgb), .45);
+    }
+
+    #clockCalendar .time-clock-indicator-danger {
+        color: var(--bs-danger);
+        background-color: rgba(var(--bs-danger-rgb), .18);
+        border-color: rgba(var(--bs-danger-rgb), .45);
     }
 
     .time-clock-month-controls {
@@ -556,30 +595,49 @@
 
             const indicators = [];
             if (day.isHoliday) {
-                indicators.push({ icon: 'ki-calendar-8', color: 'warning', label: day.holidayName || 'Feriado' });
+                indicators.push({ icon: 'ki-calendar-8', theme: 'warning', label: day.holidayName || 'Feriado' });
             }
             if (day.absences.length) {
-                const labels = [...new Set(day.absences.map(absence => absence.typeLabel))].join(', ');
-                indicators.push({ icon: 'ki-document', color: 'success', label: `Ausência: ${labels}` });
+                [...new Map(day.absences.map(absence => [absence.type, absence])).values()]
+                    .forEach(absence => indicators.push(getAbsenceIndicator(absence)));
             }
             if (day.unjustifiedAbsence) {
-                indicators.push({ icon: 'ki-information-5', color: 'danger', label: day.unjustifiedAbsence.typeLabel });
+                indicators.push({ icon: 'ki-information', theme: 'danger', label: day.unjustifiedAbsence.typeLabel });
             }
 
             if (!indicators.length) return;
 
-            const top = info.el.querySelector('.fc-daygrid-day-top');
-            if (!top) return;
+            const frame = info.el.querySelector('.fc-daygrid-day-frame');
+            if (!frame) return;
 
             const container = document.createElement('span');
             container.className = 'time-clock-day-indicators';
             container.innerHTML = indicators.map(indicator => `
-                <span class="time-clock-day-indicator text-${indicator.color}" data-bs-toggle="tooltip" title="${escapeAttribute(indicator.label)}">
-                    <i class="ki-duotone ${indicator.icon} fs-5"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>
+                <span class="time-clock-day-indicator time-clock-indicator-${indicator.theme}" data-bs-toggle="tooltip" title="${escapeAttribute(indicator.label)}">
+                    <i class="ki-duotone ${indicator.icon} fs-4"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>
                 </span>`).join('');
-            top.appendChild(container);
+            frame.appendChild(container);
 
             container.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(element => new bootstrap.Tooltip(element));
+        }
+
+        function getAbsenceIndicator(absence) {
+            const indicatorsByType = {
+                MedicalCertificate: { icon: 'ki-pulse', theme: 'medical' },
+                Vacation: { icon: 'ki-airplane', theme: 'primary' },
+                MaternityLeave: { icon: 'ki-heart', theme: 'medical' },
+                MarriageLeave: { icon: 'ki-people', theme: 'primary' },
+                MilitaryService: { icon: 'ki-shield-cross', theme: 'warning' },
+                Bereavement: { icon: 'ki-information', theme: 'danger' },
+                HomeOffice: { icon: 'ki-home-2', theme: 'success' },
+                Other: { icon: 'ki-document', theme: 'primary' }
+            };
+            const indicator = indicatorsByType[absence.type] || indicatorsByType.Other;
+
+            return {
+                ...indicator,
+                label: `Ausência: ${absence.typeLabel}`
+            };
         }
 
         function openPunchModal(date) {
