@@ -129,11 +129,13 @@ namespace Axiom.Atlas.Application.DTOs.TimeClock
         public int WorkedMinutes { get; set; }
         public int ExpectedMinutes { get; set; }
         public int BalanceMinutes { get; set; }
+        public int AccumulatedBalanceMinutes { get; set; }
         public int AbsenceDays { get; set; }
         public int UnjustifiedAbsenceDays { get; set; }
         public string WorkedLabel { get; set; } = "0h00";
         public string ExpectedLabel { get; set; } = "0h00";
         public string BalanceLabel { get; set; } = "0h00";
+        public string AccumulatedBalanceLabel { get; set; } = "0h00";
     }
 
     public class TimeClockCalendarDto

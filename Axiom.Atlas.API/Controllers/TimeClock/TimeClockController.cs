@@ -168,9 +168,21 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
                 return BadRequest(new { message = "Data inválida para o registro de ponto." });
             }
 
+            var existingPunches = await _context.TimeClockPunches
+                .Where(x => x.UserId == userId && x.PunchDate == punchDate)
+                .ToListAsync();
+
             if (request.Punches.Count == 0)
             {
-                return BadRequest(new { message = "Informe ao menos um registro de ponto." });
+                if (existingPunches.Count == 0)
+                {
+                    return BadRequest(new { message = "Não há registros de ponto para remover nesta data." });
+                }
+
+                _context.TimeClockPunches.RemoveRange(existingPunches);
+                await _context.SaveChangesAsync();
+
+                return Ok(await BuildDayAsync(userId, punchDate));
             }
 
             var requestedTypes = new HashSet<TimeClockPunchType>();
@@ -200,10 +212,6 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
 
                 parsedPunches.Add((punch, type, time));
             }
-
-            var existingPunches = await _context.TimeClockPunches
-                .Where(x => x.UserId == userId && x.PunchDate == punchDate)
-                .ToListAsync();
 
             var removedPunches = existingPunches
                 .Where(x => !requestedTypes.Contains(x.Type))
@@ -509,6 +517,12 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
             summary.WorkedLabel = FormatMinutes(summary.WorkedMinutes);
             summary.ExpectedLabel = FormatMinutes(summary.ExpectedMinutes);
             summary.BalanceLabel = FormatSignedMinutes(summary.BalanceMinutes);
+            summary.AccumulatedBalanceMinutes = await CalculateAccumulatedBalanceAsync(
+                userId,
+                schedule,
+                globalSettings.ToleranceMinutes,
+                DateTime.UtcNow.Date);
+            summary.AccumulatedBalanceLabel = FormatSignedMinutes(summary.AccumulatedBalanceMinutes);
 
             return new TimeClockCalendarDto
             {
@@ -520,6 +534,66 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
                 Days = days,
                 Summary = summary
             };
+        }
+
+        private async Task<int> CalculateAccumulatedBalanceAsync(
+            string userId,
+            UserWorkScheduleSetting schedule,
+            int toleranceMinutes,
+            DateTime throughDate)
+        {
+            var firstPunchDate = await _context.TimeClockPunches
+                .Where(x => x.UserId == userId)
+                .OrderBy(x => x.PunchDate)
+                .Select(x => (DateTime?)x.PunchDate)
+                .FirstOrDefaultAsync();
+            var firstAbsenceDate = await _context.TimeClockAbsences
+                .Where(x => x.UserId == userId)
+                .OrderBy(x => x.StartDate)
+                .Select(x => (DateTime?)x.StartDate)
+                .FirstOrDefaultAsync();
+            var firstUnjustifiedAbsenceDate = await _context.TimeClockUnjustifiedAbsences
+                .Where(x => x.UserId == userId)
+                .OrderBy(x => x.AbsenceDate)
+                .Select(x => (DateTime?)x.AbsenceDate)
+                .FirstOrDefaultAsync();
+
+            var startDates = new[] { firstPunchDate, firstAbsenceDate, firstUnjustifiedAbsenceDate }
+                .Where(x => x.HasValue)
+                .Select(x => x!.Value.Date)
+                .ToList();
+            if (startDates.Count == 0)
+            {
+                return 0;
+            }
+
+            var startDate = startDates.Min();
+            if (startDate > throughDate)
+            {
+                return 0;
+            }
+
+            var punches = await _context.TimeClockPunches
+                .Where(x => x.UserId == userId && x.PunchDate >= startDate && x.PunchDate <= throughDate)
+                .ToListAsync();
+            var absences = await _context.TimeClockAbsences
+                .Include(x => x.Attachments)
+                .Where(x => x.UserId == userId && x.StartDate <= throughDate && x.EndDate >= startDate)
+                .ToListAsync();
+            var unjustifiedAbsences = await _context.TimeClockUnjustifiedAbsences
+                .Where(x => x.UserId == userId && x.AbsenceDate >= startDate && x.AbsenceDate <= throughDate)
+                .ToListAsync();
+
+            var totalDays = (throughDate.Date - startDate.Date).Days + 1;
+            return Enumerable.Range(0, totalDays)
+                .Select(offset => BuildDay(
+                    startDate.AddDays(offset),
+                    schedule,
+                    toleranceMinutes,
+                    punches,
+                    absences,
+                    unjustifiedAbsences))
+                .Sum(day => day.BalanceMinutes);
         }
 
         private async Task<TimeClockDayDto> BuildDayAsync(string userId, DateTime date)
@@ -569,16 +643,19 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
                 ? 0
                 : Math.Max(0, CalculateMinutesBetween(schedule.EntryTime, schedule.ExitTime) - schedule.LunchIntervalMinutes);
 
+            var hasFullDayJustifiedAbsence = dayAbsences.Any(x => x.PeriodType == TimeClockAbsencePeriodType.FullDay);
             var workedMinutes = CalculateWorkedMinutes(dayPunches);
             var lunchMinutes = CalculateLunchMinutes(dayPunches);
             var absenceCoverageMinutes = CalculateJustifiedAbsenceCoverageMinutes(dayAbsences, expectedBaseMinutes);
             var expectedMinutes = Math.Max(0, expectedBaseMinutes - absenceCoverageMinutes);
             var balanceMinutes = workedMinutes - expectedMinutes;
 
-            if (absenceCoverageMinutes >= expectedBaseMinutes && expectedBaseMinutes > 0)
+            if (hasFullDayJustifiedAbsence)
             {
                 balanceMinutes = 0;
                 workedMinutes = 0;
+                expectedMinutes = 0;
+                lunchMinutes = 0;
             }
 
             var unjustifiedDto = unjustified == null

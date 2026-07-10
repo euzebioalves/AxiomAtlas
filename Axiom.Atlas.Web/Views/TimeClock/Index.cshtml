@@ -44,6 +44,51 @@
         font-weight: 700;
     }
 
+    #clockCalendar .time-clock-day-indicators {
+        display: inline-flex;
+        align-items: center;
+        gap: .25rem;
+        margin-left: .35rem;
+    }
+
+    #clockCalendar .time-clock-day-indicator {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.5rem;
+        height: 1.5rem;
+        border: 0;
+        border-radius: .4rem;
+        background: transparent;
+        cursor: help;
+    }
+
+    .time-clock-month-controls {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(150px, 1fr));
+        gap: .75rem;
+        width: min(100%, 760px);
+    }
+
+    .time-clock-month-controls .btn,
+    .time-clock-month-controls .form-control {
+        min-height: 52px;
+        white-space: nowrap;
+    }
+
+    @@media (max-width: 1199.98px) {
+        .time-clock-month-controls {
+            grid-template-columns: repeat(2, minmax(180px, 1fr));
+        }
+    }
+
+    @@media (max-width: 575.98px) {
+        .time-clock-month-controls {
+            grid-template-columns: 1fr;
+            width: 100%;
+        }
+    }
+
     .balance-positive {
         color: var(--bs-success);
     }
@@ -108,24 +153,36 @@
                                 Clique em um dia para lançar uma ou várias marcações, registrar falta ou anexar uma ausência.
                             </div>
                         </div>
-                        <div class="d-flex flex-column flex-sm-row gap-3 align-items-stretch align-items-sm-center">
-                            <button class="btn btn-light" id="btnPreviousMonth" type="button">
-                                <i class="ki-duotone ki-left fs-3"></i>Mês anterior
+                        <div class="time-clock-month-controls">
+                            <button class="btn btn-light d-inline-flex align-items-center justify-content-center gap-2" id="btnPreviousMonth" type="button">
+                                <i class="ki-duotone ki-left fs-3"></i><span>Mês anterior</span>
                             </button>
-                            <input type="month" id="monthPicker" class="form-control form-control-solid w-200px">
-                            <button class="btn btn-light" id="btnNextMonth" type="button">
-                                Próximo mês<i class="ki-duotone ki-right fs-3"></i>
+                            <input type="month" id="monthPicker" class="form-control form-control-solid">
+                            <button class="btn btn-light d-inline-flex align-items-center justify-content-center gap-2" id="btnNextMonth" type="button">
+                                <span>Próximo mês</span><i class="ki-duotone ki-right fs-3"></i>
                             </button>
-                            <button class="btn btn-success" id="btnOpenAbsenceModal" type="button">
-                                <i class="ki-duotone ki-plus fs-2"></i>Ausência
+                            <button class="btn btn-success d-inline-flex align-items-center justify-content-center gap-2" id="btnOpenAbsenceModal" type="button">
+                                <i class="ki-duotone ki-plus fs-2"></i><span>Ausência</span>
                             </button>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="row g-5 g-xl-8 mb-5 mb-xl-8">
-                <div class="col-xl-3 col-md-6">
+            <div class="row row-cols-1 row-cols-md-2 row-cols-xl-5 g-5 g-xl-8 mb-5 mb-xl-8">
+                <div class="col">
+                    <div class="card card-flush h-xl-100">
+                        <div class="card-body d-flex align-items-center p-6">
+                            <div class="symbol symbol-50px me-5"><span class="symbol-label bg-light-danger"><i class="ki-duotone ki-chart-simple fs-2x text-danger"><span class="path1"></span><span class="path2"></span></i></span></div>
+                            <div class="d-flex flex-column">
+                                <span class="fs-2hx fw-bold lh-1 ls-n2" id="summaryTotalBalance">0h00</span>
+                                <span class="text-gray-600 fw-semibold fs-6 mt-2">Banco de horas</span>
+                                <span class="text-gray-500 fw-semibold fs-7 mt-1">Saldo acumulado</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col">
                     <div class="card card-flush h-xl-100">
                         <div class="card-body d-flex align-items-center p-6">
                             <div class="symbol symbol-50px me-5"><span class="symbol-label bg-light-primary"><i class="ki-duotone ki-wallet fs-2x text-primary"><span class="path1"></span><span class="path2"></span></i></span></div>
@@ -137,7 +194,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-xl-3 col-md-6">
+                <div class="col">
                     <div class="card card-flush h-xl-100">
                         <div class="card-body d-flex align-items-center p-6">
                             <div class="symbol symbol-50px me-5"><span class="symbol-label bg-light-success"><i class="ki-duotone ki-time fs-2x text-success"><span class="path1"></span><span class="path2"></span></i></span></div>
@@ -149,7 +206,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-xl-3 col-md-6">
+                <div class="col">
                     <div class="card card-flush h-xl-100">
                         <div class="card-body d-flex align-items-center p-6">
                             <div class="symbol symbol-50px me-5"><span class="symbol-label bg-light-info"><i class="ki-duotone ki-calendar-tick fs-2x text-info"><span class="path1"></span><span class="path2"></span></i></span></div>
@@ -161,7 +218,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-xl-3 col-md-6">
+                <div class="col">
                     <div class="card card-flush h-xl-100">
                         <div class="card-body d-flex align-items-center p-6">
                             <div class="symbol symbol-50px me-5"><span class="symbol-label bg-light-warning"><i class="ki-duotone ki-shield-tick fs-2x text-warning"><span class="path1"></span><span class="path2"></span></i></span></div>
@@ -422,6 +479,8 @@
         function renderSummary() {
             document.getElementById('calendarTitle').innerText = currentCalendar.monthLabel;
             document.getElementById('calendarSubtitle').innerText = `Jornada padrão: ${currentCalendar.schedule.entryTime} às ${currentCalendar.schedule.exitTime}, intervalo de ${currentCalendar.schedule.lunchIntervalMinutes} min.`;
+            document.getElementById('summaryTotalBalance').innerText = currentCalendar.summary.accumulatedBalanceLabel;
+            document.getElementById('summaryTotalBalance').className = `fs-2hx fw-bold lh-1 ls-n2 ${getBalanceClass(currentCalendar.summary.accumulatedBalanceMinutes)}`;
             document.getElementById('summaryBalance').innerText = currentCalendar.summary.balanceLabel;
             document.getElementById('summaryBalance').className = `fs-2hx fw-bold lh-1 ls-n2 ${getBalanceClass(currentCalendar.summary.balanceMinutes)}`;
             document.getElementById('summaryWorked').innerText = currentCalendar.summary.workedLabel;
@@ -436,67 +495,48 @@
                 return;
             }
 
-            if (!fullCalendar) {
-                fullCalendar = new FullCalendar.Calendar(calendarElement, {
-                    initialView: 'dayGridMonth',
-                    initialDate: `${currentCalendar.year}-${String(currentCalendar.month).padStart(2, '0')}-01`,
-                    locale: 'pt-br',
-                    firstDay: 0,
-                    fixedWeekCount: false,
-                    selectable: true,
-                    selectMirror: true,
-                    dayMaxEvents: 3,
-                    moreLinkText: count => `+${count} mais`,
-                    headerToolbar: false,
-                    dateClick: info => openPunchModal(info.dateStr),
-                    select: info => {
-                        openPunchModal(info.startStr);
-                        fullCalendar.unselect();
-                    },
-                    eventClick: info => {
-                        info.jsEvent.preventDefault();
-                        openPunchModal(info.event.extendedProps.date);
-                    },
-                    dayCellClassNames: info => getDayClasses(info.date),
-                    dayHeaderClassNames: info => isWeekend(info.date) ? ['time-clock-weekend'] : []
-                });
-                fullCalendar.render();
+            if (fullCalendar) {
+                fullCalendar.destroy();
             }
+            calendarElement.innerHTML = '';
 
-            fullCalendar.batchRendering(() => {
-                fullCalendar.removeAllEvents();
-                fullCalendar.addEventSource(buildCalendarEvents());
-                fullCalendar.gotoDate(`${currentCalendar.year}-${String(currentCalendar.month).padStart(2, '0')}-01`);
+            fullCalendar = new FullCalendar.Calendar(calendarElement, {
+                initialView: 'dayGridMonth',
+                initialDate: `${currentCalendar.year}-${String(currentCalendar.month).padStart(2, '0')}-01`,
+                locale: 'pt-br',
+                firstDay: 0,
+                fixedWeekCount: false,
+                selectable: true,
+                selectMirror: true,
+                dayMaxEvents: 0,
+                moreLinkText: count => `+${count} mais`,
+                headerToolbar: false,
+                dateClick: info => openPunchModal(info.dateStr),
+                select: info => {
+                    openPunchModal(info.startStr);
+                    fullCalendar.unselect();
+                },
+                eventClick: info => {
+                    info.jsEvent.preventDefault();
+                    openPunchModal(info.event.extendedProps.date);
+                },
+                dayCellClassNames: info => getDayClasses(info.date),
+                dayCellDidMount: info => renderDayIndicators(info),
+                dayHeaderClassNames: info => isWeekend(info.date) ? ['time-clock-weekend'] : []
             });
+            fullCalendar.addEventSource(buildCalendarEvents());
+            fullCalendar.render();
         }
 
         function buildCalendarEvents() {
             return currentCalendar.days.flatMap(day => {
-                const punches = day.punches.map(punch => ({
+                return day.punches.map(punch => ({
                     title: `${punch.typeLabel} · ${punch.time}`,
                     start: day.date,
                     allDay: true,
                     classNames: ['fc-event-primary'],
                     extendedProps: { date: day.date }
                 }));
-
-                const absences = day.absences.map(absence => ({
-                    title: absence.typeLabel,
-                    start: day.date,
-                    allDay: true,
-                    classNames: ['fc-event-success'],
-                    extendedProps: { date: day.date }
-                }));
-
-                const unjustified = day.unjustifiedAbsence ? [{
-                    title: day.unjustifiedAbsence.typeLabel,
-                    start: day.date,
-                    allDay: true,
-                    classNames: ['fc-event-danger'],
-                    extendedProps: { date: day.date }
-                }] : [];
-
-                return [...punches, ...absences, ...unjustified];
             });
         }
 
@@ -508,6 +548,38 @@
             if (day?.unjustifiedAbsence) classes.push('time-clock-has-unjustified');
 
             return classes;
+        }
+
+        function renderDayIndicators(info) {
+            const day = getDay(toDateKey(info.date));
+            if (!day) return;
+
+            const indicators = [];
+            if (day.isHoliday) {
+                indicators.push({ icon: 'ki-calendar-8', color: 'warning', label: day.holidayName || 'Feriado' });
+            }
+            if (day.absences.length) {
+                const labels = [...new Set(day.absences.map(absence => absence.typeLabel))].join(', ');
+                indicators.push({ icon: 'ki-document', color: 'success', label: `Ausência: ${labels}` });
+            }
+            if (day.unjustifiedAbsence) {
+                indicators.push({ icon: 'ki-information-5', color: 'danger', label: day.unjustifiedAbsence.typeLabel });
+            }
+
+            if (!indicators.length) return;
+
+            const top = info.el.querySelector('.fc-daygrid-day-top');
+            if (!top) return;
+
+            const container = document.createElement('span');
+            container.className = 'time-clock-day-indicators';
+            container.innerHTML = indicators.map(indicator => `
+                <span class="time-clock-day-indicator text-${indicator.color}" data-bs-toggle="tooltip" title="${escapeAttribute(indicator.label)}">
+                    <i class="ki-duotone ${indicator.icon} fs-5"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>
+                </span>`).join('');
+            top.appendChild(container);
+
+            container.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(element => new bootstrap.Tooltip(element));
         }
 
         function openPunchModal(date) {
