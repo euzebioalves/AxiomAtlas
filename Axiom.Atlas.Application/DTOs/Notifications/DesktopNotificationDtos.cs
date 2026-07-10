@@ -17,6 +17,7 @@ namespace Axiom.Atlas.Application.DTOs.Notifications
         public string WorkPackageSubject { get; set; } = string.Empty;
         public string StatusName { get; set; } = string.Empty;
         public string? PreviousStatusName { get; set; }
+        public string? ReasonComment { get; set; }
         public string? WorkPackageUrl { get; set; }
         public DateTime CreatedAt { get; set; }
     }

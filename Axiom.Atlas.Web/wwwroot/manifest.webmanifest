@@ -1,0 +1,16 @@
+{
+  "name": "Axiom Atlas",
+  "short_name": "Axiom Atlas",
+  "description": "Plataforma interna de gestão Axiom Atlas",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#151521",
+  "theme_color": "#1b1b29",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon"
+    }
+  ]
+}

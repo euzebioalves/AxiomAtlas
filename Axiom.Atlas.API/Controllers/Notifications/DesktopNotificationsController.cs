@@ -92,6 +92,7 @@ namespace Axiom.Atlas.API.Controllers.Notifications
                     WorkPackageSubject = x.WorkPackageSubject,
                     StatusName = x.StatusName,
                     PreviousStatusName = x.PreviousStatusName,
+                    ReasonComment = x.ReasonComment,
                     WorkPackageUrl = x.WorkPackageUrl,
                     CreatedAt = x.CreatedAt
                 })

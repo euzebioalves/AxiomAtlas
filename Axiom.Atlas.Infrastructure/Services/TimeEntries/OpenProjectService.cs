@@ -68,6 +68,7 @@ namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
             var authString = Convert.ToBase64String(Encoding.ASCII.GetBytes($"apikey:{plainTextToken}"));
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", authString);
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/hal+json"));
+            client.DefaultRequestHeaders.CacheControl = new CacheControlHeaderValue { NoCache = true, NoStore = true };
 
             return client;
         }
@@ -610,7 +611,7 @@ namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
             for (var offset = 1; ; offset += pageSize)
             {
                 using var response = await client.GetAsync(
-                    $"api/v3/work_packages?pageSize={pageSize}&offset={offset}",
+                    $"api/v3/work_packages?pageSize={pageSize}&offset={offset}&monitorTimestamp={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}",
                     cancellationToken);
 
                 if (!response.IsSuccessStatusCode)
@@ -657,6 +658,52 @@ namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
             }).ToList());
 
             return workPackages;
+        }
+
+        public async Task<string?> GetLatestWorkPackageCommentAsync(
+            int workPackageId,
+            CancellationToken cancellationToken = default)
+        {
+            var client = await CreateConfiguredClientAsync();
+            using var response = await client.GetAsync(
+                $"api/v3/work_packages/{workPackageId}/activities?offset=1&pageSize=20&monitorTimestamp={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}",
+                cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(responseBody))
+            {
+                return null;
+            }
+
+            using var document = JsonDocument.Parse(responseBody);
+            if (!document.RootElement.TryGetProperty("_embedded", out var embedded) ||
+                !embedded.TryGetProperty("elements", out var elements) ||
+                elements.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            foreach (var activity in elements.EnumerateArray())
+            {
+                if (!activity.TryGetProperty("comment", out var comment) ||
+                    !comment.TryGetProperty("raw", out var rawComment))
+                {
+                    continue;
+                }
+
+                var normalizedComment = NormalizeNotificationComment(rawComment.GetString());
+                if (!string.IsNullOrWhiteSpace(normalizedComment))
+                {
+                    return normalizedComment;
+                }
+            }
+
+            return null;
         }
 
         public async Task<Dictionary<int, string>> GetOpenProjectUserEmailsAsync(
@@ -1063,6 +1110,21 @@ namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
             return string.IsNullOrWhiteSpace(baseUrl)
                 ? null
                 : baseUrl.Trim().TrimEnd('/');
+        }
+
+        private static string? NormalizeNotificationComment(string? comment)
+        {
+            if (string.IsNullOrWhiteSpace(comment))
+            {
+                return null;
+            }
+
+            var normalizedComment = string.Join(" ", comment
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+            return normalizedComment.Length <= 1000
+                ? normalizedComment
+                : $"{normalizedComment[..997]}...";
         }
 
         private static bool TryReadIdFromHref(string? href, out int id)

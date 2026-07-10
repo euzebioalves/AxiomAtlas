@@ -41,7 +41,10 @@
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Axiom Atlas" />
     <meta property="og:site_name" content="Axiom Atlas" />
+    <meta name="application-name" content="Axiom Atlas" />
+    <meta name="theme-color" content="#1b1b29" />
     <link rel="shortcut icon" href="~/favicon.ico" />
+    <link rel="manifest" href="~/manifest.webmanifest" />
 
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:300,400,500,600,700" />
     <link href="~/metronic8/css/datatables.bundle.css" rel="stylesheet" type="text/css" />
@@ -420,14 +423,23 @@
 
                     const notifications = await response.json();
                     for (const notification of notifications) {
-                        const title = `Work Package #${notification.workPackageId}: ${notification.statusName}`;
-                        const message = `${title} - ${notification.workPackageSubject}`;
+                        const isRejected = notification.statusName.toLowerCase() === 'rejected';
+                        const alertTitle = isRejected
+                            ? `Revisão necessária na WP #${notification.workPackageId}`
+                            : `Falha de teste na WP #${notification.workPackageId}`;
+                        const reason = notification.reasonComment
+                            ? `Comentário: ${notification.reasonComment}`
+                            : 'Comentário: nenhuma justificativa foi informada no OpenProject.';
+                        const message = `${alertTitle} | ${notification.workPackageSubject}. ${reason}`;
                         showToast(message, 'danger', notification.workPackageUrl);
 
                         if ('Notification' in window && Notification.permission === 'granted') {
-                            const nativeNotification = new Notification(title, {
-                                body: notification.workPackageSubject,
-                                tag: notification.id
+                            const nativeNotification = new Notification('Axiom Atlas | Alerta de qualidade', {
+                                body: `${alertTitle}\n${notification.workPackageSubject}\n${reason}`,
+                                tag: notification.id,
+                                icon: '/favicon.ico',
+                                badge: '/favicon.ico',
+                                requireInteraction: true
                             });
                             nativeNotification.onclick = () => {
                                 window.focus();

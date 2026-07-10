@@ -99,6 +99,9 @@ namespace Axiom.Atlas.Infrastructure.Services.Notifications
                 var workPackageCache = await _openProjectService.GetWorkPackageAsync(transition.WorkPackage.Id);
                 var workPackageUrl = OpenProjectService.BuildWorkPackageWebUrl(baseUrl, workPackageCache)
                     ?? $"{baseUrl}/work_packages/{transition.WorkPackage.Id}/activity";
+                var reasonComment = await _openProjectService.GetLatestWorkPackageCommentAsync(
+                    transition.WorkPackage.Id,
+                    cancellationToken);
 
                 foreach (var responsibleUserId in transition.WorkPackage.ResponsibleUserIds)
                 {
@@ -116,6 +119,7 @@ namespace Axiom.Atlas.Infrastructure.Services.Notifications
                         WorkPackageSubject = transition.WorkPackage.Subject,
                         StatusName = transition.WorkPackage.StatusName,
                         PreviousStatusName = transition.PreviousStatus,
+                        ReasonComment = reasonComment,
                         WorkPackageUrl = workPackageUrl,
                         CreatedAt = now
                     });

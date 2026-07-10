@@ -155,6 +155,7 @@ namespace Axiom.Atlas.Persistence
                 entity.Property(x => x.WorkPackageSubject).HasMaxLength(500).IsRequired();
                 entity.Property(x => x.StatusName).HasMaxLength(200).IsRequired();
                 entity.Property(x => x.PreviousStatusName).HasMaxLength(200);
+                entity.Property(x => x.ReasonComment).HasMaxLength(1000);
                 entity.Property(x => x.WorkPackageUrl).HasMaxLength(1000);
                 entity.HasIndex(x => new { x.UserId, x.DeliveredAt });
             });
