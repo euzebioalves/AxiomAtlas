@@ -31,4 +31,14 @@
         public string? Identifier { get; set; }
         public string? Name { get; set; }
     }
+
+    public class OpenProjectWorkPackageMonitoringItemDto
+    {
+        public int Id { get; set; }
+        public string Subject { get; set; } = string.Empty;
+        public string StatusName { get; set; } = string.Empty;
+        public List<int> ResponsibleUserIds { get; set; } = new();
+        public int ProjectId { get; set; }
+        public string? ProjectName { get; set; }
+    }
 }

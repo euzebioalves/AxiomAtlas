@@ -177,6 +177,11 @@
                                         </a>
                                     </div>
                                     <div class="menu-item px-5">
+                                        <a asp-controller="DesktopNotifications" asp-action="Index" class="menu-link px-5">
+                                            Notificações da Área de Trabalho
+                                        </a>
+                                    </div>
+                                    <div class="menu-item px-5">
                                         <a asp-controller="Auth" asp-action="Logout" class="menu-link px-5">
                                             Sair
                                         </a>
@@ -368,6 +373,81 @@
     <script src="https://cdn.amcharts.com/lib/5/geodata/worldTimeZoneAreasLow.js"></script>
     <script src="~/metronic8/js/widgets.bundle.js"></script>
     <script src="~/metronic8/js/widgets.js"></script>
+    <div id="axiom_desktop_notification_toasts" class="toast-container position-fixed top-0 end-0 p-4" style="z-index: 1090;"></div>
+    <script>
+        window.AxiomDesktopNotifications = (() => {
+            const container = document.getElementById('axiom_desktop_notification_toasts');
+
+            function showToast(message, type = 'primary', workPackageUrl) {
+                const toastElement = document.createElement('div');
+                toastElement.className = `toast align-items-center border-0 text-bg-${type}`;
+                toastElement.setAttribute('role', 'alert');
+                toastElement.setAttribute('aria-live', 'assertive');
+                toastElement.setAttribute('aria-atomic', 'true');
+                toastElement.innerHTML = `
+                    <div class="d-flex">
+                        <div class="toast-body d-flex align-items-center gap-2"></div>
+                        <button type="button" class="btn-close me-2 m-auto" data-bs-dismiss="toast" aria-label="Fechar"></button>
+                    </div>`;
+
+                const body = toastElement.querySelector('.toast-body');
+                const icon = document.createElement('i');
+                icon.className = 'ki-duotone ki-notification-status fs-3';
+                const text = document.createElement(workPackageUrl ? 'a' : 'span');
+                text.textContent = message;
+                text.className = workPackageUrl ? 'text-white text-hover-white fw-semibold' : 'fw-semibold';
+                if (workPackageUrl) {
+                    text.href = workPackageUrl;
+                    text.target = '_blank';
+                    text.rel = 'noopener noreferrer';
+                }
+
+                body.append(icon, text);
+                container.appendChild(toastElement);
+                const toast = new bootstrap.Toast(toastElement, { delay: 10000 });
+                toastElement.addEventListener('hidden.bs.toast', () => toastElement.remove());
+                toast.show();
+            }
+
+            async function markDelivered(notificationId) {
+                await fetch(`/DesktopNotifications/${notificationId}/Delivered`, { method: 'POST' });
+            }
+
+            async function poll() {
+                try {
+                    const response = await fetch('/DesktopNotifications/Pending', { cache: 'no-store' });
+                    if (!response.ok) return;
+
+                    const notifications = await response.json();
+                    for (const notification of notifications) {
+                        const title = `Work Package #${notification.workPackageId}: ${notification.statusName}`;
+                        const message = `${title} - ${notification.workPackageSubject}`;
+                        showToast(message, 'danger', notification.workPackageUrl);
+
+                        if ('Notification' in window && Notification.permission === 'granted') {
+                            const nativeNotification = new Notification(title, {
+                                body: notification.workPackageSubject,
+                                tag: notification.id
+                            });
+                            nativeNotification.onclick = () => {
+                                window.focus();
+                                if (notification.workPackageUrl) window.open(notification.workPackageUrl, '_blank', 'noopener,noreferrer');
+                                nativeNotification.close();
+                            };
+                        }
+
+                        await markDelivered(notification.id);
+                    }
+                } catch {
+                    // A falha temporária da consulta não deve interromper a navegação do usuário.
+                }
+            }
+
+            setTimeout(poll, 3000);
+            setInterval(poll, 45000);
+            return { showToast };
+        })();
+    </script>
     @await RenderSectionAsync("Scripts", required: false)
 </body>
 </html>

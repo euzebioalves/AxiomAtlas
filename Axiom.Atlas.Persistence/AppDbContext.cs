@@ -4,6 +4,7 @@ using Axiom.Atlas.Domain.Entities.TimeEntries;
 using Axiom.Atlas.Domain.Entities.TimeClock;
 using Axiom.Atlas.Domain.Entities.Users;
 using Axiom.Atlas.Domain.Entities.Integrations;
+using Axiom.Atlas.Domain.Entities.Notifications;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -32,6 +33,11 @@ namespace Axiom.Atlas.Persistence
 
         //Integrations
         public DbSet<IntegrationSettings> Integrations { get; set; }
+
+        //Desktop notifications
+        public DbSet<UserDesktopNotificationSetting> UserDesktopNotificationSettings { get; set; }
+        public DbSet<OpenProjectWorkPackageStatusSnapshot> OpenProjectWorkPackageStatusSnapshots { get; set; }
+        public DbSet<DesktopNotification> DesktopNotifications { get; set; }
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -129,6 +135,28 @@ namespace Axiom.Atlas.Persistence
                 entity.HasIndex(x => new { x.Provider, x.Environment })
                     .IsUnique()
                     .HasDatabaseName("IX_IntegrationSettings_Provider_Environment");
+            });
+
+            builder.Entity<UserDesktopNotificationSetting>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.HasIndex(x => x.UserId).IsUnique();
+            });
+
+            builder.Entity<OpenProjectWorkPackageStatusSnapshot>(entity =>
+            {
+                entity.HasKey(x => x.WorkPackageId);
+                entity.Property(x => x.StatusName).HasMaxLength(200).IsRequired();
+            });
+
+            builder.Entity<DesktopNotification>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.WorkPackageSubject).HasMaxLength(500).IsRequired();
+                entity.Property(x => x.StatusName).HasMaxLength(200).IsRequired();
+                entity.Property(x => x.PreviousStatusName).HasMaxLength(200);
+                entity.Property(x => x.WorkPackageUrl).HasMaxLength(1000);
+                entity.HasIndex(x => new { x.UserId, x.DeliveredAt });
             });
         }
     }
