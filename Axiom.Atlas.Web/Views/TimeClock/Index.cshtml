@@ -15,13 +15,20 @@
     }
 
     #clockCalendar {
-        --time-clock-special-surface: rgba(148, 163, 184, .12);
+        --time-clock-special-surface: rgba(148, 163, 184, .045);
         --time-clock-special-text: #64748b;
+        --time-clock-grid-border: rgba(148, 163, 184, .2);
     }
 
     [data-bs-theme="dark"] #clockCalendar {
-        --time-clock-special-surface: rgba(148, 163, 184, .16);
+        --time-clock-special-surface: rgba(148, 163, 184, .075);
         --time-clock-special-text: #b7c3d5;
+        --time-clock-grid-border: rgba(148, 163, 184, .24);
+    }
+
+    #clockCalendar .fc-theme-standard td,
+    #clockCalendar .fc-theme-standard th {
+        border-color: var(--time-clock-grid-border);
     }
 
     #clockCalendar .fc-daygrid-day.fc-day-sun,
