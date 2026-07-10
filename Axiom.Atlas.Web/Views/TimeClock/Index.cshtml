@@ -655,8 +655,14 @@
                 observation: row.querySelector('.punch-observation').value
             })).filter(punch => punch.type || punch.time);
 
-            if (!selectedDate || punches.length === 0 || punches.some(punch => !punch.type || !punch.time)) {
+            const existingPunches = getDay(selectedDate)?.punches || [];
+            if (!selectedDate || punches.some(punch => !punch.type || !punch.time)) {
                 showMessage('Informe tipo e horário para cada registro de ponto.', 'warning');
+                return;
+            }
+
+            if (punches.length === 0 && existingPunches.length === 0) {
+                showMessage('Inclua ao menos um registro antes de salvar.', 'warning');
                 return;
             }
 

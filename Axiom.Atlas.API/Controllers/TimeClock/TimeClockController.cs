@@ -29,6 +29,8 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
             TimeClockPunchType.AfternoonExit
         ];
 
+        private static readonly TimeZoneInfo BusinessTimeZone = ResolveBusinessTimeZone();
+
         private readonly AppDbContext _context;
         private readonly UserManager<User> _userManager;
 
@@ -521,7 +523,7 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
                 userId,
                 schedule,
                 globalSettings.ToleranceMinutes,
-                DateTime.UtcNow.Date);
+                GetBusinessToday());
             summary.AccumulatedBalanceLabel = FormatSignedMinutes(summary.AccumulatedBalanceMinutes);
 
             return new TimeClockCalendarDto
@@ -542,6 +544,7 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
             int toleranceMinutes,
             DateTime throughDate)
         {
+            var throughDateUtc = DateTime.SpecifyKind(throughDate.Date, DateTimeKind.Utc);
             var firstPunchDate = await _context.TimeClockPunches
                 .Where(x => x.UserId == userId)
                 .OrderBy(x => x.PunchDate)
@@ -568,23 +571,23 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
             }
 
             var startDate = startDates.Min();
-            if (startDate > throughDate)
+            if (startDate > throughDateUtc)
             {
                 return 0;
             }
 
             var punches = await _context.TimeClockPunches
-                .Where(x => x.UserId == userId && x.PunchDate >= startDate && x.PunchDate <= throughDate)
+                .Where(x => x.UserId == userId && x.PunchDate >= startDate && x.PunchDate <= throughDateUtc)
                 .ToListAsync();
             var absences = await _context.TimeClockAbsences
                 .Include(x => x.Attachments)
-                .Where(x => x.UserId == userId && x.StartDate <= throughDate && x.EndDate >= startDate)
+                .Where(x => x.UserId == userId && x.StartDate <= throughDateUtc && x.EndDate >= startDate)
                 .ToListAsync();
             var unjustifiedAbsences = await _context.TimeClockUnjustifiedAbsences
-                .Where(x => x.UserId == userId && x.AbsenceDate >= startDate && x.AbsenceDate <= throughDate)
+                .Where(x => x.UserId == userId && x.AbsenceDate >= startDate && x.AbsenceDate <= throughDateUtc)
                 .ToListAsync();
 
-            var totalDays = (throughDate.Date - startDate.Date).Days + 1;
+            var totalDays = (throughDateUtc.Date - startDate.Date).Days + 1;
             return Enumerable.Range(0, totalDays)
                 .Select(offset => BuildDay(
                     startDate.AddDays(offset),
@@ -638,7 +641,7 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
             var unjustified = monthUnjustifiedAbsences
                 .FirstOrDefault(x => x.AbsenceDate.Date == date.Date);
 
-            var isFuture = date.Date > DateTime.UtcNow.Date;
+            var isFuture = date.Date > GetBusinessToday();
             var expectedBaseMinutes = IsWeekend(date)
                 ? 0
                 : Math.Max(0, CalculateMinutesBetween(schedule.EntryTime, schedule.ExitTime) - schedule.LunchIntervalMinutes);
@@ -931,6 +934,32 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
         private static bool IsWeekend(DateTime date)
         {
             return date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
+        }
+
+        private static DateTime GetBusinessToday()
+        {
+            return TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, BusinessTimeZone).Date;
+        }
+
+        private static TimeZoneInfo ResolveBusinessTimeZone()
+        {
+            foreach (var timeZoneId in new[] { "America/Sao_Paulo", "E. South America Standard Time" })
+            {
+                try
+                {
+                    return TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
+                }
+                catch (TimeZoneNotFoundException)
+                {
+                    // Try the alternate Windows/IANA identifier.
+                }
+                catch (InvalidTimeZoneException)
+                {
+                    // Try the alternate Windows/IANA identifier.
+                }
+            }
+
+            return TimeZoneInfo.Utc;
         }
 
         private static bool IsValidYearMonth(int year, int month)
