@@ -68,6 +68,7 @@ namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
             var authString = Convert.ToBase64String(Encoding.ASCII.GetBytes($"apikey:{plainTextToken}"));
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", authString);
             client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/hal+json"));
+            client.DefaultRequestHeaders.CacheControl = new CacheControlHeaderValue { NoCache = true, NoStore = true };
 
             return client;
         }
@@ -600,6 +601,143 @@ namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
             return results;
         }
 
+        public async Task<List<OpenProjectWorkPackageMonitoringItemDto>> GetWorkPackagesForStatusMonitoringAsync(
+            CancellationToken cancellationToken = default)
+        {
+            const int pageSize = 100;
+            var client = await CreateConfiguredClientAsync();
+            var workPackages = new List<OpenProjectWorkPackageMonitoringItemDto>();
+
+            for (var offset = 1; ; offset += pageSize)
+            {
+                using var response = await client.GetAsync(
+                    $"api/v3/work_packages?pageSize={pageSize}&offset={offset}&monitorTimestamp={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}",
+                    cancellationToken);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException(
+                        $"OpenProject retornou {(int)response.StatusCode} ao monitorar Work Packages: {await ReadOpenProjectErrorMessageAsync(response)}");
+                }
+
+                var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                if (string.IsNullOrWhiteSpace(responseBody))
+                {
+                    break;
+                }
+
+                using var document = JsonDocument.Parse(responseBody);
+                if (!document.RootElement.TryGetProperty("_embedded", out var embedded) ||
+                    !embedded.TryGetProperty("elements", out var elements) ||
+                    elements.ValueKind != JsonValueKind.Array)
+                {
+                    break;
+                }
+
+                var pageItems = elements
+                    .EnumerateArray()
+                    .Select(ReadWorkPackageMonitoringItem)
+                    .Where(x => x != null)
+                    .Cast<OpenProjectWorkPackageMonitoringItemDto>()
+                    .ToList();
+
+                workPackages.AddRange(pageItems);
+
+                if (pageItems.Count < pageSize)
+                {
+                    break;
+                }
+            }
+
+            await UpsertWorkPackageCacheAsync(workPackages.Select(x => new OpenProjectWorkPackageSearchResult
+            {
+                Id = x.Id,
+                Subject = x.Subject,
+                ProjectId = x.ProjectId,
+                ProjectName = x.ProjectName ?? "Projeto Desconhecido"
+            }).ToList());
+
+            return workPackages;
+        }
+
+        public async Task<string?> GetLatestWorkPackageCommentAsync(
+            int workPackageId,
+            CancellationToken cancellationToken = default)
+        {
+            var client = await CreateConfiguredClientAsync();
+            using var response = await client.GetAsync(
+                $"api/v3/work_packages/{workPackageId}/activities?offset=1&pageSize=20&monitorTimestamp={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}",
+                cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (string.IsNullOrWhiteSpace(responseBody))
+            {
+                return null;
+            }
+
+            using var document = JsonDocument.Parse(responseBody);
+            if (!document.RootElement.TryGetProperty("_embedded", out var embedded) ||
+                !embedded.TryGetProperty("elements", out var elements) ||
+                elements.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            foreach (var activity in elements.EnumerateArray())
+            {
+                if (!activity.TryGetProperty("comment", out var comment) ||
+                    !comment.TryGetProperty("raw", out var rawComment))
+                {
+                    continue;
+                }
+
+                var normalizedComment = NormalizeNotificationComment(rawComment.GetString());
+                if (!string.IsNullOrWhiteSpace(normalizedComment))
+                {
+                    return normalizedComment;
+                }
+            }
+
+            return null;
+        }
+
+        public async Task<Dictionary<int, string>> GetOpenProjectUserEmailsAsync(
+            IEnumerable<int> userIds,
+            CancellationToken cancellationToken = default)
+        {
+            var client = await CreateConfiguredClientAsync();
+            var emails = new Dictionary<int, string>();
+
+            foreach (var userId in userIds.Distinct().Where(id => id > 0))
+            {
+                using var response = await client.GetAsync($"api/v3/users/{userId}", cancellationToken);
+                if (!response.IsSuccessStatusCode)
+                {
+                    continue;
+                }
+
+                var responseBody = await response.Content.ReadAsStringAsync(cancellationToken);
+                if (string.IsNullOrWhiteSpace(responseBody))
+                {
+                    continue;
+                }
+
+                using var document = JsonDocument.Parse(responseBody);
+                if (document.RootElement.TryGetProperty("email", out var emailElement) &&
+                    !string.IsNullOrWhiteSpace(emailElement.GetString()))
+                {
+                    emails[userId] = emailElement.GetString()!;
+                }
+            }
+
+            return emails;
+        }
+
         private static string BuildWorkPackageSearchUrl(string filterName, string filterOperator, string query, int pageSize)
         {
             var filters = JsonSerializer.Serialize(new[]
@@ -875,6 +1013,69 @@ namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
             };
         }
 
+        private static OpenProjectWorkPackageMonitoringItemDto? ReadWorkPackageMonitoringItem(JsonElement element)
+        {
+            if (!element.TryGetProperty("id", out var idElement) || !idElement.TryGetInt32(out var id))
+            {
+                return null;
+            }
+
+            var subject = element.TryGetProperty("subject", out var subjectElement)
+                ? subjectElement.GetString()
+                : null;
+            if (string.IsNullOrWhiteSpace(subject))
+            {
+                return null;
+            }
+
+            var statusName = string.Empty;
+            var projectId = 0;
+            string? projectName = null;
+            var responsibleUserIds = new List<int>();
+
+            if (element.TryGetProperty("_links", out var links))
+            {
+                if (links.TryGetProperty("status", out var statusLink) &&
+                    statusLink.TryGetProperty("title", out var statusTitle))
+                {
+                    statusName = statusTitle.GetString() ?? string.Empty;
+                }
+
+                if (links.TryGetProperty("project", out var projectLink))
+                {
+                    if (projectLink.TryGetProperty("href", out var projectHref))
+                    {
+                        TryReadIdFromHref(projectHref.GetString(), out projectId);
+                    }
+
+                    if (projectLink.TryGetProperty("title", out var projectTitle))
+                    {
+                        projectName = projectTitle.GetString();
+                    }
+                }
+
+                foreach (var responsibleLinkName in new[] { "assignee", "responsible" })
+                {
+                    if (links.TryGetProperty(responsibleLinkName, out var responsibleLink) &&
+                        responsibleLink.TryGetProperty("href", out var responsibleHref) &&
+                        TryReadIdFromHref(responsibleHref.GetString(), out var responsibleUserId))
+                    {
+                        responsibleUserIds.Add(responsibleUserId);
+                    }
+                }
+            }
+
+            return new OpenProjectWorkPackageMonitoringItemDto
+            {
+                Id = id,
+                Subject = subject,
+                StatusName = statusName,
+                ResponsibleUserIds = responsibleUserIds.Distinct().ToList(),
+                ProjectId = projectId,
+                ProjectName = projectName
+            };
+        }
+
         private async Task UpsertWorkPackageCacheAsync(List<OpenProjectWorkPackageSearchResult> workPackages)
         {
             if (workPackages.Count == 0)
@@ -909,6 +1110,21 @@ namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
             return string.IsNullOrWhiteSpace(baseUrl)
                 ? null
                 : baseUrl.Trim().TrimEnd('/');
+        }
+
+        private static string? NormalizeNotificationComment(string? comment)
+        {
+            if (string.IsNullOrWhiteSpace(comment))
+            {
+                return null;
+            }
+
+            var normalizedComment = string.Join(" ", comment
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+            return normalizedComment.Length <= 1000
+                ? normalizedComment
+                : $"{normalizedComment[..997]}...";
         }
 
         private static bool TryReadIdFromHref(string? href, out int id)

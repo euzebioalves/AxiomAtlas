@@ -1,0 +1,120 @@
+@model Axiom.Atlas.Web.Model.Notifications.DesktopNotificationSettingsViewModel
+
+@{
+    ViewData["Title"] = "Notificações da Área de Trabalho";
+}
+
+<div class="d-flex flex-column flex-column-fluid">
+    <div id="kt_app_toolbar" class="app-toolbar py-3 py-lg-6">
+        <div id="kt_app_toolbar_container" class="app-container container-xxl d-flex flex-stack">
+            <div class="page-title d-flex flex-column justify-content-center flex-wrap me-3">
+                <h1 class="page-heading d-flex text-gray-900 fw-bold fs-3 flex-column justify-content-center my-0">@ViewData["Title"]</h1>
+                <ul class="breadcrumb breadcrumb-separatorless fw-semibold fs-7 my-0 pt-1">
+                    <li class="breadcrumb-item text-muted"><a asp-controller="Home" asp-action="Index" class="text-muted text-hover-primary">Home</a></li>
+                    <li class="breadcrumb-item"><span class="bullet bg-gray-500 w-5px h-2px"></span></li>
+                    <li class="breadcrumb-item text-muted">Preferências pessoais</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div id="kt_app_content" class="app-content flex-column-fluid">
+        <div id="kt_app_content_container" class="app-container container-xxl">
+            <div class="card card-flush mw-850px">
+                <div class="card-header">
+                    <div class="card-title">
+                        <i class="ki-duotone ki-notification-status fs-2x text-primary me-4"><span class="path1"></span><span class="path2"></span><span class="path3"></span><span class="path4"></span></i>
+                        <div>
+                            <h3 class="fw-bold mb-1">Alertas de Work Packages</h3>
+                            <div class="text-muted fw-semibold fs-7">Receba avisos quando uma Work Package sob sua responsabilidade no OpenProject for reprovada em testes ou rejeitada.</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body pt-0">
+                    <div class="notice d-flex bg-light-primary rounded border-primary border border-dashed p-6 mb-8">
+                        <i class="ki-duotone ki-information fs-2tx text-primary me-4"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>
+                        <div class="d-flex flex-stack flex-grow-1">
+                            <div class="fw-semibold">
+                                <div class="fs-6 text-gray-700">A identificação do responsável é feita pelo e-mail cadastrado no OpenProject e no Axiom Atlas.</div>
+                                <div class="text-muted fs-7 mt-1">O navegador precisa permitir notificações para exibir os avisos fora da página.</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex flex-stack border-bottom border-gray-300 border-bottom-dashed py-5">
+                        <div class="d-flex align-items-center">
+                            <div class="symbol symbol-45px me-5"><span class="symbol-label bg-light-success"><i class="ki-duotone ki-notification-bing fs-2x text-success"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i></span></div>
+                            <div>
+                                <div class="fw-bold text-gray-800">Notificações da área de trabalho</div>
+                                <div class="text-muted fs-7" id="desktopNotificationStatus">Carregando preferência...</div>
+                            </div>
+                        </div>
+                        <label class="form-check form-switch form-check-custom form-check-solid">
+                            <input class="form-check-input" type="checkbox" id="desktopNotificationEnabled" />
+                            <span class="form-check-label fw-semibold text-muted">Ativar</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            const toggle = document.getElementById('desktopNotificationEnabled');
+            const status = document.getElementById('desktopNotificationStatus');
+
+            const updateStatus = enabled => {
+                if (!('Notification' in window)) {
+                    status.innerText = 'Este navegador não oferece suporte a notificações da área de trabalho.';
+                    return;
+                }
+
+                status.innerText = enabled && Notification.permission === 'granted'
+                    ? 'Ativas neste navegador.'
+                    : 'Desativadas. Ative para receber alertas de Work Packages.';
+            };
+
+            try {
+                const response = await fetch('/DesktopNotifications/Settings');
+                const settings = await response.json();
+                toggle.checked = settings.isEnabled;
+                updateStatus(toggle.checked);
+            } catch {
+                status.innerText = 'Não foi possível carregar sua preferência agora.';
+            }
+
+            toggle.addEventListener('change', async () => {
+                let enabled = toggle.checked;
+                if (enabled && 'Notification' in window && Notification.permission !== 'granted') {
+                    const permission = await Notification.requestPermission();
+                    enabled = permission === 'granted';
+                    toggle.checked = enabled;
+                } else if (enabled && !('Notification' in window)) {
+                    enabled = false;
+                    toggle.checked = false;
+                }
+
+                try {
+                    const response = await fetch('/DesktopNotifications/Settings', {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ isEnabled: enabled })
+                    });
+                    if (!response.ok) throw new Error();
+
+                    updateStatus(enabled);
+                    window.AxiomDesktopNotifications?.showToast(
+                        enabled ? 'Notificações da área de trabalho ativadas.' : 'Notificações da área de trabalho desativadas.',
+                        enabled ? 'success' : 'secondary');
+                } catch {
+                    toggle.checked = !enabled;
+                    updateStatus(toggle.checked);
+                    window.AxiomDesktopNotifications?.showToast('Não foi possível salvar sua preferência.', 'danger');
+                }
+            });
+        });
+    </script>
+}

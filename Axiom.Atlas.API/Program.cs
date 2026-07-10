@@ -10,6 +10,7 @@ using Axiom.Atlas.Domain.Interfaces.Users;
 using Axiom.Atlas.Infrastructure.Repositories.Users;
 using Axiom.Atlas.Infrastructure.Services.Auth;
 using Axiom.Atlas.Infrastructure.Services.Mail;
+using Axiom.Atlas.Infrastructure.Services.Notifications;
 using Axiom.Atlas.Infrastructure.Services.TimeEntries;
 using Axiom.Atlas.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -88,6 +89,8 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<OpenProjectService>();
+builder.Services.AddScoped<OpenProjectWorkPackageStatusMonitor>();
+builder.Services.AddHostedService<OpenProjectWorkPackageStatusMonitoringHostedService>();
 builder.Services.AddHttpClient();
 
 // Injeta o serviço de email para ser usado em notificações, resets de senha, etc
