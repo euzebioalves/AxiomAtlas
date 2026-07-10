@@ -1,0 +1,51 @@
+# Build outputs
+bin/
+obj/
+Debug/
+Release/
+x64/
+x86/
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio
+.vs/
+.vscode/
+*.VC.db
+*.VC.VC.opendb
+
+# Rider
+.idea/
+
+# Runtime/local logs
+.run/
+logs/
+*.log
+
+# ASP.NET/local database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment files
+.env
+.env.*
+!.env.example
+**/appsettings.Development.json
+**/appsettings.Local.json
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# Node/package cache when used by tooling
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

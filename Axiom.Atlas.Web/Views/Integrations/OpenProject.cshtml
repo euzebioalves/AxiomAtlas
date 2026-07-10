@@ -1,0 +1,162 @@
+﻿@model Axiom.Atlas.Web.Model.Integrations.OpenProjectSettingsViewModel
+@{
+    ViewData["Title"] = "Integração: OpenProject";
+}
+
+<div class="card shadow-sm">
+    <div class="card-header">
+        <h3 class="card-title">Configurações do OpenProject</h3>
+    </div>
+    
+    <div class="card-body">
+        
+        @if (TempData["SuccessMessage"] != null)
+        {
+            <div class="alert alert-success mb-8">
+                @TempData["SuccessMessage"]
+            </div>
+        }
+
+        @* <form asp-controller="Integrations" asp-action="SaveOpenProject" method="post"> *@
+        <form action="/Integrations/SaveOpenProject" method="post">
+            
+            <div class="mb-10 p-5 bg-light rounded d-flex align-items-center justify-content-between">
+                <div>
+                    <h4 class="text-gray-900 fw-bold">Ambiente Ativo</h4>
+                    <div class="text-gray-500 fs-6">Selecione qual ambiente o Axiom Atlas deve usar para sincronizar as tarefas.</div>
+                </div>
+                <div>
+                    <select asp-for="ActiveEnvironment" class="form-select form-select-solid" data-control="select2" data-hide-search="true">
+                        <option value="Homologation">Homologação</option>
+                        <option value="Production">Produção</option>
+                    </select>
+                </div>
+            </div>
+            <ul class="nav nav-tabs nav-line-tabs nav-line-tabs-2x mb-5 fs-6">
+                <li class="nav-item">
+                    <a class="nav-link active" data-bs-toggle="tab" href="#kt_tab_homologation">
+                        <i class="ki-duotone ki-flask fs-2 me-2"><span class="path1"></span><span class="path2"></span></i>
+                        Homologação
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" data-bs-toggle="tab" href="#kt_tab_production">
+                        <i class="ki-duotone ki-rocket fs-2 me-2"><span class="path1"></span><span class="path2"></span></i>
+                        Produção
+                    </a>
+                </li>
+            </ul>
+            <div class="tab-content" id="myTabContent">
+                
+                <div class="tab-pane fade show active" id="kt_tab_homologation" role="tabpanel">
+                    <div class="row mb-6 mt-4">
+                        <label class="col-lg-3 col-form-label required fw-semibold fs-6">URL Base (Homologação)</label>
+                        <div class="col-lg-9">
+                            <input asp-for="Homologation.BaseUrl" class="form-control form-control-lg form-control-solid" placeholder="ex: https://homolog.openproject.com" />
+                        </div>
+                    </div>
+                    <div class="row mb-6">
+                        <label class="col-lg-3 col-form-label required fw-semibold fs-6">API Token</label>
+                        <div class="col-lg-9">
+                            <input asp-for="Homologation.PrimaryToken" type="password" class="form-control form-control-lg form-control-solid" placeholder="Token gerado no OpenProject" />
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end">
+                        <button type="button"
+                                class="btn btn-light-info js-test-openproject"
+                                data-environment="Homologation"
+                                data-base-url-field="Homologation_BaseUrl"
+                                data-token-field="Homologation_PrimaryToken">
+                            Testar Conexão (Homologação)
+                        </button>
+                    </div>
+                </div>
+
+                <div class="tab-pane fade" id="kt_tab_production" role="tabpanel">
+                    <div class="row mb-6 mt-4">
+                        <label class="col-lg-3 col-form-label required fw-semibold fs-6">URL Base (Produção)</label>
+                        <div class="col-lg-9">
+                            <input asp-for="Production.BaseUrl" class="form-control form-control-lg form-control-solid" placeholder="ex: https://app.openproject.com" />
+                        </div>
+                    </div>
+                    <div class="row mb-6">
+                        <label class="col-lg-3 col-form-label required fw-semibold fs-6">API Token</label>
+                        <div class="col-lg-9">
+                            <input asp-for="Production.PrimaryToken" type="password" class="form-control form-control-lg form-control-solid" placeholder="Token gerado no OpenProject" />
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end">
+                        <button type="button"
+                                class="btn btn-light-info js-test-openproject"
+                                data-environment="Production"
+                                data-base-url-field="Production_BaseUrl"
+                                data-token-field="Production_PrimaryToken">
+                            Testar Conexão (Produção)
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+            <div class="card-footer d-flex justify-content-end py-6 px-9 mt-10">
+                <button type="submit" class="btn btn-primary">Salvar Configurações</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        document.querySelectorAll('.js-test-openproject').forEach(button => {
+            button.addEventListener('click', async function () {
+                const environment = this.dataset.environment;
+                const baseUrl = document.getElementById(this.dataset.baseUrlField)?.value;
+                const primaryToken = document.getElementById(this.dataset.tokenField)?.value;
+                const originalText = this.innerText;
+
+                this.disabled = true;
+                this.innerText = 'Testando...';
+
+                try {
+                    const response = await fetch('/Integrations/TestOpenProject', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            environment,
+                            baseUrl,
+                            primaryToken
+                        })
+                    });
+
+                    const data = await response.json().catch(() => ({
+                        message: 'Não foi possível ler a resposta do servidor.'
+                    }));
+
+                    const warnings = Array.isArray(data.warnings) && data.warnings.length > 0
+                        ? `\n\n${data.warnings.join('\n')}`
+                        : '';
+
+                    Swal.fire({
+                        text: `${data.message || 'Teste concluído.'}${warnings}`,
+                        icon: response.ok ? 'success' : 'error',
+                        buttonsStyling: false,
+                        confirmButtonText: 'Ok',
+                        customClass: {
+                            confirmButton: response.ok ? 'btn btn-primary' : 'btn btn-danger'
+                        }
+                    });
+                } catch (error) {
+                    Swal.fire({
+                        text: 'Erro de comunicação com o servidor.',
+                        icon: 'error',
+                        buttonsStyling: false,
+                        confirmButtonText: 'Ok',
+                        customClass: { confirmButton: 'btn btn-danger' }
+                    });
+                } finally {
+                    this.disabled = false;
+                    this.innerText = originalText;
+                }
+            });
+        });
+    </script>
+}

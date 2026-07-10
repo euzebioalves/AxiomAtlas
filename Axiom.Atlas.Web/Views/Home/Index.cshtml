@@ -1,0 +1,142 @@
+@{
+    ViewData["Title"] = "Início";
+    var userName = User?.Identity?.Name ?? "Usuário";
+}
+
+<div class="d-flex flex-column flex-column-fluid">
+    <div id="kt_app_toolbar" class="app-toolbar py-3 py-lg-6">
+        <div id="kt_app_toolbar_container" class="app-container container-xxl d-flex flex-stack">
+            <div class="page-title d-flex flex-column justify-content-center flex-wrap me-3">
+                <h1 class="page-heading d-flex text-gray-900 fw-bold fs-3 flex-column justify-content-center my-0">
+                    Início
+                </h1>
+                <ul class="breadcrumb breadcrumb-separatorless fw-semibold fs-7 my-0 pt-1">
+                    <li class="breadcrumb-item text-muted">Axiom Atlas</li>
+                    <li class="breadcrumb-item">
+                        <span class="bullet bg-gray-500 w-5px h-2px"></span>
+                    </li>
+                    <li class="breadcrumb-item text-muted">Visão geral</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div id="kt_app_content" class="app-content flex-column-fluid">
+        <div id="kt_app_content_container" class="app-container container-xxl">
+            <div class="card mb-8">
+                <div class="card-body d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-6 p-10">
+                    <div>
+                        <span class="badge badge-light-primary fw-bold mb-4">Axiom Atlas</span>
+                        <h2 class="text-gray-900 fw-bold mb-3">Olá, @userName.</h2>
+                        <p class="text-gray-600 fw-semibold fs-5 mb-0">
+                            Escolha uma área oficial do sistema para continuar sua operação.
+                        </p>
+                    </div>
+                    <div class="symbol symbol-80px">
+                        <span class="symbol-label bg-light-primary">
+                            <i class="ki-duotone ki-element-11 fs-3x text-primary"><span class="path1"></span><span class="path2"></span><span class="path3"></span><span class="path4"></span></i>
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row g-5 g-xl-8">
+                <div class="col-xl-4 col-md-6">
+                    <a asp-controller="TimeEntries" asp-action="Index" class="card card-flush h-100 hover-elevate-up">
+                        <div class="card-body d-flex align-items-center p-8">
+                            <div class="symbol symbol-50px me-5">
+                                <span class="symbol-label bg-light-primary">
+                                    <i class="ki-duotone ki-timer fs-2x text-primary"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>
+                                </span>
+                            </div>
+                            <div>
+                                <h3 class="text-gray-900 fw-bold mb-1">Entradas de Tempo</h3>
+                                <span class="text-gray-600 fw-semibold">Lançamentos e sincronização com OpenProject.</span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+
+                <div class="col-xl-4 col-md-6">
+                    <a asp-controller="TimeClock" asp-action="Index" class="card card-flush h-100 hover-elevate-up">
+                        <div class="card-body d-flex align-items-center p-8">
+                            <div class="symbol symbol-50px me-5">
+                                <span class="symbol-label bg-light-success">
+                                    <i class="ki-duotone ki-calendar-tick fs-2x text-success"><span class="path1"></span><span class="path2"></span><span class="path3"></span><span class="path4"></span><span class="path5"></span><span class="path6"></span></i>
+                                </span>
+                            </div>
+                            <div>
+                                <h3 class="text-gray-900 fw-bold mb-1">Ponto Eletrônico</h3>
+                                <span class="text-gray-600 fw-semibold">Calendário mensal de registros e ausências.</span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+
+                <div class="col-xl-4 col-md-6">
+                    <a asp-controller="TimeClock" asp-action="Audit" class="card card-flush h-100 hover-elevate-up">
+                        <div class="card-body d-flex align-items-center p-8">
+                            <div class="symbol symbol-50px me-5">
+                                <span class="symbol-label bg-light-info">
+                                    <i class="ki-duotone ki-chart-line-up fs-2x text-info"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>
+                                </span>
+                            </div>
+                            <div>
+                                <h3 class="text-gray-900 fw-bold mb-1">Auditoria do Ponto</h3>
+                                <span class="text-gray-600 fw-semibold">Saldo e histórico do banco de horas.</span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+
+                <div class="col-xl-4 col-md-6">
+                    <a asp-controller="Users" asp-action="Index" class="card card-flush h-100 hover-elevate-up">
+                        <div class="card-body d-flex align-items-center p-8">
+                            <div class="symbol symbol-50px me-5">
+                                <span class="symbol-label bg-light-warning">
+                                    <i class="ki-duotone ki-profile-user fs-2x text-warning"><span class="path1"></span><span class="path2"></span><span class="path3"></span><span class="path4"></span></i>
+                                </span>
+                            </div>
+                            <div>
+                                <h3 class="text-gray-900 fw-bold mb-1">Usuários</h3>
+                                <span class="text-gray-600 fw-semibold">Cadastro, perfil e status dos usuários.</span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+
+                <div class="col-xl-4 col-md-6">
+                    <a asp-controller="Roles" asp-action="Index" class="card card-flush h-100 hover-elevate-up">
+                        <div class="card-body d-flex align-items-center p-8">
+                            <div class="symbol symbol-50px me-5">
+                                <span class="symbol-label bg-light-danger">
+                                    <i class="ki-duotone ki-shield-tick fs-2x text-danger"><span class="path1"></span><span class="path2"></span></i>
+                                </span>
+                            </div>
+                            <div>
+                                <h3 class="text-gray-900 fw-bold mb-1">Perfis</h3>
+                                <span class="text-gray-600 fw-semibold">Gestão de perfis e permissões.</span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+
+                <div class="col-xl-4 col-md-6">
+                    <a asp-controller="Integrations" asp-action="OpenProject" class="card card-flush h-100 hover-elevate-up">
+                        <div class="card-body d-flex align-items-center p-8">
+                            <div class="symbol symbol-50px me-5">
+                                <span class="symbol-label bg-light-success">
+                                    <i class="ki-duotone ki-technology-4 fs-2x text-success"><span class="path1"></span><span class="path2"></span><span class="path3"></span><span class="path4"></span><span class="path5"></span><span class="path6"></span><span class="path7"></span></i>
+                                </span>
+                            </div>
+                            <div>
+                                <h3 class="text-gray-900 fw-bold mb-1">OpenProject</h3>
+                                <span class="text-gray-600 fw-semibold">Configuração e validação da integração.</span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

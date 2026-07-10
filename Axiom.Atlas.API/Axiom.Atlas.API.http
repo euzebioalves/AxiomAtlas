@@ -1,0 +1,6 @@
+@Axiom.Atlas.API_HostAddress = http://localhost:5122
+
+GET {{Axiom.Atlas.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
