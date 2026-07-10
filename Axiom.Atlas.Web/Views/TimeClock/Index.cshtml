@@ -14,13 +14,31 @@
         background-color: var(--bs-primary-light);
     }
 
-    #clockCalendar .time-clock-weekend {
-        background: rgba(var(--bs-danger-rgb), .06);
+    #clockCalendar {
+        --time-clock-special-surface: rgba(148, 163, 184, .12);
+        --time-clock-special-text: #64748b;
     }
 
-    #clockCalendar .time-clock-weekend .fc-daygrid-day-number,
-    #clockCalendar .fc-col-header-cell.time-clock-weekend .fc-col-header-cell-cushion {
-        color: var(--bs-danger);
+    [data-bs-theme="dark"] #clockCalendar {
+        --time-clock-special-surface: rgba(148, 163, 184, .16);
+        --time-clock-special-text: #b7c3d5;
+    }
+
+    #clockCalendar .fc-daygrid-day.fc-day-sun,
+    #clockCalendar .fc-daygrid-day.fc-day-sat,
+    #clockCalendar .fc-daygrid-day.time-clock-special-day,
+    #clockCalendar .fc-col-header-cell.fc-day-sun,
+    #clockCalendar .fc-col-header-cell.fc-day-sat {
+        background: var(--time-clock-special-surface);
+    }
+
+    #clockCalendar .fc-daygrid-day.fc-day-sun .fc-daygrid-day-number,
+    #clockCalendar .fc-daygrid-day.fc-day-sat .fc-daygrid-day-number,
+    #clockCalendar .fc-daygrid-day.time-clock-special-day .fc-daygrid-day-number,
+    #clockCalendar .fc-col-header-cell.fc-day-sun .fc-col-header-cell-cushion,
+    #clockCalendar .fc-col-header-cell.fc-day-sat .fc-col-header-cell-cushion {
+        color: var(--time-clock-special-text);
+        font-weight: 700;
     }
 
     #clockCalendar .time-clock-has-absence {
@@ -560,8 +578,7 @@
                     openPunchModal(info.event.extendedProps.date);
                 },
                 dayCellClassNames: info => getDayClasses(info.date),
-                dayCellDidMount: info => renderDayIndicators(info),
-                dayHeaderClassNames: info => isWeekend(info.date) ? ['time-clock-weekend'] : []
+                dayCellDidMount: info => renderDayIndicators(info)
             });
             fullCalendar.addEventSource(buildCalendarEvents());
             fullCalendar.render();
@@ -581,10 +598,11 @@
 
         function getDayClasses(date) {
             const day = getDay(toDateKey(date));
-            const classes = isWeekend(date) ? ['time-clock-weekend'] : [];
+            const classes = [];
 
             if (day?.absences.length) classes.push('time-clock-has-absence');
             if (day?.unjustifiedAbsence) classes.push('time-clock-has-unjustified');
+            if (day?.isHoliday) classes.push('time-clock-special-day');
 
             return classes;
         }
@@ -815,11 +833,6 @@
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
             return `${year}-${month}-${day}`;
-        }
-
-        function isWeekend(date) {
-            const dayOfWeek = date.getDay();
-            return dayOfWeek === 0 || dayOfWeek === 6;
         }
 
         async function readJsonResponse(response) {
