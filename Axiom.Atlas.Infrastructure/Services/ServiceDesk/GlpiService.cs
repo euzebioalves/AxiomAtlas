@@ -32,10 +32,9 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                     return new GlpiConnectionTestResult { Message = "Informe BASE_URL, APP_TOKEN e USER_TOKEN." };
 
                 using var client = CreateClient(baseUrl, appToken);
-                using var sessionRequest = new HttpRequestMessage(HttpMethod.Get, "initSession/?get_full_session=true");
+                using var sessionRequest = new HttpRequestMessage(HttpMethod.Get, "initSession?get_full_session=true");
                 sessionRequest.Headers.TryAddWithoutValidation("Content-Type", "application/json");
-                // Esta instalação GLPI espera o valor bruto do USER_TOKEN após o esquema Basic.
-                sessionRequest.Headers.TryAddWithoutValidation("Authorization", $"Basic {userToken}");
+                sessionRequest.Headers.TryAddWithoutValidation("Authorization", $"user_token {userToken}");
                 using var response = await client.SendAsync(sessionRequest);
                 var content = await response.Content.ReadAsStringAsync();
                 if (!response.IsSuccessStatusCode)
@@ -47,7 +46,8 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                     return new GlpiConnectionTestResult { Message = "GLPI não retornou um token de sessão." };
 
                 var version = document.RootElement.TryGetProperty("glpi_version", out var versionElement) ? versionElement.GetString() : null;
-                using var killRequest = new HttpRequestMessage(HttpMethod.Get, "killSession/");
+                using var killRequest = new HttpRequestMessage(HttpMethod.Get, "killSession");
+                killRequest.Headers.TryAddWithoutValidation("Content-Type", "application/json");
                 killRequest.Headers.TryAddWithoutValidation("Session-Token", sessionToken);
                 await client.SendAsync(killRequest);
                 return new GlpiConnectionTestResult { Success = true, GlpiVersion = version, Message = "Conexão com GLPI validada com sucesso.", Warnings = string.IsNullOrWhiteSpace(request.ClassificationFieldKey) || string.IsNullOrWhiteSpace(request.DevOpsUrlFieldKey) ? new List<string> { "Configure as chaves técnicas dos campos adicionais após a validação da conexão." } : new List<string>() };
@@ -61,7 +61,11 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
         private HttpClient CreateClient(string baseUrl, string appToken)
         {
             var client = _httpClientFactory.CreateClient();
-            client.BaseAddress = new Uri($"{baseUrl.TrimEnd('/')}/apirest.php/");
+            var normalizedBaseUrl = baseUrl.Trim().TrimEnd('/');
+            var apiBaseUrl = normalizedBaseUrl.EndsWith("/apirest.php", StringComparison.OrdinalIgnoreCase)
+                ? normalizedBaseUrl
+                : $"{normalizedBaseUrl}/apirest.php";
+            client.BaseAddress = new Uri($"{apiBaseUrl}/");
             client.DefaultRequestHeaders.Add("App-Token", appToken);
             return client;
         }
@@ -78,13 +82,13 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                 response?.Contains("ERROR_GLPI_LOGIN_USER_TOKEN", StringComparison.OrdinalIgnoreCase) == true ||
                 response?.Contains("ERROR_WRONG_USER_TOKEN", StringComparison.OrdinalIgnoreCase) == true)
             {
-                return $"O GLPI não criou uma sessão para a credencial informada.\n\nDiagnóstico técnico:\n- Rota: /apirest.php/initSession/\n- Autorização enviada: Basic USER_TOKEN\n- Código GLPI: ERROR_SESSION_TOKEN_MISSING\n- Retorno: {SanitizeGlpiResponse(response)}\n\nVerifique se o mesmo APP_TOKEN e USER_TOKEN usados na integração funcional foram salvos nesta tela.";
+                return $"O GLPI não criou uma sessão para a credencial informada.\n\nDiagnóstico técnico:\n- Rota: /apirest.php/initSession\n- Autorização enviada: user_token USER_TOKEN\n- Código GLPI: ERROR_SESSION_TOKEN_MISSING\n- Retorno: {SanitizeGlpiResponse(response)}\n\nVerifique se o mesmo APP_TOKEN e USER_TOKEN usados na integração funcional foram salvos nesta tela.";
             }
 
             if (response?.Contains("ERROR_WRONG_APP_TOKEN_PARAMETER", StringComparison.OrdinalIgnoreCase) == true)
-                return $"O GLPI não reconheceu o APP_TOKEN informado.\n\nDiagnóstico técnico:\n- Rota: /apirest.php/initSession/\n- Autorização enviada: Basic USER_TOKEN\n- Código GLPI: ERROR_WRONG_APP_TOKEN_PARAMETER\n- Retorno: {SanitizeGlpiResponse(response)}";
+                return $"O GLPI não reconheceu o APP_TOKEN informado.\n\nDiagnóstico técnico:\n- Rota: /apirest.php/initSession\n- Autorização enviada: user_token USER_TOKEN\n- Código GLPI: ERROR_WRONG_APP_TOKEN_PARAMETER\n- Retorno: {SanitizeGlpiResponse(response)}";
 
-            return $"Não foi possível iniciar uma sessão no GLPI.\n\nDiagnóstico técnico:\n- Rota: /apirest.php/initSession/\n- Autorização enviada: Basic USER_TOKEN\n- Retorno: {SanitizeGlpiResponse(response)}";
+            return $"Não foi possível iniciar uma sessão no GLPI.\n\nDiagnóstico técnico:\n- Rota: /apirest.php/initSession\n- Autorização enviada: user_token USER_TOKEN\n- Retorno: {SanitizeGlpiResponse(response)}";
         }
 
         private static string SanitizeGlpiResponse(string? response)
