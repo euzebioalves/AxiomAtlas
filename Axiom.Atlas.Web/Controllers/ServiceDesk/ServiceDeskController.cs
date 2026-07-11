@@ -34,6 +34,14 @@ namespace Axiom.Atlas.Web.Controllers.ServiceDesk
             return new ContentResult { Content = await response.Content.ReadAsStringAsync(), ContentType = "application/json", StatusCode = (int)response.StatusCode };
         }
 
+        [HttpGet]
+        public async Task<IActionResult> Attachment(Guid id, int documentId)
+        {
+            var response = await CreateClient().GetAsync($"api/glpi/tickets/{id}/attachments/{documentId}");
+            if (!response.IsSuccessStatusCode) return NotFound();
+            return File(await response.Content.ReadAsByteArrayAsync(), response.Content.Headers.ContentType?.ToString() ?? "application/octet-stream");
+        }
+
         private HttpClient CreateClient()
         {
             var client = _httpClientFactory.CreateClient("Api");

@@ -119,6 +119,36 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             return workspace == null ? null : ToDto(workspace);
         }
 
+        public async Task<(byte[] Content, string ContentType)> DownloadAttachmentAsync(Guid workspaceId, int documentId)
+        {
+            var workspace = await _context.GlpiTicketWorkspaces.FindAsync(workspaceId) ?? throw new KeyNotFoundException("Chamado importado não encontrado.");
+            using var attachments = JsonDocument.Parse(workspace.AttachmentsJson);
+            var attachmentBelongsToWorkspace = attachments.RootElement.ValueKind == JsonValueKind.Array && attachments.RootElement
+                .EnumerateArray()
+                .Any(x => TryReadInt(x, "documents_id") == documentId);
+            if (!attachmentBelongsToWorkspace) throw new KeyNotFoundException("Anexo não encontrado neste chamado.");
+
+            var setting = await _context.Integrations.FirstOrDefaultAsync(x => x.Provider == "GLPI" && x.IsActive) ?? throw new InvalidOperationException("GLPI não configurado.");
+            using var client = CreateClient(setting.BaseUrl!, UnprotectRequired(setting.SecondaryToken, "APP_TOKEN"));
+            var session = await CreateSessionAsync(client, UnprotectRequired(setting.PrimaryToken, "USER_TOKEN"));
+            try
+            {
+                // The web endpoint requires an interactive GLPI cookie. The REST endpoint returns the raw file for the API session.
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"Document/{documentId}?alt=media");
+                request.Headers.TryAddWithoutValidation("Session-Token", session);
+                request.Headers.TryAddWithoutValidation("Accept", "application/octet-stream");
+                using var response = await client.SendAsync(request);
+                if (!response.IsSuccessStatusCode) throw new InvalidOperationException("Não foi possível obter o anexo no GLPI.");
+                var content = await response.Content.ReadAsByteArrayAsync();
+                var contentType = response.Content.Headers.ContentType?.MediaType;
+                if (contentType?.Equals("text/html", StringComparison.OrdinalIgnoreCase) == true)
+                    throw new InvalidOperationException("O GLPI retornou uma página HTML em vez do arquivo do anexo.");
+
+                return (content, contentType ?? "application/octet-stream");
+            }
+            finally { using var kill = new HttpRequestMessage(HttpMethod.Get, "killSession"); kill.Headers.TryAddWithoutValidation("Session-Token", session); await client.SendAsync(kill); }
+        }
+
         private async Task<string> CreateSessionAsync(HttpClient client, string userToken)
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, "initSession?get_full_session=true");

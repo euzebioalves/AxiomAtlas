@@ -32,5 +32,13 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
             try { return Ok(await _glpiService.SaveDraftAsync(id, request.RequirementMarkdown)); }
             catch (KeyNotFoundException) { return NotFound(); }
         }
+
+        [HttpGet("{id:guid}/attachments/{documentId:int}")]
+        public async Task<IActionResult> DownloadAttachment(Guid id, int documentId)
+        {
+            try { var file = await _glpiService.DownloadAttachmentAsync(id, documentId); return File(file.Content, file.ContentType); }
+            catch (KeyNotFoundException) { return NotFound(); }
+            catch (Exception exception) { return BadRequest(new { message = exception.Message }); }
+        }
     }
 }
