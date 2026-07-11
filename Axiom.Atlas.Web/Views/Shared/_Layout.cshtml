@@ -82,6 +82,13 @@
             }
 
             document.documentElement.setAttribute("data-bs-theme", themeMode);
+
+            const syncSidebarTheme = () => {
+                document.body.setAttribute("data-kt-app-layout", document.documentElement.getAttribute("data-bs-theme") === "dark" ? "dark-sidebar" : "light-sidebar");
+            };
+
+            syncSidebarTheme();
+            new MutationObserver(syncSidebarTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-bs-theme"] });
         }
     </script>
 

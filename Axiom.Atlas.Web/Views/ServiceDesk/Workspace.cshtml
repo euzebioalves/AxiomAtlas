@@ -172,6 +172,25 @@
             bootstrap.Modal.getOrCreateInstance(modalElement).show();
         };
 
+        const applyTicketTheme = (frame) => {
+            const document = frame.contentDocument;
+            if (!document) return;
+
+            const isDark = frame.ownerDocument.documentElement.getAttribute('data-bs-theme') === 'dark';
+            const palette = isDark
+                ? { background: '#1e1e2d', text: '#d8dbe8', border: '#393945', link: '#50cdff' }
+                : { background: '#f8f9fc', text: '#3f4254', border: '#e1e3ea', link: '#009ef7' };
+            let style = document.getElementById('axiom-ticket-theme');
+            if (!style) {
+                style = document.createElement('style');
+                style.id = 'axiom-ticket-theme';
+                document.head.appendChild(style);
+            }
+
+            style.textContent = `html,body{background:${palette.background}!important;color:${palette.text}!important}body *{background:transparent!important;color:${palette.text}!important;border-color:${palette.border}!important}a{color:${palette.link}!important}`;
+            frame.style.background = palette.background;
+        };
+
         document.getElementById('saveDraft').onclick = async () => {
             const response = await fetch('/ServiceDesk/SaveDraft/@Model.Id', {
                 method: 'POST',
@@ -185,6 +204,7 @@
             const body = frame.contentDocument?.body;
             if (!body) return;
 
+            applyTicketTheme(frame);
             frame.style.height = `${Math.max(body.scrollHeight + 8, 360)}px`;
             body.addEventListener('click', event => {
                 const image = event.target.closest('img');
@@ -198,6 +218,7 @@
 
         KTScroll.createInstances('#glpiTicketScroll');
         document.querySelectorAll('.attachment-thumb').forEach(item => item.addEventListener('click', () => openAttachmentPreview(item.dataset.imageUrl)));
+        new MutationObserver(() => document.querySelectorAll('.glpi-ticket-frame').forEach(applyTicketTheme)).observe(document.documentElement, { attributes: true, attributeFilter: ['data-bs-theme'] });
     </script>
 }
 
@@ -206,12 +227,12 @@
     .service-desk-card .card-header { flex: 0 0 76px; height: 76px; min-height: 76px; padding: 16px 28px; }
     .workspace-panel-body { flex: 1 1 auto; padding: 18px 28px 28px; }
     .ticket-card-toolbar { margin-left: 0 !important; }
-    .ticket-metadata { display: flex; gap: 20px; color: var(--bs-gray-300); font-size: .8rem; }
-    .ticket-metadata strong { color: var(--bs-white); margin-left: 4px; }
+    .ticket-metadata { display: flex; gap: 20px; color: var(--bs-body-color); font-size: .8rem; }
+    .ticket-metadata strong { color: var(--bs-heading-color); margin-left: 4px; }
     .glpi-ticket-content { background: var(--bs-gray-100); border-radius: .475rem; }
     .ticket-content-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 18px 12px; }
     .ticket-content-scroll { height: 540px; padding: 0 18px 18px; }
-    .glpi-ticket-frame { display: block; width: 100%; min-height: 360px; border: 0; background: #1e1e2d; border-radius: .475rem; }
+    .glpi-ticket-frame { display: block; width: 100%; min-height: 360px; border: 0; background: var(--bs-gray-100); border-radius: .475rem; }
     .followup-list { display: flex; flex-direction: column; gap: 10px; }
     .followup-bubble { align-self: flex-start; max-width: 88%; background: var(--bs-gray-200); border-radius: 12px 12px 12px 2px; padding: 10px 12px; color: var(--bs-gray-800); font-size: .85rem; }
     .followup-bubble:nth-child(even) { align-self: flex-end; background: var(--bs-primary); color: #fff; border-radius: 12px 12px 2px 12px; }
