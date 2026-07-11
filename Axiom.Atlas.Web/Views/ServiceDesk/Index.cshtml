@@ -1,0 +1,9 @@
+@{ ViewData["Title"] = "Demandas GLPI"; }
+<div class="app-content flex-column-fluid"><div class="app-container container-xxl">
+<div class="card card-flush mb-7"><div class="card-body p-9 d-flex flex-column flex-lg-row align-items-lg-center gap-5">
+<div class="flex-grow-1"><div class="badge badge-light-primary mb-2">Service Desk</div><h1 class="fs-2 fw-bold mb-2">Tratamento de demandas</h1><div class="text-muted">Importe um chamado por número ou assunto para iniciar a documentação da User Story.</div></div>
+<div class="w-lg-400px"><label class="form-label">Chamado GLPI</label><div class="input-group"><input id="ticketQuery" class="form-control form-control-solid" placeholder="Ex.: 2607100027 ou assunto" /><button id="importTicket" class="btn btn-primary"><i class="ki-duotone ki-magnifier fs-2"></i>Importar</button></div></div>
+</div></div>
+<div class="notice d-flex bg-light-info rounded border-info border border-dashed p-6"><i class="ki-duotone ki-information-5 fs-2tx text-info me-4"></i><div class="fw-semibold text-gray-700">A importação armazena o conteúdo, acompanhamentos e anexos do chamado para manter a rastreabilidade no Axiom Atlas.</div></div>
+</div></div>
+@section Scripts { <script>document.getElementById('importTicket').onclick=async()=>{const q=document.getElementById('ticketQuery').value.trim();if(!q)return;const r=await fetch('/ServiceDesk/Import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({query:q})});const d=await r.json();if(!r.ok){Swal.fire({icon:'error',text:d.message||'Não foi possível importar o chamado.'});return;}window.location=`/ServiceDesk/Workspace/${d.id}`;};</script> }
