@@ -36,6 +36,16 @@
 
     var descriptionDocument = $"<!doctype html><html><head><base href='{glpiBaseUrl}/' target='_blank'><style>html,body{{background:#1e1e2d!important;color:#d8dbe8!important}}body{{margin:0;padding:1rem;font-family:Inter,Arial,sans-serif;line-height:1.65;overflow-wrap:anywhere}}body *{{background:transparent!important;color:#d8dbe8!important;border-color:#393945!important}}img{{max-width:100%!important;height:auto!important;border-radius:.45rem;cursor:zoom-in}}table{{max-width:100%!important;border-collapse:collapse}}td,th{{padding:.35rem}}a{{color:#50cdff!important}}hr{{border-color:#393945}}</style></head><body>{description}</body></html>";
     var status = Text("status");
+    var statusDescription = status switch
+    {
+        "1" => "Novo",
+        "2" => "Em atendimento",
+        "3" => "Em atendimento planejado",
+        "4" => "Pendente",
+        "5" => "Solucionado",
+        "6" => "Fechado",
+        _ => string.IsNullOrWhiteSpace(status) ? "Não informado" : status
+    };
     var createdAt = FormatGlpiDate(Text("date"));
     var updatedAt = FormatGlpiDate(Text("date_mod"));
     using var followUps = JsonDocument.Parse(Model.FollowUpsJson);
@@ -57,10 +67,9 @@
             <div class="col-xl-5">
                 <div class="card card-flush h-100 service-desk-card">
                     <div class="card-header">
-                        <h3 class="card-title">Dossiê do chamado</h3>
-                        <div class="card-toolbar d-flex gap-2">
-                            <span class="badge badge-light-primary">@(Model.EntityPath ?? "Sem entidade")</span>
-                            <span class="badge badge-light-info">Status GLPI: @status</span>
+                        <div class="card-toolbar ticket-card-toolbar d-flex gap-2">
+                            <span class="badge badge-light-primary">@(Model.ClientEntityName ?? "Entidade não identificada")</span>
+                            <span class="badge badge-light-info">Status: @statusDescription</span>
                         </div>
                     </div>
                     <div class="card-body workspace-panel-body">
@@ -196,8 +205,9 @@
     .service-desk-card { display: flex; flex-direction: column; min-height: calc(100vh - 260px); }
     .service-desk-card .card-header { flex: 0 0 76px; height: 76px; min-height: 76px; padding: 16px 28px; }
     .workspace-panel-body { flex: 1 1 auto; padding: 18px 28px 28px; }
-    .ticket-metadata { display: flex; gap: 20px; color: var(--bs-gray-500); font-size: .8rem; }
-    .ticket-metadata strong { color: var(--bs-gray-200); margin-left: 4px; }
+    .ticket-card-toolbar { margin-left: 0 !important; }
+    .ticket-metadata { display: flex; gap: 20px; color: var(--bs-gray-300); font-size: .8rem; }
+    .ticket-metadata strong { color: var(--bs-white); margin-left: 4px; }
     .glpi-ticket-content { background: var(--bs-gray-100); border-radius: .475rem; }
     .ticket-content-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 18px 12px; }
     .ticket-content-scroll { height: 540px; padding: 0 18px 18px; }
