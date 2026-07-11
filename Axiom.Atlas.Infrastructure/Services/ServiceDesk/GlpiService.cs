@@ -4,7 +4,6 @@ using Axiom.Atlas.Persistence;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
 
 namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
@@ -77,7 +76,8 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             var client = _httpClientFactory.CreateClient();
             client.BaseAddress = new Uri($"{baseUrl.TrimEnd('/')}/apirest.php/");
             client.DefaultRequestHeaders.Add("App-Token", appToken);
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", Convert.ToBase64String(Encoding.UTF8.GetBytes($"{userToken}:")));
+            // A API REST legada do GLPI autentica o token externo do usuário com o esquema user_token.
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("user_token", userToken);
             return client;
         }
 
