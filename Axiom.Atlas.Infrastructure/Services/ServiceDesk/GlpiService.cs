@@ -6,6 +6,7 @@ using Axiom.Atlas.Persistence;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
 {
@@ -89,8 +90,8 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                 workspace.EntityPath = entityPath;
                 workspace.ClientEntityName = GetClientEntity(entityPath);
                 workspace.TicketPayloadJson = ticket.RootElement.GetRawText();
-                workspace.FollowUpsJson = followUps.RootElement.GetRawText();
-                workspace.AttachmentsJson = attachments.RootElement.GetRawText();
+                workspace.FollowUpsJson = await EnrichFollowUpsAsync(client, sessionToken, followUps.RootElement);
+                workspace.AttachmentsJson = await EnrichAttachmentsAsync(client, sessionToken, attachments.RootElement, setting.BaseUrl!);
                 workspace.UpdatedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
                 return ToDto(workspace);
@@ -154,6 +155,43 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
         {
             using var entity = await GetJsonAsync(client, sessionToken, $"Entity/{entityId}");
             return TryReadString(entity.RootElement, "completename") ?? TryReadString(entity.RootElement, "name");
+        }
+
+        private static async Task<string> EnrichFollowUpsAsync(HttpClient client, string sessionToken, JsonElement source)
+        {
+            var followUps = JsonNode.Parse(source.GetRawText())?.AsArray() ?? new JsonArray();
+            var users = new Dictionary<int, string>();
+            foreach (var followUp in followUps.OfType<JsonObject>())
+            {
+                var userId = followUp["users_id"]?.GetValue<int?>();
+                if (!userId.HasValue || userId <= 0) continue;
+                if (!users.TryGetValue(userId.Value, out var name))
+                {
+                    using var user = await GetJsonAsync(client, sessionToken, $"User/{userId}");
+                    name = TryReadString(user.RootElement, "realname") ?? TryReadString(user.RootElement, "name") ?? $"Usuário GLPI #{userId}";
+                    var firstName = TryReadString(user.RootElement, "firstname");
+                    if (!string.IsNullOrWhiteSpace(firstName) && !name.Contains(firstName, StringComparison.OrdinalIgnoreCase)) name = $"{firstName} {name}".Trim();
+                    users[userId.Value] = name;
+                }
+                followUp["authorName"] = name;
+            }
+            return followUps.ToJsonString();
+        }
+
+        private static async Task<string> EnrichAttachmentsAsync(HttpClient client, string sessionToken, JsonElement source, string baseUrl)
+        {
+            var attachments = JsonNode.Parse(source.GetRawText())?.AsArray() ?? new JsonArray();
+            var webBaseUrl = baseUrl.TrimEnd('/');
+            if (webBaseUrl.EndsWith("/apirest.php", StringComparison.OrdinalIgnoreCase)) webBaseUrl = webBaseUrl[..^"/apirest.php".Length];
+            foreach (var attachment in attachments.OfType<JsonObject>())
+            {
+                var documentId = attachment["documents_id"]?.GetValue<int?>();
+                if (!documentId.HasValue) continue;
+                using var document = await GetJsonAsync(client, sessionToken, $"Document/{documentId}");
+                attachment["documentName"] = TryReadString(document.RootElement, "name") ?? TryReadString(document.RootElement, "filename") ?? $"Documento #{documentId}";
+                attachment["documentUrl"] = $"{webBaseUrl}/front/document.send.php?docid={documentId}";
+            }
+            return attachments.ToJsonString();
         }
 
         private static string? GetClientEntity(string? path)
