@@ -127,5 +127,41 @@ namespace Axiom.Atlas.Web.Controllers.Integrations
                 });
             }
         }
+
+        [HttpGet]
+        public async Task<IActionResult> Glpi()
+        {
+            var client = _httpClientFactory.CreateClient("Api");
+            var token = User.FindFirst("JWToken")?.Value;
+            if (!string.IsNullOrWhiteSpace(token)) client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var response = await client.GetAsync("api/integrations/glpi");
+            return View(response.IsSuccessStatusCode ? await response.Content.ReadFromJsonAsync<GlpiSettingsViewModel>() ?? new() : new GlpiSettingsViewModel());
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> SaveGlpi(GlpiSettingsViewModel model)
+        {
+            var client = _httpClientFactory.CreateClient("Api");
+            var token = User.FindFirst("JWToken")?.Value;
+            if (!string.IsNullOrWhiteSpace(token)) client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var response = await client.PostAsJsonAsync("api/integrations/glpi", model);
+            TempData[response.IsSuccessStatusCode ? "SuccessMessage" : "ErrorMessage"] = response.IsSuccessStatusCode ? "Configurações do GLPI salvas com sucesso!" : "Não foi possível salvar as configurações do GLPI.";
+            return RedirectToAction(nameof(Glpi));
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> TestGlpi([FromBody] GlpiSettingsViewModel model)
+        {
+            var client = _httpClientFactory.CreateClient("Api");
+            var token = User.FindFirst("JWToken")?.Value;
+            if (!string.IsNullOrWhiteSpace(token)) client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            var response = await client.PostAsJsonAsync("api/integrations/glpi/test", model);
+            return new ContentResult
+            {
+                StatusCode = (int)response.StatusCode,
+                ContentType = "application/json",
+                Content = await response.Content.ReadAsStringAsync()
+            };
+        }
     }
 }

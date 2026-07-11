@@ -30,4 +30,21 @@
         public int ActivitiesCount { get; set; }
         public List<string> Warnings { get; set; } = new();
     }
+
+    public class SaveGlpiSettingsRequest
+    {
+        public string? BaseUrl { get; set; }
+        public string? AppToken { get; set; }
+        public string? UserToken { get; set; }
+        public string? ClassificationFieldKey { get; set; }
+        public string? DevOpsUrlFieldKey { get; set; }
+    }
+
+    public class GlpiConnectionTestResult
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public string? GlpiVersion { get; set; }
+        public List<string> Warnings { get; set; } = new();
+    }
 }

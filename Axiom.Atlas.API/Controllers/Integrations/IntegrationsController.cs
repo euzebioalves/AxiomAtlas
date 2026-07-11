@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Axiom.Atlas.Infrastructure.Services.TimeEntries;
+using Axiom.Atlas.Infrastructure.Services.ServiceDesk;
+using System.Text.Json;
 
 namespace Axiom.Atlas.API.Controllers.Integrations
 {
@@ -18,17 +20,20 @@ namespace Axiom.Atlas.API.Controllers.Integrations
         private readonly AppDbContext _context;
         private readonly IDataProtector _protector;
         private readonly OpenProjectService _openProjectService;
+        private readonly GlpiService _glpiService;
 
         // Injetamos o contexto do banco e o provedor de proteção de dados
         public IntegrationsController(
             AppDbContext context,
             IDataProtectionProvider provider,
-            OpenProjectService openProjectService)
+            OpenProjectService openProjectService,
+            GlpiService glpiService)
         {
             _context = context;
             // O nome "AxiomAtlas.Integrations" é o propósito. Serve como um "sal" extra.
             _protector = provider.CreateProtector("AxiomAtlas.Integrations");
             _openProjectService = openProjectService;
+            _glpiService = glpiService;
         }
 
         [HttpPost("openproject")]
@@ -132,6 +137,52 @@ namespace Axiom.Atlas.API.Controllers.Integrations
         public async Task<IActionResult> TestOpenProject([FromBody] TestOpenProjectConnectionRequest request)
         {
             var result = await _openProjectService.TestConnectionAsync(request);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        [HttpGet("glpi")]
+        public async Task<IActionResult> GetGlpiSettings()
+        {
+            var setting = await _context.Integrations.AsNoTracking().FirstOrDefaultAsync(x => x.Provider == "GLPI" && x.IsActive);
+            var additional = string.IsNullOrWhiteSpace(setting?.AdditionalSettings)
+                ? new Dictionary<string, string?>()
+                : JsonSerializer.Deserialize<Dictionary<string, string?>>(setting.AdditionalSettings!) ?? new();
+            return Ok(new SaveGlpiSettingsRequest
+            {
+                BaseUrl = setting?.BaseUrl,
+                AppToken = string.IsNullOrWhiteSpace(setting?.SecondaryToken) ? null : "********",
+                UserToken = string.IsNullOrWhiteSpace(setting?.PrimaryToken) ? null : "********",
+                ClassificationFieldKey = additional.GetValueOrDefault("classificationFieldKey"),
+                DevOpsUrlFieldKey = additional.GetValueOrDefault("devOpsUrlFieldKey")
+            });
+        }
+
+        [HttpPost("glpi")]
+        public async Task<IActionResult> SaveGlpi([FromBody] SaveGlpiSettingsRequest request)
+        {
+            var setting = await _context.Integrations.FirstOrDefaultAsync(x => x.Provider == "GLPI" && x.IsActive);
+            if (setting == null)
+            {
+                setting = new IntegrationSettings { Provider = "GLPI", Environment = "Production", IsActive = true };
+                _context.Integrations.Add(setting);
+            }
+
+            setting.BaseUrl = request.BaseUrl?.Trim().TrimEnd('/');
+            if (!string.IsNullOrWhiteSpace(request.UserToken) && request.UserToken != "********") setting.PrimaryToken = _protector.Protect(request.UserToken);
+            if (!string.IsNullOrWhiteSpace(request.AppToken) && request.AppToken != "********") setting.SecondaryToken = _protector.Protect(request.AppToken);
+            setting.AdditionalSettings = JsonSerializer.Serialize(new Dictionary<string, string?>
+            {
+                ["classificationFieldKey"] = request.ClassificationFieldKey?.Trim(),
+                ["devOpsUrlFieldKey"] = request.DevOpsUrlFieldKey?.Trim()
+            });
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Configurações do GLPI salvas com sucesso." });
+        }
+
+        [HttpPost("glpi/test")]
+        public async Task<IActionResult> TestGlpi([FromBody] SaveGlpiSettingsRequest request)
+        {
+            var result = await _glpiService.TestConnectionAsync(request);
             return result.Success ? Ok(result) : BadRequest(result);
         }
     }

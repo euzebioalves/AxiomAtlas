@@ -21,4 +21,13 @@
         public string? BaseUrl { get; set; }
         public string? PrimaryToken { get; set; }
     }
+
+    public class GlpiSettingsViewModel
+    {
+        public string? BaseUrl { get; set; }
+        public string? AppToken { get; set; }
+        public string? UserToken { get; set; }
+        public string? ClassificationFieldKey { get; set; }
+        public string? DevOpsUrlFieldKey { get; set; }
+    }
 }
