@@ -78,13 +78,22 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                 response?.Contains("ERROR_GLPI_LOGIN_USER_TOKEN", StringComparison.OrdinalIgnoreCase) == true ||
                 response?.Contains("ERROR_WRONG_USER_TOKEN", StringComparison.OrdinalIgnoreCase) == true)
             {
-                return "O GLPI aceitou o APP_TOKEN, mas não reconheceu o USER_TOKEN. Gere ou copie novamente a Chave de acesso remoto do usuário que fará a integração e salve a configuração antes de testar.";
+                return $"O GLPI não criou uma sessão para a credencial informada.\n\nDiagnóstico técnico:\n- Rota: /apirest.php/initSession/\n- Autorização enviada: Basic USER_TOKEN\n- Código GLPI: ERROR_SESSION_TOKEN_MISSING\n- Retorno: {SanitizeGlpiResponse(response)}\n\nVerifique se o mesmo APP_TOKEN e USER_TOKEN usados na integração funcional foram salvos nesta tela.";
             }
 
             if (response?.Contains("ERROR_WRONG_APP_TOKEN_PARAMETER", StringComparison.OrdinalIgnoreCase) == true)
-                return "O GLPI não reconheceu o APP_TOKEN informado. Verifique o token da aplicação autorizada no GLPI.";
+                return $"O GLPI não reconheceu o APP_TOKEN informado.\n\nDiagnóstico técnico:\n- Rota: /apirest.php/initSession/\n- Autorização enviada: Basic USER_TOKEN\n- Código GLPI: ERROR_WRONG_APP_TOKEN_PARAMETER\n- Retorno: {SanitizeGlpiResponse(response)}";
 
-            return $"Não foi possível iniciar uma sessão no GLPI. Último retorno: {response}";
+            return $"Não foi possível iniciar uma sessão no GLPI.\n\nDiagnóstico técnico:\n- Rota: /apirest.php/initSession/\n- Autorização enviada: Basic USER_TOKEN\n- Retorno: {SanitizeGlpiResponse(response)}";
+        }
+
+        private static string SanitizeGlpiResponse(string? response)
+        {
+            if (string.IsNullOrWhiteSpace(response))
+                return "nenhum detalhe retornado.";
+
+            const int maximumLength = 500;
+            return response.Length <= maximumLength ? response : $"{response[..maximumLength]}...";
         }
     }
 }
