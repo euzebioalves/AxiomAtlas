@@ -52,7 +52,7 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                     await client.GetAsync($"killSession?session_token={Uri.EscapeDataString(sessionToken)}");
                     return new GlpiConnectionTestResult { Success = true, GlpiVersion = version, Message = "Conexão com GLPI validada com sucesso.", Warnings = string.IsNullOrWhiteSpace(request.ClassificationFieldKey) || string.IsNullOrWhiteSpace(request.DevOpsUrlFieldKey) ? new List<string> { "Configure as chaves técnicas dos campos adicionais após a validação da conexão." } : new List<string>() };
                 }
-                return new GlpiConnectionTestResult { Message = $"Não foi possível iniciar uma sessão no GLPI. Último retorno: {lastError}" };
+                return new GlpiConnectionTestResult { Message = DescribeConnectionError(lastError) };
             }
             catch (Exception exception)
             {
@@ -73,6 +73,21 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
         {
             if (!string.IsNullOrWhiteSpace(requestedToken) && requestedToken != "********") return requestedToken;
             return string.IsNullOrWhiteSpace(protectedToken) ? null : _protector.Unprotect(protectedToken);
+        }
+
+        private static string DescribeConnectionError(string? response)
+        {
+            if (response?.Contains("ERROR_SESSION_TOKEN_MISSING", StringComparison.OrdinalIgnoreCase) == true ||
+                response?.Contains("ERROR_GLPI_LOGIN_USER_TOKEN", StringComparison.OrdinalIgnoreCase) == true ||
+                response?.Contains("ERROR_WRONG_USER_TOKEN", StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return "O GLPI aceitou o APP_TOKEN, mas não reconheceu o USER_TOKEN. Gere ou copie novamente a Chave de acesso remoto do usuário que fará a integração e salve a configuração antes de testar.";
+            }
+
+            if (response?.Contains("ERROR_WRONG_APP_TOKEN_PARAMETER", StringComparison.OrdinalIgnoreCase) == true)
+                return "O GLPI não reconheceu o APP_TOKEN informado. Verifique o token da aplicação autorizada no GLPI.";
+
+            return $"Não foi possível iniciar uma sessão no GLPI. Último retorno: {response}";
         }
     }
 }
