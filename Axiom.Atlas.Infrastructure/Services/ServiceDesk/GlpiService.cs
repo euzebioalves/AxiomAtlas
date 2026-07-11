@@ -32,38 +32,27 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                 if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(appToken) || string.IsNullOrWhiteSpace(userToken))
                     return new GlpiConnectionTestResult { Message = "Informe BASE_URL, APP_TOKEN e USER_TOKEN." };
 
-                using var client = CreateClient(baseUrl, appToken, userToken);
-                using var response = await client.GetAsync("initSession");
-                var content = await response.Content.ReadAsStringAsync();
-                if (!response.IsSuccessStatusCode)
-                    return new GlpiConnectionTestResult { Message = $"GLPI retornou {(int)response.StatusCode}: {content}" };
-
-                using var document = JsonDocument.Parse(content);
-                var sessionToken = document.RootElement.TryGetProperty("session_token", out var token) ? token.GetString() : null;
-                if (string.IsNullOrWhiteSpace(sessionToken))
-                    return new GlpiConnectionTestResult { Message = "GLPI não retornou um token de sessão." };
-
-                client.DefaultRequestHeaders.Remove("Session-Token");
-                client.DefaultRequestHeaders.Add("Session-Token", sessionToken);
-                using var sessionResponse = await client.GetAsync("getFullSession");
-                var sessionContent = await sessionResponse.Content.ReadAsStringAsync();
-                await client.GetAsync("killSession");
-                if (!sessionResponse.IsSuccessStatusCode)
-                    return new GlpiConnectionTestResult { Message = $"Sessão iniciada, mas o GLPI recusou a leitura: {(int)sessionResponse.StatusCode}." };
-
-                using var sessionDocument = JsonDocument.Parse(sessionContent);
-                var version = sessionDocument.RootElement.TryGetProperty("glpi_version", out var versionElement)
-                    ? versionElement.GetString()
-                    : null;
-                return new GlpiConnectionTestResult
+                var authenticationHeaders = new[]
                 {
-                    Success = true,
-                    GlpiVersion = version,
-                    Message = "Conexão com GLPI validada com sucesso.",
-                    Warnings = string.IsNullOrWhiteSpace(request.ClassificationFieldKey) || string.IsNullOrWhiteSpace(request.DevOpsUrlFieldKey)
-                        ? new List<string> { "Configure as chaves técnicas dos campos adicionais após a validação da conexão." }
-                        : new List<string>()
+                    new AuthenticationHeaderValue("user_token", userToken),
+                    new AuthenticationHeaderValue("Basic", Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"user_token:{userToken}"))),
+                    new AuthenticationHeaderValue("Basic", Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{userToken}:")))
                 };
+                string? lastError = null;
+                foreach (var authorization in authenticationHeaders)
+                {
+                    using var client = CreateClient(baseUrl, appToken, authorization);
+                    using var response = await client.GetAsync("initSession?get_full_session=true");
+                    var content = await response.Content.ReadAsStringAsync();
+                    if (!response.IsSuccessStatusCode) { lastError = $"{(int)response.StatusCode}: {content}"; continue; }
+                    using var document = JsonDocument.Parse(content);
+                    var sessionToken = document.RootElement.TryGetProperty("session_token", out var token) ? token.GetString() : null;
+                    if (string.IsNullOrWhiteSpace(sessionToken)) { lastError = "GLPI não retornou um token de sessão."; continue; }
+                    var version = document.RootElement.TryGetProperty("glpi_version", out var versionElement) ? versionElement.GetString() : null;
+                    await client.GetAsync($"killSession?session_token={Uri.EscapeDataString(sessionToken)}");
+                    return new GlpiConnectionTestResult { Success = true, GlpiVersion = version, Message = "Conexão com GLPI validada com sucesso.", Warnings = string.IsNullOrWhiteSpace(request.ClassificationFieldKey) || string.IsNullOrWhiteSpace(request.DevOpsUrlFieldKey) ? new List<string> { "Configure as chaves técnicas dos campos adicionais após a validação da conexão." } : new List<string>() };
+                }
+                return new GlpiConnectionTestResult { Message = $"Não foi possível iniciar uma sessão no GLPI. Último retorno: {lastError}" };
             }
             catch (Exception exception)
             {
@@ -71,13 +60,12 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             }
         }
 
-        private HttpClient CreateClient(string baseUrl, string appToken, string userToken)
+        private HttpClient CreateClient(string baseUrl, string appToken, AuthenticationHeaderValue authorization)
         {
             var client = _httpClientFactory.CreateClient();
             client.BaseAddress = new Uri($"{baseUrl.TrimEnd('/')}/apirest.php/");
             client.DefaultRequestHeaders.Add("App-Token", appToken);
-            // A API REST legada do GLPI autentica o token externo do usuário com o esquema user_token.
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("user_token", userToken);
+            client.DefaultRequestHeaders.Authorization = authorization;
             return client;
         }
 
