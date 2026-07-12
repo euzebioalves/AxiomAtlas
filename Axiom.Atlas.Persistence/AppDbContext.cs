@@ -5,6 +5,7 @@ using Axiom.Atlas.Domain.Entities.TimeClock;
 using Axiom.Atlas.Domain.Entities.Users;
 using Axiom.Atlas.Domain.Entities.Integrations;
 using Axiom.Atlas.Domain.Entities.Notifications;
+using Axiom.Atlas.Domain.Entities.ServiceDesk;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 
@@ -33,6 +34,8 @@ namespace Axiom.Atlas.Persistence
 
         //Integrations
         public DbSet<IntegrationSettings> Integrations { get; set; }
+        public DbSet<GlpiTicketWorkspace> GlpiTicketWorkspaces { get; set; }
+        public DbSet<GlpiImprovementTicket> GlpiImprovementTickets { get; set; }
 
         //Desktop notifications
         public DbSet<UserDesktopNotificationSetting> UserDesktopNotificationSettings { get; set; }
@@ -135,6 +138,39 @@ namespace Axiom.Atlas.Persistence
                 entity.HasIndex(x => new { x.Provider, x.Environment })
                     .IsUnique()
                     .HasDatabaseName("IX_IntegrationSettings_Provider_Environment");
+            });
+
+            builder.Entity<GlpiTicketWorkspace>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.Subject).HasMaxLength(500).IsRequired();
+                entity.Property(x => x.EntityPath).HasMaxLength(1000);
+                entity.Property(x => x.ClientEntityName).HasMaxLength(300);
+                entity.Property(x => x.Classification).HasMaxLength(300);
+                entity.Property(x => x.TicketPayloadJson).HasColumnType("text");
+                entity.Property(x => x.FollowUpsJson).HasColumnType("text");
+                entity.Property(x => x.AttachmentsJson).HasColumnType("text");
+                entity.Property(x => x.RequirementMarkdown).HasColumnType("text");
+                entity.Property(x => x.OpenProjectWorkPackageUrl).HasMaxLength(1000);
+                entity.Property(x => x.GlpiDevOpsFieldId).HasMaxLength(100);
+                entity.Property(x => x.GlpiDevOpsUrl).HasMaxLength(1000);
+                entity.Property(x => x.CreatedByUserId).HasMaxLength(100).IsRequired();
+                entity.HasIndex(x => x.GlpiTicketId).IsUnique();
+            });
+
+            builder.Entity<GlpiImprovementTicket>(entity =>
+            {
+                entity.HasKey(x => x.GlpiTicketId);
+                entity.Property(x => x.GlpiTicketId).ValueGeneratedNever();
+                entity.Property(x => x.Subject).HasMaxLength(500).IsRequired();
+                entity.Property(x => x.GlpiTicketUrl).HasMaxLength(1000);
+                entity.Property(x => x.StatusName).HasMaxLength(200).IsRequired();
+                entity.Property(x => x.EntityPath).HasMaxLength(1000);
+                entity.Property(x => x.ClientEntityName).HasMaxLength(300);
+                entity.Property(x => x.WorkPackageUrl).HasMaxLength(1000);
+                entity.Property(x => x.WorkPackageStatus).HasMaxLength(200);
+                entity.Property(x => x.WorkPackageCreator).HasMaxLength(300);
+                entity.HasIndex(x => new { x.IsInImprovementQueue, x.StatusCode, x.OpenedAt });
             });
 
             builder.Entity<UserDesktopNotificationSetting>(entity =>

@@ -1,0 +1,163 @@
+@{
+    ViewData["Title"] = "Demandas GLPI";
+}
+
+<style>
+    .service-desk-row-highlight > td {
+        background-color: var(--bs-primary-light) !important;
+        transition: background-color .6s ease;
+    }
+
+    .service-desk-row-highlight > td:first-child {
+        box-shadow: inset 3px 0 0 var(--bs-primary);
+    }
+</style>
+
+<div class="app-content flex-column-fluid">
+    <div class="app-container container-xxl">
+        <div class="card card-flush mb-7">
+            <div class="card-body p-9 d-flex flex-column flex-lg-row align-items-lg-center gap-5">
+                <div class="flex-grow-1">
+                    <div class="badge badge-light-primary mb-2">Service Desk</div>
+                    <h1 class="fs-2 fw-bold mb-2">Solicitações de melhoria</h1>
+                    <div class="text-muted">Chamados GLPI classificados para o time de Engenharia de Requisitos, ordenados do mais antigo para o mais recente.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card card-flush position-relative">
+            <div id="improvementsLoader" class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center align-items-center bg-body z-index-3 rounded" aria-live="polite">
+                <span class="spinner-border text-primary mb-4" role="status"></span>
+                <div class="fw-semibold text-gray-700">Consultando solicitações de melhoria no GLPI...</div>
+                <div class="text-muted fs-7 mt-1">Isso pode levar alguns instantes.</div>
+            </div>
+            <div id="improvementResults" aria-busy="true"></div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const results = document.getElementById('improvementResults');
+            const loader = document.getElementById('improvementsLoader');
+            const allowedPageSizes = new Set([10, 25, 50, 100]);
+            const allowedStatuses = new Set(['not_solved', 'all', 'new', 'processing_assigned', 'processing_planned', 'pending', 'solved', 'closed']);
+
+            const currentParams = () => {
+                const query = new URLSearchParams(window.location.search);
+                const page = Math.max(1, Number.parseInt(query.get('page'), 10) || 1);
+                const candidatePageSize = Number.parseInt(query.get('pageSize'), 10) || 25;
+                const candidateStatus = query.get('status') || 'not_solved';
+                const candidateHighlight = query.get('highlight');
+                return {
+                    page,
+                    pageSize: allowedPageSizes.has(candidatePageSize) ? candidatePageSize : 25,
+                    status: allowedStatuses.has(candidateStatus) ? candidateStatus : 'not_solved',
+                    highlight: /^\d+$/.test(candidateHighlight || '') ? candidateHighlight : null
+                };
+            };
+
+            const setLoading = isLoading => {
+                loader.classList.toggle('d-none', !isLoading);
+                results.setAttribute('aria-busy', String(isLoading));
+            };
+
+            const highlightTicket = ticketId => {
+                if (!ticketId) return;
+
+                const row = results.querySelector(`[data-ticket-id="${ticketId}"]`);
+                if (!row) return;
+
+                row.classList.add('service-desk-row-highlight');
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                window.setTimeout(() => row.classList.remove('service-desk-row-highlight'), 5000);
+            };
+
+            const loadPage = async (page, pageSize, status, updateUrl = true) => {
+                setLoading(true);
+                try {
+                    const response = await fetch(`/ServiceDesk/List?page=${page}&pageSize=${pageSize}&status=${encodeURIComponent(status)}`);
+                    if (!response.ok) {
+                        const error = await response.json().catch(() => ({}));
+                        throw new Error(error.message || 'Não foi possível consultar as solicitações de melhoria.');
+                    }
+
+                    results.innerHTML = await response.text();
+                    window.KTComponents?.init();
+                    if (updateUrl) {
+                        const url = new URL(window.location.href);
+                        url.searchParams.set('page', page);
+                        url.searchParams.set('pageSize', pageSize);
+                        url.searchParams.set('status', status);
+                        window.history.pushState({}, '', url);
+                    }
+
+                    highlightTicket(currentParams().highlight);
+                } catch (error) {
+                    results.innerHTML = `<div class="card-body"><div class="alert alert-danger d-flex align-items-center mb-0"><i class="ki-duotone ki-information-5 fs-2 me-3"></i>${error.message}</div></div>`;
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            document.addEventListener('click', event => {
+                const pageButton = event.target.closest('[data-improvements-page]');
+                if (pageButton && !pageButton.disabled) {
+                    event.preventDefault();
+                    loadPage(Number(pageButton.dataset.improvementsPage), Number(pageButton.dataset.pageSize), currentParams().status);
+                    return;
+                }
+
+                if (event.target.closest('#refreshImprovements')) {
+                    event.preventDefault();
+                    const { page, pageSize, status } = currentParams();
+                    loadPage(page, pageSize, status, false);
+                }
+
+                const treatmentButton = event.target.closest('[data-treat-ticket]');
+                if (treatmentButton) {
+                    event.preventDefault();
+                    importTicketForTreatment(treatmentButton.dataset.treatTicket);
+                }
+            });
+
+            document.addEventListener('change', event => {
+                if (event.target.matches('[data-improvements-page-size]')) {
+                    loadPage(1, Number(event.target.value), currentParams().status);
+                }
+
+                if (event.target.matches('[data-improvements-status-filter]')) {
+                    loadPage(1, currentParams().pageSize, event.target.value);
+                }
+            });
+
+            const importTicketForTreatment = async query => {
+                setLoading(true);
+                try {
+                    const response = await fetch('/ServiceDesk/Import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query }) });
+                    const data = await response.json();
+                    if (!response.ok) throw new Error(data.message || 'Não foi possível importar o chamado.');
+                    const { page, pageSize, status } = currentParams();
+                    const returnQuery = new URLSearchParams({
+                        returnPage: page,
+                        returnPageSize: pageSize,
+                        returnStatus: status
+                    });
+                    window.location = `/ServiceDesk/Workspace/${data.id}?${returnQuery}`;
+                } catch (error) {
+                    setLoading(false);
+                    Swal.fire({ icon: 'error', text: error.message });
+                }
+            };
+
+            window.addEventListener('popstate', () => {
+                const { page, pageSize, status } = currentParams();
+                loadPage(page, pageSize, status, false);
+            });
+
+            const { page, pageSize, status } = currentParams();
+            loadPage(page, pageSize, status, false);
+        })();
+    </script>
+}

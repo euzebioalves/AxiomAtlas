@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Axiom.Atlas.Infrastructure.Services.TimeEntries;
+using Axiom.Atlas.Infrastructure.Services.ServiceDesk;
+using System.Text.Json;
 
 namespace Axiom.Atlas.API.Controllers.Integrations
 {
@@ -18,17 +20,20 @@ namespace Axiom.Atlas.API.Controllers.Integrations
         private readonly AppDbContext _context;
         private readonly IDataProtector _protector;
         private readonly OpenProjectService _openProjectService;
+        private readonly GlpiService _glpiService;
 
         // Injetamos o contexto do banco e o provedor de proteção de dados
         public IntegrationsController(
             AppDbContext context,
             IDataProtectionProvider provider,
-            OpenProjectService openProjectService)
+            OpenProjectService openProjectService,
+            GlpiService glpiService)
         {
             _context = context;
             // O nome "AxiomAtlas.Integrations" é o propósito. Serve como um "sal" extra.
             _protector = provider.CreateProtector("AxiomAtlas.Integrations");
             _openProjectService = openProjectService;
+            _glpiService = glpiService;
         }
 
         [HttpPost("openproject")]
@@ -133,6 +138,82 @@ namespace Axiom.Atlas.API.Controllers.Integrations
         {
             var result = await _openProjectService.TestConnectionAsync(request);
             return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        [HttpGet("glpi")]
+        public async Task<IActionResult> GetGlpiSettings()
+        {
+            var settings = await _context.Integrations.AsNoTracking()
+                .Where(x => x.Provider == "GLPI")
+                .ToListAsync();
+            var production = settings.FirstOrDefault(x => x.Environment == "Production");
+            var homologation = settings.FirstOrDefault(x => x.Environment == "Homologation");
+            var active = settings.FirstOrDefault(x => x.IsActive) ?? production ?? homologation;
+
+            return Ok(new SaveGlpiSettingsRequest
+            {
+                ActiveEnvironment = active?.Environment ?? "Homologation",
+                Production = ToGlpiEnvironmentDto(production),
+                Homologation = ToGlpiEnvironmentDto(homologation)
+            });
+        }
+
+        [HttpPost("glpi")]
+        public async Task<IActionResult> SaveGlpi([FromBody] SaveGlpiSettingsRequest request)
+        {
+            var existing = await _context.Integrations.Where(x => x.Provider == "GLPI").ToListAsync();
+            var activeEnvironment = request.ActiveEnvironment == "Production" ? "Production" : "Homologation";
+            await UpsertGlpiEnvironmentSetting(existing, "Production", request.Production, activeEnvironment == "Production");
+            await UpsertGlpiEnvironmentSetting(existing, "Homologation", request.Homologation, activeEnvironment == "Homologation");
+            await _context.SaveChangesAsync();
+            return Ok(new { message = "Configurações do GLPI salvas com sucesso." });
+        }
+
+        [HttpPost("glpi/test")]
+        public async Task<IActionResult> TestGlpi([FromBody] TestGlpiConnectionRequest request)
+        {
+            var result = await _glpiService.TestConnectionAsync(request);
+            return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        private Task UpsertGlpiEnvironmentSetting(
+            List<IntegrationSettings> existing,
+            string environment,
+            GlpiEnvironmentSettingDto dto,
+            bool isActive)
+        {
+            var setting = existing.FirstOrDefault(x => x.Environment == environment);
+            if (setting == null)
+            {
+                setting = new IntegrationSettings { Provider = "GLPI", Environment = environment };
+                _context.Integrations.Add(setting);
+            }
+
+            setting.IsActive = isActive;
+            setting.BaseUrl = dto.BaseUrl?.Trim().TrimEnd('/');
+            if (!string.IsNullOrWhiteSpace(dto.UserToken) && dto.UserToken != "********") setting.PrimaryToken = _protector.Protect(dto.UserToken);
+            if (!string.IsNullOrWhiteSpace(dto.AppToken) && dto.AppToken != "********") setting.SecondaryToken = _protector.Protect(dto.AppToken);
+            setting.AdditionalSettings = JsonSerializer.Serialize(new Dictionary<string, string?>
+            {
+                ["classificationFieldKey"] = dto.ClassificationFieldKey?.Trim(),
+                ["devOpsUrlFieldKey"] = dto.DevOpsUrlFieldKey?.Trim()
+            });
+            return Task.CompletedTask;
+        }
+
+        private static GlpiEnvironmentSettingDto ToGlpiEnvironmentDto(IntegrationSettings? setting)
+        {
+            var additional = string.IsNullOrWhiteSpace(setting?.AdditionalSettings)
+                ? new Dictionary<string, string?>()
+                : JsonSerializer.Deserialize<Dictionary<string, string?>>(setting.AdditionalSettings!) ?? new();
+            return new GlpiEnvironmentSettingDto
+            {
+                BaseUrl = setting?.BaseUrl,
+                AppToken = string.IsNullOrWhiteSpace(setting?.SecondaryToken) ? null : "********",
+                UserToken = string.IsNullOrWhiteSpace(setting?.PrimaryToken) ? null : "********",
+                ClassificationFieldKey = additional.GetValueOrDefault("classificationFieldKey"),
+                DevOpsUrlFieldKey = additional.GetValueOrDefault("devOpsUrlFieldKey")
+            };
         }
     }
 }

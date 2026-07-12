@@ -3,6 +3,7 @@ using System;
 using Axiom.Atlas.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Axiom.Atlas.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260711022548_AddGlpiTicketWorkspaces")]
+    partial class AddGlpiTicketWorkspaces
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -191,71 +194,6 @@ namespace Axiom.Atlas.Persistence.Migrations
                     b.ToTable("UserDesktopNotificationSettings");
                 });
 
-                modelBuilder.Entity("Axiom.Atlas.Domain.Entities.ServiceDesk.GlpiImprovementTicket", b =>
-                {
-                    b.Property<long>("GlpiTicketId")
-                        .ValueGeneratedNever()
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("ClientEntityName")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<string>("EntityPath")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<string>("GlpiTicketUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.Property<bool>("IsInImprovementQueue")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("LastSynchronizedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("OpenedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("StatusCode")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("StatusName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Subject")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<DateTime?>("WorkPackageCreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("WorkPackageCreator")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<int?>("WorkPackageId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("WorkPackageStatus")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("WorkPackageUrl")
-                        .HasMaxLength(1000)
-                        .HasColumnType("character varying(1000)");
-
-                    b.HasKey("GlpiTicketId");
-
-                    b.HasIndex("IsInImprovementQueue", "StatusCode", "OpenedAt");
-
-                    b.ToTable("GlpiImprovementTickets");
-                });
-
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.ServiceDesk.GlpiTicketWorkspace", b =>
                 {
                     b.Property<Guid>("Id")
@@ -298,8 +236,8 @@ namespace Axiom.Atlas.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
-                    b.Property<long>("GlpiTicketId")
-                        .HasColumnType("bigint");
+                    b.Property<int>("GlpiTicketId")
+                        .HasColumnType("integer");
 
                     b.Property<int?>("OpenProjectWorkPackageId")
                         .HasColumnType("integer");
