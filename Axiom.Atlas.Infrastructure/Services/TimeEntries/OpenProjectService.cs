@@ -561,6 +561,107 @@ namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
             return cachedWp;
         }
 
+        public async Task<OpenProjectWorkPackageSummaryDto?> GetWorkPackageSummaryAsync(int wpId)
+        {
+            var client = await CreateConfiguredClientAsync();
+            var response = await client.GetAsync($"api/v3/work_packages/{wpId}");
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            var workPackage = await response.Content.ReadFromJsonAsync<OpenProjectWpResponse>();
+            if (workPackage == null)
+            {
+                return null;
+            }
+
+            return new OpenProjectWorkPackageSummaryDto
+            {
+                Id = wpId,
+                StatusName = workPackage._links?.Status?.Title,
+                CreatorName = workPackage._links?.Author?.Title ?? workPackage._links?.Responsible?.Title ?? workPackage._links?.Assignee?.Title,
+                CreatedAt = DateTime.TryParse(workPackage.CreatedAt, out var createdAt) ? createdAt : null
+            };
+        }
+
+        public async Task<Dictionary<int, OpenProjectWorkPackageSummaryDto>> GetWorkPackageSummariesAsync(
+            IEnumerable<int> workPackageIds,
+            CancellationToken cancellationToken = default)
+        {
+            var ids = workPackageIds.Where(x => x > 0).Distinct().ToArray();
+            var summaries = new Dictionary<int, OpenProjectWorkPackageSummaryDto>();
+            if (ids.Length == 0)
+            {
+                return summaries;
+            }
+
+            var client = await CreateConfiguredClientAsync();
+            foreach (var batch in ids.Chunk(100))
+            {
+                var filters = JsonSerializer.Serialize(new[]
+                {
+                    new Dictionary<string, object>
+                    {
+                        ["id"] = new { @operator = "=", values = batch }
+                    }
+                });
+                using var response = await client.GetAsync(
+                    $"api/v3/work_packages?filters={Uri.EscapeDataString(filters)}&pageSize={batch.Length}",
+                    cancellationToken);
+                if (!response.IsSuccessStatusCode)
+                {
+                    continue;
+                }
+
+                using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+                if (!document.RootElement.TryGetProperty("_embedded", out var embedded) ||
+                    !embedded.TryGetProperty("elements", out var elements) ||
+                    elements.ValueKind != JsonValueKind.Array)
+                {
+                    continue;
+                }
+
+                foreach (var workPackage in elements.EnumerateArray())
+                {
+                    if (!workPackage.TryGetProperty("id", out var idElement) || !idElement.TryGetInt32(out var id))
+                    {
+                        continue;
+                    }
+
+                    var links = workPackage.TryGetProperty("_links", out var linksElement) ? linksElement : default;
+                    var status = links.ValueKind == JsonValueKind.Object && links.TryGetProperty("status", out var statusLink) && statusLink.TryGetProperty("title", out var statusTitle)
+                        ? statusTitle.GetString()
+                        : null;
+                    var creator = ReadWorkPackageLinkTitle(links, "author")
+                        ?? ReadWorkPackageLinkTitle(links, "responsible")
+                        ?? ReadWorkPackageLinkTitle(links, "assignee");
+                    var createdAt = workPackage.TryGetProperty("createdAt", out var createdAtElement) && DateTime.TryParse(createdAtElement.GetString(), out var parsedCreatedAt)
+                        ? parsedCreatedAt.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(parsedCreatedAt, DateTimeKind.Utc) : parsedCreatedAt.ToUniversalTime()
+                        : (DateTime?)null;
+
+                    summaries[id] = new OpenProjectWorkPackageSummaryDto
+                    {
+                        Id = id,
+                        StatusName = status,
+                        CreatorName = creator,
+                        CreatedAt = createdAt
+                    };
+                }
+            }
+
+            return summaries;
+        }
+
+        private static string? ReadWorkPackageLinkTitle(JsonElement links, string linkName)
+        {
+            return links.ValueKind == JsonValueKind.Object &&
+                   links.TryGetProperty(linkName, out var link) &&
+                   link.TryGetProperty("title", out var title)
+                ? title.GetString()
+                : null;
+        }
+
         private static async Task<OpenProjectProjectResponse?> GetProjectAsync(HttpClient client, int projectId)
         {
             var response = await client.GetAsync($"api/v3/projects/{projectId}");

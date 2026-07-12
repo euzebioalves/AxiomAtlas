@@ -150,7 +150,7 @@ namespace Axiom.Atlas.Web.Controllers.Integrations
         }
 
         [HttpPost]
-        public async Task<IActionResult> TestGlpi([FromBody] GlpiSettingsViewModel model)
+        public async Task<IActionResult> TestGlpi([FromBody] GlpiConnectionTestViewModel model)
         {
             var client = _httpClientFactory.CreateClient("Api");
             var token = User.FindFirst("JWToken")?.Value;

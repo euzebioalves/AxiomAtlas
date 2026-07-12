@@ -12,7 +12,12 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
     public class GlpiTicketsController : ControllerBase
     {
         private readonly GlpiService _glpiService;
-        public GlpiTicketsController(GlpiService glpiService) => _glpiService = glpiService;
+        private readonly GlpiImprovementTicketSynchronizationQueue _synchronizationQueue;
+        public GlpiTicketsController(GlpiService glpiService, GlpiImprovementTicketSynchronizationQueue synchronizationQueue)
+        {
+            _glpiService = glpiService;
+            _synchronizationQueue = synchronizationQueue;
+        }
 
         [HttpPost("import")]
         public async Task<IActionResult> Import([FromBody] ImportGlpiTicketRequest request)
@@ -21,6 +26,22 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "Sistema";
             try { return Ok(await _glpiService.ImportTicketAsync(request.Query, userId)); }
             catch (Exception exception) { return BadRequest(new { message = exception.Message }); }
+        }
+
+        [HttpGet("improvements")]
+        public async Task<IActionResult> GetImprovementTickets([FromQuery] int page = 1, [FromQuery] int pageSize = 25, [FromQuery] string? status = null)
+        {
+            try
+            {
+                _synchronizationQueue.RequestSynchronization();
+                var tickets = await _glpiService.GetImprovementTicketsAsync(page, pageSize, status);
+                tickets.SynchronizationPending = _synchronizationQueue.IsSynchronizationPending;
+                return Ok(tickets);
+            }
+            catch (Exception exception)
+            {
+                return BadRequest(new { message = exception.Message });
+            }
         }
 
         [HttpGet("{id:guid}")]

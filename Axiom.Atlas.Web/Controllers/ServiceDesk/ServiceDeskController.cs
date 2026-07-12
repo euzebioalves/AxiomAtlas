@@ -9,7 +9,29 @@ namespace Axiom.Atlas.Web.Controllers.ServiceDesk
     {
         private readonly IHttpClientFactory _httpClientFactory;
         public ServiceDeskController(IHttpClientFactory httpClientFactory) => _httpClientFactory = httpClientFactory;
-        public IActionResult Index() => View();
+        public IActionResult Index()
+        {
+            return View();
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> List(int page = 1, int pageSize = 25, string? status = null)
+        {
+            try
+            {
+                var response = await CreateClient().GetAsync($"api/glpi/tickets/improvements?page={page}&pageSize={pageSize}&status={Uri.EscapeDataString(status ?? "not_solved")}");
+                if (response.IsSuccessStatusCode)
+                {
+                    return PartialView("_ImprovementTicketsTable", await response.Content.ReadFromJsonAsync<GlpiImprovementTicketsResponse>() ?? new GlpiImprovementTicketsResponse());
+                }
+
+                return StatusCode((int)response.StatusCode, new { message = "Não foi possível carregar as solicitações de melhoria do GLPI." });
+            }
+            catch (Exception)
+            {
+                return StatusCode(503, new { message = "Não foi possível comunicar com o serviço de integração do GLPI." });
+            }
+        }
 
         [HttpPost]
         public async Task<IActionResult> Import([FromBody] ImportGlpiTicketRequest request)
@@ -20,11 +42,24 @@ namespace Axiom.Atlas.Web.Controllers.ServiceDesk
         }
 
         [HttpGet]
-        public async Task<IActionResult> Workspace(Guid id)
+        public async Task<IActionResult> Workspace(Guid id, int returnPage = 1, int returnPageSize = 25, string? returnStatus = null)
         {
             var response = await CreateClient().GetAsync($"api/glpi/tickets/{id}");
             if (!response.IsSuccessStatusCode) return RedirectToAction(nameof(Index));
-            return View(await response.Content.ReadFromJsonAsync<GlpiTicketWorkspaceDto>());
+
+            var workspace = await response.Content.ReadFromJsonAsync<GlpiTicketWorkspaceDto>();
+            if (workspace is null) return RedirectToAction(nameof(Index));
+
+            var pageSize = new[] { 10, 25, 50, 100 }.Contains(returnPageSize) ? returnPageSize : 25;
+            ViewData["ReturnUrl"] = Url.Action(nameof(Index), new
+            {
+                page = Math.Max(1, returnPage),
+                pageSize,
+                status = string.IsNullOrWhiteSpace(returnStatus) ? "not_solved" : returnStatus,
+                highlight = workspace.GlpiTicketId
+            });
+
+            return View(workspace);
         }
 
         [HttpPost]

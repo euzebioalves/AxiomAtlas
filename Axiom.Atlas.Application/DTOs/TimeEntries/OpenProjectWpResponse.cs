@@ -3,12 +3,17 @@
     public class OpenProjectWpResponse
     {
         public string? Subject { get; set; }
+        public string? CreatedAt { get; set; }
         public OpenProjectLinks? _links { get; set; }
     }
 
     public class OpenProjectLinks
     {
         public OpenProjectProjectLink? Project { get; set; }
+        public OpenProjectProjectLink? Status { get; set; }
+        public OpenProjectProjectLink? Author { get; set; }
+        public OpenProjectProjectLink? Assignee { get; set; }
+        public OpenProjectProjectLink? Responsible { get; set; }
     }
 
     public class OpenProjectProjectLink
@@ -40,5 +45,13 @@
         public List<int> ResponsibleUserIds { get; set; } = new();
         public int ProjectId { get; set; }
         public string? ProjectName { get; set; }
+    }
+
+    public class OpenProjectWorkPackageSummaryDto
+    {
+        public int Id { get; set; }
+        public string? StatusName { get; set; }
+        public string? CreatorName { get; set; }
+        public DateTime? CreatedAt { get; set; }
     }
 }

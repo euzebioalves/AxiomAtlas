@@ -1,0 +1,29 @@
+@model Axiom.Atlas.Web.Model.Integrations.GlpiEnvironmentSettingsViewModel
+@{
+    var environmentLabel = (string)ViewData["EnvironmentLabel"]!;
+    var environmentName = (string)ViewData["EnvironmentName"]!;
+    var prefix = environmentName;
+}
+<div class="row mb-6 mt-4">
+    <label class="col-lg-3 col-form-label required fw-semibold fs-6">URL Base (@environmentLabel)</label>
+    <div class="col-lg-9"><input name="@($"{prefix}.BaseUrl")" id="@($"{prefix}_BaseUrl")" value="@Model.BaseUrl" class="form-control form-control-lg form-control-solid" placeholder="https://glpi.empresa.com" /></div>
+</div>
+<div class="row mb-6">
+    <label class="col-lg-3 col-form-label required fw-semibold fs-6">APP_TOKEN</label>
+    <div class="col-lg-9"><input name="@($"{prefix}.AppToken")" id="@($"{prefix}_AppToken")" value="@Model.AppToken" type="password" class="form-control form-control-lg form-control-solid" placeholder="Token da aplicação GLPI" /></div>
+</div>
+<div class="row mb-6">
+    <label class="col-lg-3 col-form-label required fw-semibold fs-6">USER_TOKEN</label>
+    <div class="col-lg-9"><input name="@($"{prefix}.UserToken")" id="@($"{prefix}_UserToken")" value="@Model.UserToken" type="password" class="form-control form-control-lg form-control-solid" placeholder="Token de acesso remoto do usuário GLPI" /></div>
+</div>
+<div class="row mb-6">
+    <label class="col-lg-3 col-form-label fw-semibold fs-6">Campo “Classificação”</label>
+    <div class="col-lg-9"><input name="@($"{prefix}.ClassificationFieldKey")" id="@($"{prefix}_ClassificationFieldKey")" value="@Model.ClassificationFieldKey" class="form-control form-control-lg form-control-solid" placeholder="ID da opção de busca ou chave técnica do plugin" /></div>
+</div>
+<div class="row mb-6">
+    <label class="col-lg-3 col-form-label fw-semibold fs-6">Campo “ChamadoDevops”</label>
+    <div class="col-lg-9"><input name="@($"{prefix}.DevOpsUrlFieldKey")" id="@($"{prefix}_DevOpsUrlFieldKey")" value="@Model.DevOpsUrlFieldKey" class="form-control form-control-lg form-control-solid" placeholder="Chave técnica do campo de URL" /></div>
+</div>
+<div class="d-flex justify-content-end">
+    <button type="button" class="btn btn-light-info js-test-glpi" data-environment="@environmentName" data-prefix="@prefix">Testar conexão (@environmentLabel)</button>
+</div>

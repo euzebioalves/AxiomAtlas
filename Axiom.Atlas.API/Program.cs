@@ -91,6 +91,8 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<OpenProjectService>();
 builder.Services.AddScoped<GlpiService>();
+builder.Services.AddSingleton<GlpiImprovementTicketSynchronizationQueue>();
+builder.Services.AddHostedService<GlpiImprovementTicketSynchronizationHostedService>();
 builder.Services.AddScoped<OpenProjectWorkPackageStatusMonitor>();
 builder.Services.AddHostedService<OpenProjectWorkPackageStatusMonitoringHostedService>();
 builder.Services.AddHttpClient();

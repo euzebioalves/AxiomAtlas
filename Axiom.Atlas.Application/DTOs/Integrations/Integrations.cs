@@ -33,11 +33,23 @@
 
     public class SaveGlpiSettingsRequest
     {
+        public string? ActiveEnvironment { get; set; }
+        public GlpiEnvironmentSettingDto Production { get; set; } = new();
+        public GlpiEnvironmentSettingDto Homologation { get; set; } = new();
+    }
+
+    public class GlpiEnvironmentSettingDto
+    {
         public string? BaseUrl { get; set; }
         public string? AppToken { get; set; }
         public string? UserToken { get; set; }
         public string? ClassificationFieldKey { get; set; }
         public string? DevOpsUrlFieldKey { get; set; }
+    }
+
+    public class TestGlpiConnectionRequest : GlpiEnvironmentSettingDto
+    {
+        public string? Environment { get; set; }
     }
 
     public class GlpiConnectionTestResult

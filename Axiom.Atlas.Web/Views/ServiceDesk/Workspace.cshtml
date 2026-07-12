@@ -60,7 +60,9 @@
                 <div class="text-muted fs-7">GLPI #@Model.GlpiTicketId · @(Model.ClientEntityName ?? "Entidade não identificada")</div>
                 <h1 class="fs-2 fw-bold">@Model.Subject</h1>
             </div>
-            <a asp-action="Index" class="btn btn-light-primary">Nova importação</a>
+            <a href="@(ViewData["ReturnUrl"] as string ?? Url.Action("Index"))" class="btn btn-light-primary">
+                <i class="ki-duotone ki-arrow-left fs-2"></i>Voltar
+            </a>
         </div>
 
         <div class="row g-7">

@@ -24,10 +24,22 @@
 
     public class GlpiSettingsViewModel
     {
+        public string? ActiveEnvironment { get; set; }
+        public GlpiEnvironmentSettingsViewModel Production { get; set; } = new();
+        public GlpiEnvironmentSettingsViewModel Homologation { get; set; } = new();
+    }
+
+    public class GlpiEnvironmentSettingsViewModel
+    {
         public string? BaseUrl { get; set; }
         public string? AppToken { get; set; }
         public string? UserToken { get; set; }
         public string? ClassificationFieldKey { get; set; }
         public string? DevOpsUrlFieldKey { get; set; }
+    }
+
+    public class GlpiConnectionTestViewModel : GlpiEnvironmentSettingsViewModel
+    {
+        public string? Environment { get; set; }
     }
 }

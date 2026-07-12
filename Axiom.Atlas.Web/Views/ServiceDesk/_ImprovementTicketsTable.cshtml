@@ -1,0 +1,134 @@
+@model Axiom.Atlas.Application.DTOs.ServiceDesk.GlpiImprovementTicketsResponse
+@{
+    var firstRecord = Model.TotalCount == 0 ? 0 : ((Model.Page - 1) * Model.PageSize) + 1;
+    var lastRecord = Math.Min(Model.Page * Model.PageSize, Model.TotalCount);
+    var firstPage = Math.Max(1, Model.Page - 2);
+    var lastPage = Math.Min(Model.TotalPages, firstPage + 4);
+    firstPage = Math.Max(1, lastPage - 4);
+}
+
+<div class="card-header pt-7">
+    <div class="card-title flex-column align-items-start">
+        <h3 class="mb-1">Fila de melhorias</h3>
+        <div class="d-flex flex-wrap align-items-center gap-2 text-muted fs-7 fw-semibold">
+            <span>@Model.TotalCount chamado(s) na fila local</span>
+            @if (Model.LastSynchronizedAt.HasValue)
+            {
+                <span>· Atualizada em @Model.LastSynchronizedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
+            }
+            @if (Model.SynchronizationPending)
+            {
+                <span class="badge badge-light-warning">Atualização em segundo plano</span>
+            }
+        </div>
+    </div>
+    <div class="card-toolbar d-flex flex-nowrap align-items-center gap-3">
+        <select class="form-select form-select-solid w-225px" data-control="select2" data-hide-search="true" data-improvements-status-filter aria-label="Filtrar por status do GLPI">
+            <option value="not_solved" selected="@(Model.StatusFilter == "not_solved" ? "selected" : null)">Não solucionados</option>
+            <option value="all" selected="@(Model.StatusFilter == "all" ? "selected" : null)">Todos os status</option>
+            <option value="new" selected="@(Model.StatusFilter == "new" ? "selected" : null)">Novo</option>
+            <option value="processing_assigned" selected="@(Model.StatusFilter == "processing_assigned" ? "selected" : null)">Em atendimento (atribuído)</option>
+            <option value="processing_planned" selected="@(Model.StatusFilter == "processing_planned" ? "selected" : null)">Em atendimento (planejado)</option>
+            <option value="pending" selected="@(Model.StatusFilter == "pending" ? "selected" : null)">Pendente</option>
+            <option value="solved" selected="@(Model.StatusFilter == "solved" ? "selected" : null)">Solucionado</option>
+            <option value="closed" selected="@(Model.StatusFilter == "closed" ? "selected" : null)">Fechado</option>
+        </select>
+        <button id="refreshImprovements" type="button" class="btn btn-icon btn-light-primary" data-bs-toggle="tooltip" data-bs-placement="top" title="Atualizar listagem" aria-label="Atualizar listagem">
+            <i class="ki-duotone ki-arrows-circle fs-2"></i>
+        </button>
+    </div>
+</div>
+<div class="card-body pt-3">
+    @if (Model.Items.Count == 0)
+    {
+        <div class="text-center py-15">
+            <i class="ki-duotone ki-folder-added fs-4x text-gray-400 mb-5"><span class="path1"></span><span class="path2"></span></i>
+            <div class="fw-bold fs-4 text-gray-700">Nenhuma solicitação de melhoria encontrada</div>
+            <div class="text-muted mt-2">Verifique a classificação no GLPI ou atualize a lista.</div>
+        </div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table align-middle table-row-dashed fs-6 gy-5">
+                <thead>
+                    <tr class="text-start text-gray-500 fw-bold fs-7 text-uppercase gs-0">
+                        <th>Chamado GLPI</th>
+                        <th>Data de abertura</th>
+                        <th>Dias em aberto</th>
+                        <th>Status</th>
+                        <th>Cliente</th>
+                        <th>Work Package</th>
+                        <th>Status User Story</th>
+                        <th>Criador da User Story</th>
+                        <th>Dias da WP</th>
+                        <th class="text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="fw-semibold text-gray-700">
+                    @foreach (var ticket in Model.Items)
+                    {
+                        <tr data-ticket-id="@ticket.GlpiTicketId">
+                            <td class="min-w-225px">
+                                <a href="@ticket.GlpiTicketUrl" target="_blank" rel="noopener noreferrer" class="text-primary fw-bold d-inline-flex align-items-center gap-1">#@ticket.GlpiTicketId <i class="ki-duotone ki-exit-right-corner fs-6"></i></a>
+                                <div class="text-muted text-truncate mw-250px" title="@ticket.Subject">@ticket.Subject</div>
+                            </td>
+                            <td>@(ticket.OpenedAt?.ToLocalTime().ToString("dd/MM/yyyy") ?? "—")</td>
+                            <td><span class="badge badge-light-info">@ticket.DaysOpen dia(s)</span></td>
+                            <td><span class="badge badge-light-primary">@ticket.GlpiStatusName</span></td>
+                            <td>@(ticket.ClientEntityName ?? "—")</td>
+                            <td>
+                                @if (ticket.WorkPackageId.HasValue)
+                                {
+                                    @if (!string.IsNullOrWhiteSpace(ticket.WorkPackageUrl))
+                                    {
+                                        <a href="@ticket.WorkPackageUrl" target="_blank" rel="noopener noreferrer" class="badge badge-light-primary">#@ticket.WorkPackageId <i class="ki-duotone ki-exit-right-corner fs-7"></i></a>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge badge-light-primary">#@ticket.WorkPackageId</span>
+                                    }
+                                }
+                            </td>
+                            <td>@(ticket.WorkPackageStatus ?? "—")</td>
+                            <td>@(ticket.WorkPackageCreator ?? "—")</td>
+                            <td>@(ticket.WorkPackageDaysOpen?.ToString() ?? "—")</td>
+                            <td class="text-end">
+                                <button type="button" class="btn btn-icon btn-light-primary" data-treat-ticket="@ticket.GlpiTicketId" title="Tratar chamado" aria-label="Tratar chamado #@ticket.GlpiTicketId">
+                                    <i class="ki-duotone ki-notepad-edit fs-2"><span class="path1"></span><span class="path2"></span></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="d-flex flex-stack flex-wrap pt-6 gap-4">
+            <div class="d-flex align-items-center gap-3 text-muted fs-7">
+                <span>Exibir</span>
+                <select class="form-select form-select-sm form-select-solid w-90px" data-improvements-page-size aria-label="Registros por página">
+                    @foreach (var pageSize in new[] { 10, 25, 50, 100 })
+                    {
+                        <option value="@pageSize" selected="@(pageSize == Model.PageSize ? "selected" : null)">@pageSize</option>
+                    }
+                </select>
+                <span>por página. Mostrando @firstRecord–@lastRecord de @Model.TotalCount.</span>
+            </div>
+            <ul class="pagination mb-0">
+                <li class="page-item previous @(Model.Page == 1 ? "disabled" : "")">
+                    <button type="button" class="page-link" data-improvements-page="@(Model.Page - 1)" data-page-size="@Model.PageSize" @(Model.Page == 1 ? "disabled" : null)><i class="previous"></i></button>
+                </li>
+                @for (var currentPage = firstPage; currentPage <= lastPage; currentPage++)
+                {
+                    <li class="page-item @(currentPage == Model.Page ? "active" : "")">
+                        <button type="button" class="page-link" data-improvements-page="@currentPage" data-page-size="@Model.PageSize">@currentPage</button>
+                    </li>
+                }
+                <li class="page-item next @(Model.Page >= Model.TotalPages ? "disabled" : "")">
+                    <button type="button" class="page-link" data-improvements-page="@(Model.Page + 1)" data-page-size="@Model.PageSize" @(Model.Page >= Model.TotalPages ? "disabled" : null)><i class="next"></i></button>
+                </li>
+            </ul>
+        </div>
+    }
+</div>
