@@ -20,6 +20,19 @@ namespace Axiom.Atlas.Application.DTOs.ServiceDesk
     }
     public class SaveRequirementDraftRequest { public string? RequirementMarkdown { get; set; } }
 
+    public class CreateOpenProjectUserStoryRequest
+    {
+        public int ProjectId { get; set; }
+        public string? RequirementMarkdown { get; set; }
+    }
+
+    public class OpenProjectProjectOptionDto
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public string? Identifier { get; set; }
+    }
+
     public class GlpiImprovementTicketsResponse
     {
         public List<GlpiImprovementTicketDto> Items { get; set; } = new();

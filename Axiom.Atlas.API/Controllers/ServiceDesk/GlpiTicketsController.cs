@@ -54,6 +54,21 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
             catch (KeyNotFoundException) { return NotFound(); }
         }
 
+        [HttpGet("openproject-projects")]
+        public async Task<IActionResult> GetOpenProjectProjects()
+        {
+            try { return Ok(await _glpiService.GetOpenProjectProjectsAsync()); }
+            catch (Exception exception) { return BadRequest(new { message = exception.Message }); }
+        }
+
+        [HttpPost("{id:guid}/user-story")]
+        public async Task<IActionResult> CreateUserStory(Guid id, [FromBody] CreateOpenProjectUserStoryRequest request)
+        {
+            try { return Ok(await _glpiService.CreateUserStoryAsync(id, request)); }
+            catch (KeyNotFoundException) { return NotFound(); }
+            catch (Exception exception) { return BadRequest(new { message = exception.Message }); }
+        }
+
         [HttpGet("{id:guid}/attachments/{documentId:int}")]
         public async Task<IActionResult> DownloadAttachment(Guid id, int documentId)
         {

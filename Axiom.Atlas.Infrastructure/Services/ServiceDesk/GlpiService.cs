@@ -6,6 +6,7 @@ using Axiom.Atlas.Persistence;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Concurrent;
+using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -24,6 +25,7 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
         private static readonly ConcurrentDictionary<string, CachedGlpiSession> GlpiSessions = new();
         private static readonly ConcurrentDictionary<string, GlpiSearchFieldMetadata> SearchFieldMetadata = new();
         private static readonly ConcurrentDictionary<string, SemaphoreSlim> SessionLocks = new();
+        private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> WorkspaceLocks = new();
 
         public GlpiService(IHttpClientFactory httpClientFactory, AppDbContext context, IDataProtectionProvider provider, OpenProjectService openProjectService)
         {
@@ -118,6 +120,79 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             return ToDto(workspace);
         }
 
+        public Task<List<OpenProjectProjectOptionDto>> GetOpenProjectProjectsAsync() => _openProjectService.GetProjectsAsync();
+
+        public async Task<GlpiTicketWorkspaceDto> CreateUserStoryAsync(Guid workspaceId, CreateOpenProjectUserStoryRequest request)
+        {
+            var workspaceLock = WorkspaceLocks.GetOrAdd(workspaceId, _ => new SemaphoreSlim(1, 1));
+            await workspaceLock.WaitAsync();
+            try
+            {
+                var workspace = await _context.GlpiTicketWorkspaces.FindAsync(workspaceId)
+                    ?? throw new KeyNotFoundException("Chamado importado não encontrado.");
+                var markdown = request.RequirementMarkdown?.Trim();
+                if (!string.IsNullOrWhiteSpace(markdown))
+                {
+                    workspace.RequirementMarkdown = markdown;
+                }
+
+                if (string.IsNullOrWhiteSpace(workspace.RequirementMarkdown))
+                {
+                    throw new InvalidOperationException("Documente a User Story antes de enviá-la para o OpenProject.");
+                }
+
+                if (!workspace.OpenProjectWorkPackageId.HasValue)
+                {
+                    var glpiBaseUrl = await _context.Integrations
+                        .Where(x => x.Provider == "GLPI" && x.IsActive)
+                        .Select(x => x.BaseUrl)
+                        .FirstOrDefaultAsync();
+                    var glpiTicketUrl = BuildTicketWebUrl(glpiBaseUrl, workspace.GlpiTicketId);
+                    var created = await _openProjectService.CreateUserStoryAsync(
+                        request.ProjectId,
+                        workspace.Subject,
+                        workspace.RequirementMarkdown,
+                        workspace.ClientEntityName ?? string.Empty,
+                        workspace.GlpiTicketId,
+                        glpiTicketUrl ?? string.Empty);
+                    workspace.OpenProjectWorkPackageId = created.Id;
+                    workspace.OpenProjectWorkPackageUrl = created.Url;
+                    workspace.UpdatedAt = DateTime.UtcNow;
+
+                    // Persist before updating GLPI so a retry only repairs the link and never duplicates the User Story.
+                    await _context.SaveChangesAsync();
+                }
+                else if (string.IsNullOrWhiteSpace(workspace.OpenProjectWorkPackageUrl))
+                {
+                    var workPackage = await _openProjectService.GetWorkPackageAsync(workspace.OpenProjectWorkPackageId.Value);
+                    workspace.OpenProjectWorkPackageUrl = OpenProjectService.BuildWorkPackageWebUrl(
+                        await _openProjectService.GetActiveOpenProjectBaseUrlAsync(),
+                        workPackage);
+                    workspace.UpdatedAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+
+                if (string.IsNullOrWhiteSpace(workspace.OpenProjectWorkPackageUrl))
+                {
+                    throw new InvalidOperationException("A User Story foi criada, mas não foi possível determinar sua URL no OpenProject.");
+                }
+
+                if (!string.Equals(workspace.GlpiDevOpsUrl, workspace.OpenProjectWorkPackageUrl, StringComparison.OrdinalIgnoreCase))
+                {
+                    await UpdateGlpiDevOpsUrlAsync(workspace, workspace.OpenProjectWorkPackageUrl);
+                    workspace.GlpiDevOpsUrl = workspace.OpenProjectWorkPackageUrl;
+                    workspace.UpdatedAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync();
+                }
+
+                return ToDto(workspace);
+            }
+            finally
+            {
+                workspaceLock.Release();
+            }
+        }
+
         public async Task<GlpiImprovementTicketsResponse> GetImprovementTicketsAsync(int page, int pageSize, string? statusFilter)
         {
             page = Math.Max(1, page);
@@ -166,7 +241,6 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             var userToken = UnprotectRequired(setting.PrimaryToken, "USER_TOKEN");
             using var client = CreateClient(setting.BaseUrl ?? throw new InvalidOperationException("BASE_URL do GLPI não configurada."), appToken);
             var sessionToken = await GetCachedSessionAsync(client, setting.BaseUrl!, userToken, cancellationToken);
-            var configuredFields = ReadAdditionalSettings(setting.AdditionalSettings);
             var fieldMetadata = await GetSearchFieldMetadataAsync(client, sessionToken, setting.BaseUrl!, setting.AdditionalSettings, cancellationToken);
             var endpoint = $"search/Ticket?criteria[0][field]={fieldMetadata.ClassificationFieldId}&criteria[0][searchtype]=contains&criteria[0][value]={Uri.EscapeDataString("Solicitação de Melhoria")}&range=0-999";
             if (fieldMetadata.DevOpsSearchFieldId.HasValue)
@@ -194,7 +268,7 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             var workspaces = await _context.GlpiTicketWorkspaces.AsNoTracking()
                 .Where(x => x.OpenProjectWorkPackageId != null || x.GlpiDevOpsUrl != null || x.OpenProjectWorkPackageUrl != null)
                 .ToDictionaryAsync(x => x.GlpiTicketId, cancellationToken);
-            var snapshots = await FetchTicketSnapshotsAsync(client, sessionToken, candidates, configuredFields.GetValueOrDefault("devOpsUrlFieldKey"), cancellationToken);
+            var snapshots = await FetchTicketSnapshotsAsync(client, sessionToken, candidates, fieldMetadata.DevOpsFieldKey, cancellationToken);
             var entityPaths = await GetEntityPathsAsync(client, sessionToken, snapshots.Select(x => x.EntityId), cancellationToken);
             var workPackageIds = snapshots
                 .Select(x => workspaces.TryGetValue(x.TicketId, out var workspace)
@@ -326,10 +400,12 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             var configured = ReadAdditionalSettings(additionalSettings);
             var configuredClassification = int.TryParse(configured.GetValueOrDefault("classificationFieldKey"), out var classificationId) ? classificationId : (int?)null;
             var configuredDevOps = int.TryParse(configured.GetValueOrDefault("devOpsUrlFieldKey"), out var devOpsId) ? devOpsId : (int?)null;
-            if (configuredClassification.HasValue && configuredDevOps.HasValue)
-            {
-                return new GlpiSearchFieldMetadata(configuredClassification.Value, configuredDevOps, DateTimeOffset.UtcNow.AddHours(1));
-            }
+            var configuredClassificationFieldKey = configuredClassification.HasValue
+                ? null
+                : configured.GetValueOrDefault("classificationFieldKey")?.Trim();
+            var configuredDevOpsFieldKey = configuredDevOps.HasValue
+                ? null
+                : configured.GetValueOrDefault("devOpsUrlFieldKey")?.Trim();
 
             var cacheKey = $"glpi:search-fields:{baseUrl.TrimEnd('/').ToLowerInvariant()}:{configured.GetValueOrDefault("classificationFieldKey")}:{configured.GetValueOrDefault("devOpsUrlFieldKey")}";
             if (SearchFieldMetadata.TryGetValue(cacheKey, out var cached) && cached.ExpiresAt > DateTimeOffset.UtcNow)
@@ -339,7 +415,9 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
 
             using var options = await GetJsonAsync(client, sessionToken, "listSearchOptions/Ticket", cancellationToken);
             var discoveredClassification = configuredClassification ?? 76673;
+            var discoveredClassificationFieldKey = configuredClassificationFieldKey;
             int? discoveredDevOps = configuredDevOps;
+            var discoveredDevOpsFieldKey = configuredDevOpsFieldKey;
             if (options.RootElement.ValueKind == JsonValueKind.Object)
             {
                 foreach (var option in options.RootElement.EnumerateObject())
@@ -350,21 +428,32 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                     }
 
                     var name = TryReadString(option.Value, "name") ?? string.Empty;
-                    if (!configuredClassification.HasValue && name.Contains("classificação", StringComparison.OrdinalIgnoreCase))
+                    if (name.Contains("classificação", StringComparison.OrdinalIgnoreCase))
                     {
-                        discoveredClassification = optionId;
+                        if (!configuredClassification.HasValue)
+                        {
+                            discoveredClassification = optionId;
+                        }
+
+                        discoveredClassificationFieldKey ??= GetSearchOptionTechnicalFieldKey(option.Value);
                     }
 
-                    if (!configuredDevOps.HasValue &&
-                        (name.Contains("chamadodevops", StringComparison.OrdinalIgnoreCase) ||
-                         (name.Contains("atividade", StringComparison.OrdinalIgnoreCase) && name.Contains("devops", StringComparison.OrdinalIgnoreCase))))
+                    var isDevOpsField = name.Contains("chamadodevops", StringComparison.OrdinalIgnoreCase) ||
+                                        (name.Contains("atividade", StringComparison.OrdinalIgnoreCase) && name.Contains("devops", StringComparison.OrdinalIgnoreCase));
+                    if (isDevOpsField)
                     {
-                        discoveredDevOps = optionId;
+                        discoveredDevOps ??= optionId;
+                        discoveredDevOpsFieldKey ??= GetSearchOptionTechnicalFieldKey(option.Value);
                     }
                 }
             }
 
-            var metadata = new GlpiSearchFieldMetadata(discoveredClassification, discoveredDevOps, DateTimeOffset.UtcNow.AddHours(1));
+            var metadata = new GlpiSearchFieldMetadata(
+                discoveredClassification,
+                discoveredClassificationFieldKey,
+                discoveredDevOps,
+                discoveredDevOpsFieldKey,
+                DateTimeOffset.UtcNow.AddHours(1));
             SearchFieldMetadata[cacheKey] = metadata;
             return metadata;
         }
@@ -448,6 +537,152 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                 throw new InvalidOperationException("O GLPI retornou uma página HTML em vez do arquivo do anexo.");
 
             return (content, contentType ?? "application/octet-stream");
+        }
+
+        private async Task UpdateGlpiDevOpsUrlAsync(GlpiTicketWorkspace workspace, string workPackageUrl)
+        {
+            var setting = await _context.Integrations.FirstOrDefaultAsync(x => x.Provider == "GLPI" && x.IsActive)
+                ?? throw new InvalidOperationException("GLPI não configurado para atualizar o vínculo da User Story.");
+            using var client = CreateClient(setting.BaseUrl ?? throw new InvalidOperationException("BASE_URL do GLPI não configurada."), UnprotectRequired(setting.SecondaryToken, "APP_TOKEN"));
+            var session = await GetCachedSessionAsync(client, setting.BaseUrl!, UnprotectRequired(setting.PrimaryToken, "USER_TOKEN"), CancellationToken.None);
+            var pluginRecord = await GetPluginFieldsTicketRecordAsync(client, session, workspace.GlpiTicketId);
+            if (pluginRecord is null)
+            {
+                throw new InvalidOperationException("A User Story foi criada no OpenProject, mas o registro do plugin Fields não foi encontrado para este chamado. Confirme que o perfil da integração possui acesso aos campos adicionais e tente vincular novamente.");
+            }
+
+            const string classificationField = "plugin_fields_classificaodechamadofielddropdowns_id";
+            const string devOpsField = "atividadedevopfield";
+            var pluginRecordId = TryReadInt(pluginRecord.Value, "id");
+            var classificationId = TryReadInt(pluginRecord.Value, classificationField);
+            if (!pluginRecordId.HasValue || !classificationId.HasValue || classificationId.Value <= 0)
+            {
+                throw new InvalidOperationException("A User Story foi criada no OpenProject, mas o GLPI não retornou a Classificação obrigatória do registro de campos adicionais. Confirme as permissões do perfil da integração e tente vincular novamente.");
+            }
+
+            // ChamadoDevops e Classificação pertencem ao item do plugin Fields, não ao Ticket.
+            // Reenviamos a classificação obrigatória para preservar a validação do próprio plugin.
+            var input = new Dictionary<string, object?>
+            {
+                ["id"] = pluginRecordId.Value,
+                [devOpsField] = workPackageUrl,
+                [classificationField] = classificationId.Value
+            };
+            using var request = new HttpRequestMessage(HttpMethod.Put, $"PluginFieldsTicketchamado/{pluginRecordId.Value}")
+            {
+                Content = JsonContent.Create(new { input })
+            };
+            request.Headers.TryAddWithoutValidation("Session-Token", session);
+            using var response = await client.SendAsync(request);
+            if (!response.IsSuccessStatusCode)
+            {
+                var responseBody = await response.Content.ReadAsStringAsync();
+                throw new InvalidOperationException(
+                    $"A User Story foi criada no OpenProject, mas o GLPI retornou {(int)response.StatusCode} ao atualizar o campo ChamadoDevops: {SanitizeGlpiResponse(responseBody)}");
+            }
+
+            workspace.GlpiDevOpsFieldId = devOpsField;
+        }
+
+        private static async Task<JsonElement?> GetPluginFieldsTicketRecordAsync(HttpClient client, string sessionToken, long ticketId)
+        {
+            const int pageSize = 1000;
+            var firstPage = await GetPluginFieldsTicketRecordsPageAsync(client, sessionToken, 0, pageSize - 1);
+            if (firstPage.Records.Count == 0)
+            {
+                return null;
+            }
+
+            var record = FindPluginFieldsTicketRecord(firstPage.Records, ticketId);
+            if (record.HasValue)
+            {
+                return record;
+            }
+
+            for (var start = pageSize; start < firstPage.TotalCount; start += pageSize)
+            {
+                var page = await GetPluginFieldsTicketRecordsPageAsync(
+                    client,
+                    sessionToken,
+                    start,
+                    Math.Min(start + pageSize - 1, firstPage.TotalCount - 1));
+                record = FindPluginFieldsTicketRecord(page.Records, ticketId);
+                if (record.HasValue)
+                {
+                    return record;
+                }
+            }
+
+            return null;
+        }
+
+        private static async Task<(List<JsonElement> Records, int TotalCount)> GetPluginFieldsTicketRecordsPageAsync(
+            HttpClient client,
+            string sessionToken,
+            int start,
+            int end)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"PluginFieldsTicketchamado?range={start}-{end}");
+            request.Headers.TryAddWithoutValidation("Session-Token", sessionToken);
+            using var response = await client.SendAsync(request);
+            var responseBody = await response.Content.ReadAsStringAsync();
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException($"GLPI retornou {(int)response.StatusCode} ao consultar os campos adicionais do chamado: {SanitizeGlpiResponse(responseBody)}");
+            }
+
+            using var document = JsonDocument.Parse(responseBody);
+            var records = document.RootElement.ValueKind == JsonValueKind.Array
+                ? document.RootElement.EnumerateArray().Select(record => record.Clone()).ToList()
+                : new List<JsonElement>();
+            var contentRange = response.Content.Headers.TryGetValues("Content-Range", out var values)
+                ? values.FirstOrDefault()
+                : null;
+            var totalCount = int.TryParse(contentRange?.Split('/').Last(), out var parsedTotal)
+                ? parsedTotal
+                : records.Count;
+            return (records, totalCount);
+        }
+
+        private static JsonElement? FindPluginFieldsTicketRecord(IEnumerable<JsonElement> records, long ticketId)
+        {
+            foreach (var record in records)
+            {
+                if (TryReadLong(record, "items_id") == ticketId)
+                {
+                    return record;
+                }
+            }
+
+            return null;
+        }
+
+        private static async Task<JsonElement?> GetTicketSearchFieldValueAsync(
+            HttpClient client,
+            string sessionToken,
+            long ticketId,
+            int fieldId)
+        {
+            // Campos do plugin Fields nem sempre aparecem no recurso Ticket/{id}. A busca
+            // expõe o valor formatado da search option e permite preserva-lo no PUT.
+            var endpoint = $"search/Ticket?criteria[0][field]=2&criteria[0][searchtype]=equals&criteria[0][value]={ticketId}&forcedisplay[0]={fieldId}&range=0-0";
+            using var result = await GetJsonAsync(client, sessionToken, endpoint);
+            if (!result.RootElement.TryGetProperty("data", out var data) ||
+                data.ValueKind != JsonValueKind.Array ||
+                data.GetArrayLength() == 0)
+            {
+                return null;
+            }
+
+            var row = data[0];
+            if (!row.TryGetProperty(fieldId.ToString(), out var value) ||
+                value.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined ||
+                (value.ValueKind == JsonValueKind.String && string.IsNullOrWhiteSpace(value.GetString())))
+            {
+                return null;
+            }
+
+            return value.Clone();
         }
 
         private async Task<string> CreateSessionAsync(HttpClient client, string userToken, CancellationToken cancellationToken = default)
@@ -619,6 +854,20 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                 : JsonSerializer.Deserialize<Dictionary<string, string?>>(value) ?? new Dictionary<string, string?>();
         }
 
+        private static string? GetSearchOptionTechnicalFieldKey(JsonElement option)
+        {
+            foreach (var propertyName in new[] { "field", "uid" })
+            {
+                var value = TryReadString(option, propertyName)?.Trim();
+                if (!string.IsNullOrWhiteSpace(value) && !int.TryParse(value, out _))
+                {
+                    return value;
+                }
+            }
+
+            return null;
+        }
+
         private static string? FindConfiguredFieldValue(JsonElement element, string? key)
         {
             if (string.IsNullOrWhiteSpace(key))
@@ -648,6 +897,44 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                 {
                     var nestedValue = FindConfiguredFieldValue(child, key);
                     if (!string.IsNullOrWhiteSpace(nestedValue))
+                    {
+                        return nestedValue;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static JsonElement? FindConfiguredFieldElement(JsonElement element, string? key)
+        {
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return null;
+            }
+
+            if (element.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var property in element.EnumerateObject())
+                {
+                    if (string.Equals(property.Name, key, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return property.Value.Clone();
+                    }
+
+                    var nestedValue = FindConfiguredFieldElement(property.Value, key);
+                    if (nestedValue.HasValue)
+                    {
+                        return nestedValue;
+                    }
+                }
+            }
+            else if (element.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var child in element.EnumerateArray())
+                {
+                    var nestedValue = FindConfiguredFieldElement(child, key);
+                    if (nestedValue.HasValue)
                     {
                         return nestedValue;
                     }
@@ -770,6 +1057,7 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
         }
 
         private static int? TryReadInt(JsonElement element, string name) => element.TryGetProperty(name, out var value) && int.TryParse(value.ToString(), out var result) ? result : null;
+        private static long? TryReadLong(JsonElement element, string name) => element.TryGetProperty(name, out var value) && long.TryParse(value.ToString(), out var result) ? result : null;
         private static string? TryReadString(JsonElement element, string name) => element.TryGetProperty(name, out var value) ? value.GetString() : null;
         private static DateTime? TryReadDateTime(JsonElement element, string name)
         {
@@ -830,6 +1118,11 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
         private sealed record SearchTicketCandidate(long TicketId, string? DevOpsUrl);
         private sealed record GlpiTicketSnapshot(long TicketId, string Subject, int? EntityId, DateTime? OpenedAt, int? StatusCode, string? DevOpsUrl);
         private sealed record CachedGlpiSession(string Token, DateTimeOffset ExpiresAt);
-        private sealed record GlpiSearchFieldMetadata(int ClassificationFieldId, int? DevOpsSearchFieldId, DateTimeOffset ExpiresAt);
+        private sealed record GlpiSearchFieldMetadata(
+            int ClassificationFieldId,
+            string? ClassificationFieldKey,
+            int? DevOpsSearchFieldId,
+            string? DevOpsFieldKey,
+            DateTimeOffset ExpiresAt);
     }
 }
