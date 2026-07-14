@@ -1,5 +1,6 @@
 ﻿@{
     ViewData["Title"] = "Entradas de Tempo";
+    var preselectedWorkPackageId = ViewData["PreselectedWorkPackageId"] is int workPackageId ? workPackageId : 0;
 }
 
 <style>
@@ -240,6 +241,7 @@
     <script>
         // Variável global para armazenar os dados em memória
         let currentEntries = [];
+        const preselectedWorkPackageId = @preselectedWorkPackageId;
 
         document.addEventListener("DOMContentLoaded", function () {
             // Carrega a tabela assim que a página abre
@@ -325,6 +327,31 @@
                 }
             });
             });
+
+            if (preselectedWorkPackageId > 0) {
+                window.setTimeout(async () => {
+                    document.getElementById('btnOpenNewModal').click();
+                    const wpSelect = document.getElementById('wpId');
+                    let selectedText = `#${preselectedWorkPackageId}`;
+
+                    try {
+                        const response = await fetch(`/TimeEntries/GetWorkPackageInfo?wpId=${preselectedWorkPackageId}`);
+                        if (response.ok) {
+                            const workPackage = await response.json();
+                            selectedText = `#${preselectedWorkPackageId} - ${workPackage.subject || workPackage.projectName || ''}`.trim();
+                        }
+                    } catch {
+                        // O lançamento ainda pode ser iniciado somente pelo identificador da Work Package.
+                    }
+
+                    const option = new Option(selectedText, preselectedWorkPackageId, true, true);
+                    window.jQuery(wpSelect).append(option).trigger('change');
+                    document.getElementById('wpTitleHelp').style.display = 'block';
+                    document.getElementById('wpTitleHelp').className = 'form-text text-success mt-1 fs-6';
+                    document.getElementById('wpTitleHelp').innerHTML = `<i class="ki-duotone ki-check-circle fs-3 text-success"><span class="path1"></span><span class="path2"></span></i> <strong>Selecionado:</strong> ${selectedText}`;
+                    loadActivities(preselectedWorkPackageId);
+                }, 250);
+            }
 
             // 2. Cálculo automático de horas
             const startTimeInput = document.getElementById('startTime');

@@ -350,6 +350,9 @@
                     <button type="button" class="btn btn-light-danger" id="btnToggleUnjustified">
                         <i class="ki-duotone ki-cross-circle fs-2"><span class="path1"></span><span class="path2"></span></i>Falta sem justificativa
                     </button>
+                    <button type="button" class="btn btn-light-danger d-none" id="btnDeleteUnjustified">
+                        <i class="ki-duotone ki-trash fs-2"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>Remover falta sem justificativa
+                    </button>
                 </div>
 
                 <div class="card bg-light-danger border border-danger border-dashed mb-8 d-none" id="unjustifiedPanel">
@@ -498,6 +501,7 @@
                 document.getElementById('unjustifiedPanel').classList.toggle('d-none');
             });
             document.getElementById('btnSaveUnjustified').addEventListener('click', saveUnjustifiedAbsence);
+            document.getElementById('btnDeleteUnjustified').addEventListener('click', deleteUnjustifiedAbsence);
             document.getElementById('unjustifiedType').addEventListener('change', syncUnjustifiedVisibility);
             document.getElementById('absencePeriodType').addEventListener('change', syncAbsenceVisibility);
             document.getElementById('absenceForm').addEventListener('submit', saveAbsence);
@@ -670,6 +674,7 @@
             const day = getDay(date);
             document.getElementById('punchModalDateLabel').innerText = `${formatDatePt(date)} - ${day?.expectedLabel || '0h00'} previstos`;
             document.getElementById('unjustifiedPanel').classList.add('d-none');
+            document.getElementById('btnDeleteUnjustified').classList.toggle('d-none', !day?.unjustifiedAbsence);
 
             const rows = document.getElementById('punchRows');
             rows.innerHTML = '';
@@ -782,6 +787,21 @@
                 });
                 await readJsonResponse(response);
                 showMessage('Falta sinalizada com sucesso.', 'success');
+                punchModal.hide();
+                loadSelectedMonth();
+            } catch (error) {
+                showMessage(error.message, 'error');
+            }
+        }
+
+        async function deleteUnjustifiedAbsence() {
+            const absence = getDay(selectedDate)?.unjustifiedAbsence;
+            if (!absence) return;
+
+            try {
+                const response = await fetch(`/TimeClock/DeleteUnjustifiedAbsence/${absence.id}`, { method: 'DELETE' });
+                await readJsonResponse(response);
+                showMessage('Falta sem justificativa removida.', 'success');
                 punchModal.hide();
                 loadSelectedMonth();
             } catch (error) {

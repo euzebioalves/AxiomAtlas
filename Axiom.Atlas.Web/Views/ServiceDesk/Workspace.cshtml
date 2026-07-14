@@ -51,6 +51,8 @@
     using var followUps = JsonDocument.Parse(Model.FollowUpsJson);
     using var attachments = JsonDocument.Parse(Model.AttachmentsJson);
     var followUpCount = followUps.RootElement.ValueKind == JsonValueKind.Array ? followUps.RootElement.GetArrayLength() : 0;
+    var hasLinkedUserStory = Model.OpenProjectWorkPackageId.HasValue;
+    var hasGlpiLink = !string.IsNullOrWhiteSpace(Model.GlpiDevOpsUrl);
 }
 
 <div class="app-content flex-column-fluid">
@@ -144,9 +146,42 @@
                 <div class="card card-flush h-100 service-desk-card">
                     <div class="card-header">
                         <h3 class="card-title">User Story em Markdown</h3>
-                        <div class="card-toolbar"><button id="saveDraft" class="btn btn-primary">Salvar rascunho</button></div>
+                        <div class="card-toolbar d-flex gap-3">
+                            <button id="saveDraft" class="btn btn-light-primary">Salvar rascunho</button>
+                            @if (!hasLinkedUserStory || !hasGlpiLink)
+                            {
+                                <button id="createUserStory" class="btn btn-primary">@(hasLinkedUserStory ? "Vincular ao GLPI" : "Criar e vincular")</button>
+                            }
+                        </div>
                     </div>
                     <div class="card-body workspace-panel-body">
+                        @if (hasLinkedUserStory)
+                        {
+                            <div class="alert @(hasGlpiLink ? "alert-success" : "alert-warning") d-flex align-items-center mb-6">
+                                <i class="ki-duotone @(hasGlpiLink ? "ki-check-circle" : "ki-information-5") fs-2x me-4"></i>
+                                <div class="flex-grow-1">
+                                    <div class="fw-bold">User Story #@Model.OpenProjectWorkPackageId criada no OpenProject</div>
+                                    <div class="fs-7">@(hasGlpiLink ? "O vínculo ChamadoDevops também foi atualizado no GLPI." : "O vínculo no GLPI está pendente. Revise a configuração e tente vincular novamente.")</div>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    @if (!string.IsNullOrWhiteSpace(Model.OpenProjectWorkPackageUrl))
+                                    {
+                                        <a href="@Model.OpenProjectWorkPackageUrl" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-light-primary">Abrir User Story</a>
+                                    }
+                                    <a href="/TimeEntries?workPackageId=@Model.OpenProjectWorkPackageId" class="btn btn-sm btn-primary">Lançar horas</a>
+                                </div>
+                            </div>
+                        }
+                        @if (!hasLinkedUserStory)
+                        {
+                            <div class="mb-6">
+                                <label for="openProjectProject" class="form-label required">Projeto no OpenProject</label>
+                                <select id="openProjectProject" class="form-select form-select-solid" data-control="select2" data-placeholder="Selecione o projeto para esta User Story">
+                                    <option></option>
+                                </select>
+                                <div class="form-text">A User Story será criada com o tipo <strong>User Story</strong> no projeto selecionado.</div>
+                            </div>
+                        }
                         <textarea id="draft" class="form-control form-control-solid font-monospace" rows="20" placeholder="# User Story&#10;&#10;## Contexto&#10;## Critérios de aceite">@Model.RequirementMarkdown</textarea>
                         <div class="form-text">Use Markdown. Imagens coladas serão incluídas como referência na próxima etapa de anexos.</div>
                     </div>
@@ -201,6 +236,81 @@
             });
             Swal.fire({ icon: response.ok ? 'success' : 'error', text: response.ok ? 'Rascunho salvo com sucesso.' : 'Não foi possível salvar o rascunho.' });
         };
+
+        const projectSelect = document.getElementById('openProjectProject');
+        const createUserStoryButton = document.getElementById('createUserStory');
+        const hasExistingUserStory = @hasLinkedUserStory.ToString().ToLowerInvariant();
+
+        const loadOpenProjectProjects = async () => {
+            if (!projectSelect) return;
+
+            createUserStoryButton?.setAttribute('disabled', 'disabled');
+            try {
+                const response = await fetch('/ServiceDesk/OpenProjectProjects');
+                const projects = await response.json();
+                if (!response.ok) throw new Error(projects.message || 'Não foi possível carregar os projetos do OpenProject.');
+
+                projects.forEach(project => {
+                    const label = project.identifier ? `${project.name} (${project.identifier})` : project.name;
+                    projectSelect.add(new Option(label, project.id));
+                });
+
+                if (window.jQuery && !window.jQuery(projectSelect).hasClass('select2-hidden-accessible')) {
+                    window.jQuery(projectSelect).select2({
+                        placeholder: 'Selecione o projeto para esta User Story',
+                        width: '100%'
+                    });
+                }
+            } catch (error) {
+                Swal.fire({ icon: 'error', text: error.message || 'Não foi possível carregar os projetos do OpenProject.' });
+            } finally {
+                createUserStoryButton?.removeAttribute('disabled');
+            }
+        };
+
+        createUserStoryButton?.addEventListener('click', async () => {
+            const projectId = Number(projectSelect?.value);
+            const requirementMarkdown = document.getElementById('draft').value;
+            if (!hasExistingUserStory && !projectId) {
+                Swal.fire({ icon: 'warning', text: 'Selecione o projeto de destino no OpenProject.' });
+                return;
+            }
+
+            if (!requirementMarkdown.trim()) {
+                Swal.fire({ icon: 'warning', text: 'Documente a User Story antes de criá-la.' });
+                return;
+            }
+
+            createUserStoryButton.setAttribute('disabled', 'disabled');
+            createUserStoryButton.setAttribute('data-kt-indicator', 'on');
+            try {
+                const response = await fetch('/ServiceDesk/CreateUserStory/@Model.Id', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ projectId: hasExistingUserStory ? 0 : projectId, requirementMarkdown })
+                });
+                const payload = await response.json();
+                if (!response.ok) throw new Error(payload.message || 'Não foi possível criar a User Story.');
+
+                await Swal.fire({
+                    icon: 'success',
+                    text: 'User Story criada no OpenProject e vinculada automaticamente ao chamado no GLPI.'
+                });
+                window.location.reload();
+            } catch (error) {
+                const message = error.message || 'Não foi possível concluir a criação da User Story.';
+                await Swal.fire({ icon: 'error', text: message });
+
+                // A Work Package pode ter sido persistida antes de uma falha no GLPI.
+                // Recarregar permite visualizar o estado salvo e repetir somente o vínculo pendente.
+                if (message.includes('User Story foi criada')) window.location.reload();
+            } finally {
+                createUserStoryButton.removeAttribute('disabled');
+                createUserStoryButton.removeAttribute('data-kt-indicator');
+            }
+        });
+
+        loadOpenProjectProjects();
 
         document.querySelectorAll('.glpi-ticket-frame').forEach(frame => frame.addEventListener('load', () => {
             const body = frame.contentDocument?.body;

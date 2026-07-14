@@ -293,6 +293,17 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
                 return BadRequest(new { message = "Tipo de falta inválido." });
             }
 
+            var hasFullDayJustifiedAbsence = await _context.TimeClockAbsences
+                .AnyAsync(x => x.UserId == userId &&
+                               x.PeriodType == TimeClockAbsencePeriodType.FullDay &&
+                               x.StartDate <= absenceDate &&
+                               x.EndDate >= absenceDate);
+
+            if (hasFullDayJustifiedAbsence)
+            {
+                return BadRequest(new { message = "Esta data já possui uma ausência justificada integral e não pode receber falta sem justificativa." });
+            }
+
             TimeSpan? startTime = null;
             TimeSpan? endTime = null;
 
@@ -333,6 +344,29 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
 
             var day = await BuildDayAsync(userId, absenceDate);
             return Ok(day);
+        }
+
+        [HttpDelete("unjustified-absence/{id:guid}")]
+        public async Task<IActionResult> DeleteUnjustifiedAbsence(Guid id)
+        {
+            var userId = GetCurrentUserId();
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return Unauthorized(new { message = "Usuário não identificado no token." });
+            }
+
+            var absence = await _context.TimeClockUnjustifiedAbsences
+                .FirstOrDefaultAsync(x => x.Id == id && x.UserId == userId);
+
+            if (absence == null)
+            {
+                return NotFound(new { message = "Falta sem justificativa não encontrada." });
+            }
+
+            _context.TimeClockUnjustifiedAbsences.Remove(absence);
+            await _context.SaveChangesAsync();
+
+            return Ok();
         }
 
         [HttpPost("absences")]
@@ -424,6 +458,21 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
             }
 
             _context.TimeClockAbsences.Add(absence);
+
+            if (parsedPeriodType == TimeClockAbsencePeriodType.FullDay)
+            {
+                var conflictingUnjustifiedAbsences = await _context.TimeClockUnjustifiedAbsences
+                    .Where(x => x.UserId == targetUserId &&
+                                x.AbsenceDate >= parsedStartDate &&
+                                x.AbsenceDate <= parsedEndDate)
+                    .ToListAsync();
+
+                if (conflictingUnjustifiedAbsences.Count > 0)
+                {
+                    _context.TimeClockUnjustifiedAbsences.RemoveRange(conflictingUnjustifiedAbsences);
+                }
+            }
+
             await _context.SaveChangesAsync();
 
             return Ok(MapAbsence(absence));
@@ -647,6 +696,12 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
                 : Math.Max(0, CalculateMinutesBetween(schedule.EntryTime, schedule.ExitTime) - schedule.LunchIntervalMinutes);
 
             var hasFullDayJustifiedAbsence = dayAbsences.Any(x => x.PeriodType == TimeClockAbsencePeriodType.FullDay);
+            // A justified full-day absence always takes precedence over a prior absence flag.
+            if (hasFullDayJustifiedAbsence)
+            {
+                unjustified = null;
+            }
+
             var workedMinutes = CalculateWorkedMinutes(dayPunches);
             var lunchMinutes = CalculateLunchMinutes(dayPunches);
             var absenceCoverageMinutes = CalculateJustifiedAbsenceCoverageMinutes(dayAbsences, expectedBaseMinutes);

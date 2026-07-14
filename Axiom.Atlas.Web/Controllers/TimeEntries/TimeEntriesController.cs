@@ -14,8 +14,9 @@ namespace Axiom.Atlas.Web.Controllers.TimeEntries
             _httpClientFactory = httpClientFactory;
         }
 
-        public IActionResult Index()
+        public IActionResult Index(int? workPackageId)
         {
+            ViewData["PreselectedWorkPackageId"] = workPackageId is > 0 ? workPackageId : null;
             return View();
         }
 

@@ -117,6 +117,15 @@ namespace Axiom.Atlas.Web.Controllers.TimeClock
             return await ProxyResponseAsync(response);
         }
 
+        [HttpDelete]
+        [Route("TimeClock/DeleteUnjustifiedAbsence/{id:guid}")]
+        public async Task<IActionResult> DeleteUnjustifiedAbsence(Guid id)
+        {
+            var client = await CreateAuthorizedApiClientAsync();
+            var response = await client.DeleteAsync($"api/TimeClock/unjustified-absence/{id}");
+            return await ProxyResponseAsync(response);
+        }
+
         [HttpPost]
         [RequestSizeLimit(50_000_000)]
         public async Task<IActionResult> SaveAbsence()

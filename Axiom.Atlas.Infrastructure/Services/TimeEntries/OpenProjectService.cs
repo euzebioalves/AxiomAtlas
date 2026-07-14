@@ -1,16 +1,19 @@
 using Axiom.Atlas.Application.DTOs.Integrations;
+using Axiom.Atlas.Application.DTOs.ServiceDesk;
 using Axiom.Atlas.Application.DTOs.TimeEntries;
 using Axiom.Atlas.Domain.Entities.Integrations;
 using Axiom.Atlas.Domain.Entities.TimeEntries;
 using Axiom.Atlas.Persistence;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
 {
@@ -19,15 +22,18 @@ namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly AppDbContext _context;
         private readonly IDataProtector _protector;
+        private readonly ILogger<OpenProjectService> _logger;
 
         public OpenProjectService(
             IHttpClientFactory httpClientFactory,
             AppDbContext context,
-            IDataProtectionProvider provider)
+            IDataProtectionProvider provider,
+            ILogger<OpenProjectService> logger)
         {
             _httpClientFactory = httpClientFactory;
             _context = context;
             _protector = provider.CreateProtector("AxiomAtlas.Integrations");
+            _logger = logger;
         }
 
         private async Task<HttpClient> CreateConfiguredClientAsync(string? environment = null)
@@ -83,6 +89,126 @@ namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
             return NormalizeBaseUrl(baseUrl);
         }
 
+        public async Task<List<OpenProjectProjectOptionDto>> GetProjectsAsync()
+        {
+            var client = await CreateConfiguredClientAsync();
+            using var response = await client.GetAsync("api/v3/projects?pageSize=1000");
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException(
+                    $"OpenProject retornou {(int)response.StatusCode} ao carregar projetos: {await ReadOpenProjectErrorMessageAsync(response)}");
+            }
+
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            if (!document.RootElement.TryGetProperty("_embedded", out var embedded) ||
+                !embedded.TryGetProperty("elements", out var elements) ||
+                elements.ValueKind != JsonValueKind.Array)
+            {
+                return new List<OpenProjectProjectOptionDto>();
+            }
+
+            return elements.EnumerateArray()
+                .Select(project => new OpenProjectProjectOptionDto
+                {
+                    Id = project.TryGetProperty("id", out var id) && id.TryGetInt32(out var projectId) ? projectId : 0,
+                    Name = project.TryGetProperty("name", out var name) ? name.GetString() ?? string.Empty : string.Empty,
+                    Identifier = project.TryGetProperty("identifier", out var identifier) ? identifier.GetString() : null
+                })
+                .Where(project => project.Id > 0 && !string.IsNullOrWhiteSpace(project.Name))
+                .OrderBy(project => project.Name)
+                .ToList();
+        }
+
+        public async Task<(int Id, string? Url)> CreateUserStoryAsync(
+            int projectId,
+            string subject,
+            string markdown,
+            string serviceDeskClient,
+            long serviceDeskTicketId,
+            string serviceDeskTicketUrl)
+        {
+            if (projectId <= 0)
+            {
+                throw new InvalidOperationException("Selecione o projeto do OpenProject para a User Story.");
+            }
+
+            if (string.IsNullOrWhiteSpace(markdown))
+            {
+                throw new InvalidOperationException("Documente a User Story antes de criá-la no OpenProject.");
+            }
+
+            if (string.IsNullOrWhiteSpace(serviceDeskClient) || serviceDeskTicketId <= 0 || string.IsNullOrWhiteSpace(serviceDeskTicketUrl))
+            {
+                throw new InvalidOperationException("O chamado GLPI precisa ter cliente, número e link válidos para criar a User Story.");
+            }
+
+            var client = await CreateConfiguredClientAsync();
+            var project = await GetProjectAsync(client, projectId)
+                ?? throw new InvalidOperationException("O projeto selecionado não foi encontrado no OpenProject ou o token não possui acesso a ele.");
+            var typeId = await GetUserStoryTypeIdAsync(client, projectId);
+            if (!typeId.HasValue)
+            {
+                throw new InvalidOperationException("O projeto selecionado não possui um tipo de Work Package chamado 'User Story'. Configure esse tipo no OpenProject ou escolha outro projeto.");
+            }
+
+            var formRequestPayload = new Dictionary<string, object?>
+            {
+                ["subject"] = subject.Trim(),
+                ["description"] = new { format = "markdown", raw = markdown },
+                ["_links"] = new Dictionary<string, object?>
+                {
+                    ["project"] = new { href = $"/api/v3/projects/{projectId}" },
+                    ["type"] = new { href = $"/api/v3/types/{typeId.Value}" }
+                }
+            };
+
+            using var formResponse = await client.PostAsJsonAsync("api/v3/work_packages/form", formRequestPayload);
+            if (!formResponse.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException(
+                    $"OpenProject retornou {(int)formResponse.StatusCode} ao carregar o formulário da User Story: {await ReadOpenProjectErrorMessageAsync(formResponse)}");
+            }
+
+            using var formDocument = JsonDocument.Parse(await formResponse.Content.ReadAsStringAsync());
+            if (!formDocument.RootElement.TryGetProperty("_embedded", out var embeddedForm) ||
+                !embeddedForm.TryGetProperty("payload", out var formPayload) ||
+                formPayload.ValueKind != JsonValueKind.Object)
+            {
+                throw new InvalidOperationException("O OpenProject não retornou o payload de criação da User Story.");
+            }
+
+            var payload = JsonNode.Parse(formPayload.GetRawText())?.AsObject()
+                ?? throw new InvalidOperationException("Não foi possível interpretar o payload de criação retornado pelo OpenProject.");
+
+            await AddServiceDeskCustomFieldsAsync(
+                client,
+                formDocument.RootElement,
+                payload,
+                serviceDeskClient,
+                serviceDeskTicketId,
+                serviceDeskTicketUrl);
+
+            using var response = await client.PostAsJsonAsync(GetFormCommitUri(formDocument.RootElement), payload);
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "OpenProject rejected User Story creation for project {ProjectId}. The form commit returned HTTP {StatusCode}.",
+                    projectId,
+                    (int)response.StatusCode);
+                throw new InvalidOperationException(
+                    $"OpenProject retornou {(int)response.StatusCode} ao criar a User Story: {await ReadOpenProjectErrorMessageAsync(response)}");
+            }
+
+            using var created = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            if (!created.RootElement.TryGetProperty("id", out var idElement) || !idElement.TryGetInt32(out var workPackageId))
+            {
+                throw new InvalidOperationException("O OpenProject criou a User Story, mas não retornou seu identificador.");
+            }
+
+            var baseUrl = await GetActiveOpenProjectBaseUrlAsync();
+            return (workPackageId, BuildWorkPackageWebUrl(baseUrl, workPackageId, project.Identifier));
+        }
+
         public static string? BuildWorkPackageWebUrl(string? baseUrl, WorkPackageCache? workPackage)
         {
             var normalizedBaseUrl = NormalizeBaseUrl(baseUrl);
@@ -97,6 +223,19 @@ namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
             }
 
             return $"{normalizedBaseUrl}/work_packages/{workPackage.Id}/activity";
+        }
+
+        public static string? BuildWorkPackageWebUrl(string? baseUrl, int workPackageId, string? projectIdentifier)
+        {
+            var normalizedBaseUrl = NormalizeBaseUrl(baseUrl);
+            if (string.IsNullOrWhiteSpace(normalizedBaseUrl) || workPackageId <= 0)
+            {
+                return null;
+            }
+
+            return string.IsNullOrWhiteSpace(projectIdentifier)
+                ? $"{normalizedBaseUrl}/work_packages/{workPackageId}/activity"
+                : $"{normalizedBaseUrl}/projects/{Uri.EscapeDataString(projectIdentifier)}/work_packages/{workPackageId}/activity";
         }
 
         public static string? BuildTimeEntryApiUrl(string? baseUrl, int? openProjectTimeEntryId)
@@ -671,6 +810,306 @@ namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
             }
 
             return await response.Content.ReadFromJsonAsync<OpenProjectProjectResponse>();
+        }
+
+        private static async Task<int?> GetUserStoryTypeIdAsync(HttpClient client, int projectId)
+        {
+            using var response = await client.GetAsync($"api/v3/projects/{projectId}/types");
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            if (!document.RootElement.TryGetProperty("_embedded", out var embedded) ||
+                !embedded.TryGetProperty("elements", out var elements) ||
+                elements.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            foreach (var type in elements.EnumerateArray())
+            {
+                var name = type.TryGetProperty("name", out var nameElement)
+                    ? nameElement.GetString()
+                    : type.TryGetProperty("_links", out var links) &&
+                      links.TryGetProperty("self", out var self) &&
+                      self.TryGetProperty("title", out var title)
+                        ? title.GetString()
+                        : null;
+                if (!string.Equals(name?.Trim(), "User Story", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (type.TryGetProperty("id", out var idElement) && idElement.TryGetInt32(out var typeId))
+                {
+                    return typeId;
+                }
+            }
+
+            return null;
+        }
+
+        private async Task AddServiceDeskCustomFieldsAsync(
+            HttpClient client,
+            JsonElement form,
+            JsonObject payload,
+            string clientName,
+            long ticketId,
+            string ticketUrl)
+        {
+            if (!form.TryGetProperty("_embedded", out var embedded) ||
+                !embedded.TryGetProperty("schema", out var schema) ||
+                schema.ValueKind != JsonValueKind.Object)
+            {
+                throw new InvalidOperationException("O OpenProject não retornou o schema da User Story para identificar os campos ServiceDesk.");
+            }
+
+            var fields = schema.EnumerateObject()
+                // O schema HAL tambem carrega metadados como _type (string) e _links.
+                // Apenas as entradas-object representam campos que podem ser enviados no payload.
+                .Where(property => property.Value.ValueKind == JsonValueKind.Object &&
+                                   !property.Name.StartsWith('_'))
+                .Select(property => ReadSchemaField(property))
+                .Where(field => !string.IsNullOrWhiteSpace(field.Title))
+                .ToList();
+            var clientField = fields.FirstOrDefault(field =>
+                string.Equals(field.Title?.Trim(), "Cliente", StringComparison.OrdinalIgnoreCase));
+            var serviceDeskFields = fields
+                .Where(field => string.Equals(field.Title?.Trim(), "ServiceDesk", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            var ticketField = serviceDeskFields.FirstOrDefault(field => field.IsNumeric);
+            var linkField = fields.FirstOrDefault(field =>
+                string.Equals(field.Title?.Trim(), "Link ServiceDesk", StringComparison.OrdinalIgnoreCase));
+
+            var missingFields = new List<string>();
+            if (clientField == null) missingFields.Add("Cliente");
+            if (ticketField == null) missingFields.Add("ServiceDesk (número do chamado)");
+            if (linkField == null) missingFields.Add("Link ServiceDesk");
+            if (missingFields.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    $"O projeto/tipo selecionado não disponibiliza os campos obrigatórios no OpenProject: {string.Join(", ", missingFields)}.");
+            }
+
+            var requiredClientField = clientField!;
+            var requiredTicketField = ticketField!;
+            var requiredLinkField = linkField!;
+            // Campos de lista do OpenProject podem vir como CustomOption, mesmo quando
+            // os valores permitidos não estiverem incorporados ao schema do formulario.
+            if (requiredClientField.HasAllowedValues ||
+                requiredClientField.IsResource ||
+                requiredClientField.IsObject ||
+                requiredClientField.IsCollection ||
+                string.Equals(requiredClientField.Location, "_links", StringComparison.OrdinalIgnoreCase))
+            {
+                var option = await FindAllowedValueAsync(client, requiredClientField, clientName);
+                if (option == null)
+                {
+                    throw new InvalidOperationException(
+                        $"O campo Cliente do OpenProject não possui a opção '{clientName}'. Cadastre ou habilite esse cliente antes de criar a User Story.");
+                }
+
+                JsonNode value = new JsonObject { ["href"] = option.Href };
+                SetSchemaFieldValue(payload, requiredClientField,
+                    requiredClientField.IsCollection ? new JsonArray(value) : value);
+            }
+            else
+            {
+                // Homologação usa Cliente como texto, sem opções pré-cadastradas.
+                SetSchemaFieldValue(payload, requiredClientField, JsonValue.Create(clientName));
+            }
+
+            SetSchemaFieldValue(payload, requiredTicketField, JsonValue.Create(ticketId));
+            SetSchemaFieldValue(payload, requiredLinkField, JsonValue.Create(ticketUrl));
+
+            _logger.LogInformation(
+                "OpenProject User Story custom-field mapping. Cliente={ClientField}; Ticket={TicketField}; Link={LinkField}; PayloadKinds={PayloadKinds}",
+                DescribeSchemaField(requiredClientField),
+                DescribeSchemaField(requiredTicketField),
+                DescribeSchemaField(requiredLinkField),
+                new
+                {
+                    Cliente = GetPayloadValueKind(payload, requiredClientField),
+                    Ticket = GetPayloadValueKind(payload, requiredTicketField),
+                    Link = GetPayloadValueKind(payload, requiredLinkField)
+                });
+        }
+
+        private static string GetFormCommitUri(JsonElement form)
+        {
+            if (TryGetObjectProperty(form, "_links", out var links) &&
+                TryGetObjectProperty(links, "commit", out var commit) &&
+                commit.TryGetProperty("href", out var href) &&
+                !string.IsNullOrWhiteSpace(href.GetString()))
+            {
+                return href.GetString()!.TrimStart('/');
+            }
+
+            return "api/v3/work_packages";
+        }
+
+        private static void SetSchemaFieldValue(JsonObject payload, OpenProjectSchemaField field, JsonNode? value)
+        {
+            if (string.Equals(field.Location, "_links", StringComparison.OrdinalIgnoreCase))
+            {
+                if (payload["_links"] is not JsonObject links)
+                {
+                    links = new JsonObject();
+                    payload["_links"] = links;
+                }
+
+                links[field.Key] = value;
+                return;
+            }
+
+            payload[field.Key] = value;
+        }
+
+        private static OpenProjectSchemaField ReadSchemaField(JsonProperty property)
+        {
+            var definition = property.Value;
+            var title = definition.TryGetProperty("title", out var titleElement)
+                ? titleElement.GetString()
+                : definition.TryGetProperty("name", out var nameElement)
+                    ? nameElement.GetString()
+                    : null;
+            var type = definition.TryGetProperty("type", out var typeElement) ? typeElement.GetString() : null;
+            var location = definition.TryGetProperty("location", out var locationElement) ? locationElement.GetString() : null;
+            var hasAllowedValues = TryGetObjectProperty(definition, "_embedded", out var embedded) &&
+                                   embedded.TryGetProperty("allowedValues", out _) ||
+                                   TryGetObjectProperty(definition, "_links", out var links) &&
+                                   links.TryGetProperty("allowedValues", out _);
+            var isCollection = string.Equals(type, "array", StringComparison.OrdinalIgnoreCase) ||
+                               string.Equals(type, "[]", StringComparison.OrdinalIgnoreCase) ||
+                               definition.TryGetProperty("items", out _);
+            var isNumeric = string.Equals(type, "integer", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(type, "number", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(type, "float", StringComparison.OrdinalIgnoreCase);
+            var isObject = string.Equals(type, "object", StringComparison.OrdinalIgnoreCase);
+            var isResource = string.Equals(type, "CustomOption", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(type, "User", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(type, "Version", StringComparison.OrdinalIgnoreCase) ||
+                             string.Equals(type, "Project", StringComparison.OrdinalIgnoreCase);
+
+            return new OpenProjectSchemaField(property.Name, title, type, location, definition, hasAllowedValues, isCollection, isNumeric, isObject, isResource);
+        }
+
+        private static bool TryGetObjectProperty(JsonElement element, string propertyName, out JsonElement value)
+        {
+            if (element.ValueKind == JsonValueKind.Object &&
+                element.TryGetProperty(propertyName, out value) &&
+                value.ValueKind == JsonValueKind.Object)
+            {
+                return true;
+            }
+
+            value = default;
+            return false;
+        }
+
+        private static object DescribeSchemaField(OpenProjectSchemaField field) => new
+        {
+            field.Key,
+            field.Title,
+            field.Type,
+            field.Location,
+            field.HasAllowedValues,
+            field.IsCollection,
+            field.IsNumeric,
+            field.IsObject,
+            field.IsResource
+        };
+
+        private static string GetPayloadValueKind(JsonObject payload, OpenProjectSchemaField field)
+        {
+            JsonNode? value = null;
+            if (string.Equals(field.Location, "_links", StringComparison.OrdinalIgnoreCase) &&
+                payload["_links"] is JsonObject links)
+            {
+                value = links[field.Key];
+            }
+            else
+            {
+                value = payload[field.Key];
+            }
+
+            return value?.GetValueKind().ToString() ?? "null";
+        }
+
+        private static async Task<OpenProjectAllowedValue?> FindAllowedValueAsync(
+            HttpClient client,
+            OpenProjectSchemaField field,
+            string expectedTitle)
+        {
+            var allowedValues = ReadAllowedValues(field.Definition).ToList();
+            if (allowedValues.Count == 0 &&
+                TryGetObjectProperty(field.Definition, "_links", out var links) &&
+                TryGetObjectProperty(links, "allowedValues", out var allowedValuesLink) &&
+                allowedValuesLink.TryGetProperty("href", out var hrefElement) &&
+                !string.IsNullOrWhiteSpace(hrefElement.GetString()))
+            {
+                var requestUri = hrefElement.GetString()!.TrimStart('/');
+                using var response = await client.GetAsync(requestUri);
+                if (response.IsSuccessStatusCode)
+                {
+                    using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+                    allowedValues = ReadAllowedValues(document.RootElement).ToList();
+                }
+            }
+
+            return allowedValues.FirstOrDefault(option =>
+                string.Equals(NormalizeComparable(option.Title), NormalizeComparable(expectedTitle), StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static IEnumerable<OpenProjectAllowedValue> ReadAllowedValues(JsonElement element)
+        {
+            if (element.ValueKind == JsonValueKind.Object &&
+                TryGetObjectProperty(element, "_embedded", out var embedded) &&
+                embedded.TryGetProperty("allowedValues", out var embeddedAllowedValues))
+            {
+                return ReadAllowedValues(embeddedAllowedValues);
+            }
+
+            if (element.ValueKind == JsonValueKind.Object &&
+                TryGetObjectProperty(element, "_embedded", out var collectionEmbedded) &&
+                collectionEmbedded.TryGetProperty("elements", out var elements))
+            {
+                return ReadAllowedValues(elements);
+            }
+
+            if (element.ValueKind != JsonValueKind.Array)
+            {
+                return Enumerable.Empty<OpenProjectAllowedValue>();
+            }
+
+            return element.EnumerateArray()
+                .Where(value => value.ValueKind == JsonValueKind.Object)
+                .Select(value =>
+                {
+                    var title = value.TryGetProperty("title", out var titleElement)
+                        ? titleElement.GetString()
+                        : value.TryGetProperty("name", out var nameElement) ? nameElement.GetString()
+                        : value.TryGetProperty("value", out var valueElement) ? valueElement.GetString() : null;
+                    var href = value.TryGetProperty("href", out var hrefElement)
+                        ? hrefElement.GetString()
+                        : TryGetObjectProperty(value, "_links", out var links) &&
+                          TryGetObjectProperty(links, "self", out var self) &&
+                          self.TryGetProperty("href", out var selfHref) ? selfHref.GetString() : null;
+                    return string.IsNullOrWhiteSpace(title) || string.IsNullOrWhiteSpace(href)
+                        ? null
+                        : new OpenProjectAllowedValue(title, href);
+                })
+                .Where(value => value != null)
+                .Cast<OpenProjectAllowedValue>()
+                .ToList();
+        }
+
+        private static string NormalizeComparable(string value)
+        {
+            return string.Concat(value.Trim().Normalize(NormalizationForm.FormD)
+                .Where(character => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(character) != System.Globalization.UnicodeCategory.NonSpacingMark));
         }
 
         public async Task<List<OpenProjectWorkPackageSearchResult>> SearchWorkPackagesAsync(string query, int pageSize = 20)
@@ -1387,5 +1826,19 @@ namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
                 details.Add(message);
             }
         }
+
+        private sealed record OpenProjectSchemaField(
+            string Key,
+            string? Title,
+            string? Type,
+            string? Location,
+            JsonElement Definition,
+            bool HasAllowedValues,
+            bool IsCollection,
+            bool IsNumeric,
+            bool IsObject,
+            bool IsResource);
+
+        private sealed record OpenProjectAllowedValue(string Title, string Href);
     }
 }

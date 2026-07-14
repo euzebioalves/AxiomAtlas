@@ -2,6 +2,7 @@
 {
     public class OpenProjectWpResponse
     {
+        public int Id { get; set; }
         public string? Subject { get; set; }
         public string? CreatedAt { get; set; }
         public OpenProjectLinks? _links { get; set; }
