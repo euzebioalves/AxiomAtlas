@@ -74,10 +74,10 @@
                 window.setTimeout(() => row.classList.remove('service-desk-row-highlight'), 5000);
             };
 
-            const loadPage = async (page, pageSize, status, updateUrl = true) => {
+            const loadPage = async (page, pageSize, status, updateUrl = true, forceRefresh = false) => {
                 setLoading(true);
                 try {
-                    const response = await fetch(`/ServiceDesk/List?page=${page}&pageSize=${pageSize}&status=${encodeURIComponent(status)}`);
+                    const response = await fetch(`/ServiceDesk/List?page=${page}&pageSize=${pageSize}&status=${encodeURIComponent(status)}&refresh=${forceRefresh}`);
                     if (!response.ok) {
                         const error = await response.json().catch(() => ({}));
                         throw new Error(error.message || 'Não foi possível consultar as solicitações de melhoria.');
@@ -112,7 +112,7 @@
                 if (event.target.closest('#refreshImprovements')) {
                     event.preventDefault();
                     const { page, pageSize, status } = currentParams();
-                    loadPage(page, pageSize, status, false);
+                    loadPage(page, pageSize, status, false, true);
                 }
 
                 const treatmentButton = event.target.closest('[data-treat-ticket]');

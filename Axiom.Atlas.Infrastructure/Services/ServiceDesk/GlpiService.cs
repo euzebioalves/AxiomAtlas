@@ -185,6 +185,10 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                     await _context.SaveChangesAsync();
                 }
 
+                // The queue is a local projection. Refresh it immediately after a successful
+                // GLPI update so the operator sees the new User Story when returning to the list.
+                await RefreshImprovementTicketWorkPackageProjectionAsync(workspace);
+
                 return ToDto(workspace);
             }
             finally
@@ -344,6 +348,29 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             }
 
             await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        private async Task RefreshImprovementTicketWorkPackageProjectionAsync(GlpiTicketWorkspace workspace)
+        {
+            var ticket = await _context.GlpiImprovementTickets.FindAsync(workspace.GlpiTicketId);
+            if (ticket is null)
+            {
+                return;
+            }
+
+            var workPackageId = ExtractWorkPackageId(workspace.GlpiDevOpsUrl);
+            var workPackage = workPackageId.HasValue
+                ? await _openProjectService.GetWorkPackageSummaryAsync(workPackageId.Value)
+                : null;
+
+            ticket.WorkPackageId = workPackageId;
+            ticket.WorkPackageUrl = workPackageId.HasValue ? workspace.GlpiDevOpsUrl : null;
+            ticket.WorkPackageStatus = workPackage?.StatusName;
+            ticket.WorkPackageCreator = workPackage?.CreatorName;
+            ticket.WorkPackageCreatedAt = workPackage?.CreatedAt;
+            ticket.LastSynchronizedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
         }
 
         private async Task<List<GlpiTicketSnapshot>> FetchTicketSnapshotsAsync(

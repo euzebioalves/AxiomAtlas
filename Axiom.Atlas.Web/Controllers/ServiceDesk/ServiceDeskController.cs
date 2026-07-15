@@ -15,11 +15,12 @@ namespace Axiom.Atlas.Web.Controllers.ServiceDesk
         }
 
         [HttpGet]
-        public async Task<IActionResult> List(int page = 1, int pageSize = 25, string? status = null)
+        public async Task<IActionResult> List(int page = 1, int pageSize = 25, string? status = null, bool refresh = false)
         {
             try
             {
-                var response = await CreateClient().GetAsync($"api/glpi/tickets/improvements?page={page}&pageSize={pageSize}&status={Uri.EscapeDataString(status ?? "not_solved")}");
+                var response = await CreateClient().GetAsync(
+                    $"api/glpi/tickets/improvements?page={page}&pageSize={pageSize}&status={Uri.EscapeDataString(status ?? "not_solved")}&refresh={refresh.ToString().ToLowerInvariant()}");
                 if (response.IsSuccessStatusCode)
                 {
                     return PartialView("_ImprovementTicketsTable", await response.Content.ReadFromJsonAsync<GlpiImprovementTicketsResponse>() ?? new GlpiImprovementTicketsResponse());

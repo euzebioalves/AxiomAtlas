@@ -29,11 +29,25 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
         }
 
         [HttpGet("improvements")]
-        public async Task<IActionResult> GetImprovementTickets([FromQuery] int page = 1, [FromQuery] int pageSize = 25, [FromQuery] string? status = null)
+        public async Task<IActionResult> GetImprovementTickets(
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 25,
+            [FromQuery] string? status = null,
+            [FromQuery] bool refresh = false)
         {
             try
             {
-                _synchronizationQueue.RequestSynchronization();
+                if (refresh)
+                {
+                    // A manual refresh is explicit: wait for GLPI and OpenProject reconciliation
+                    // before reading the local queue again.
+                    await _glpiService.SynchronizeImprovementTicketsAsync(HttpContext.RequestAborted);
+                }
+                else
+                {
+                    _synchronizationQueue.RequestSynchronization();
+                }
+
                 var tickets = await _glpiService.GetImprovementTicketsAsync(page, pageSize, status);
                 tickets.SynchronizationPending = _synchronizationQueue.IsSynchronizationPending;
                 return Ok(tickets);
