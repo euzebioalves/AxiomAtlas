@@ -34,6 +34,8 @@
             glpiBaseUrl = uri.GetLeftPart(UriPartial.Authority);
     }
 
+    var glpiTicketUrl = $"{glpiBaseUrl.TrimEnd('/')}/front/ticket.form.php?id={Model.GlpiTicketId}";
+
     var descriptionDocument = $"<!doctype html><html><head><base href='{glpiBaseUrl}/' target='_blank'><style>html,body{{background:#1e1e2d!important;color:#d8dbe8!important}}body{{margin:0;padding:1rem;font-family:Inter,Arial,sans-serif;line-height:1.65;overflow-wrap:anywhere}}body *{{background:transparent!important;color:#d8dbe8!important;border-color:#393945!important}}img{{max-width:100%!important;height:auto!important;border-radius:.45rem;cursor:zoom-in}}table{{max-width:100%!important;border-collapse:collapse}}td,th{{padding:.35rem}}a{{color:#50cdff!important}}hr{{border-color:#393945}}</style></head><body>{description}</body></html>";
     var status = Text("status");
     var statusDescription = status switch
@@ -59,7 +61,12 @@
     <div class="app-container container-xxl">
         <div class="d-flex flex-wrap flex-stack mb-7">
             <div>
-                <div class="text-muted fs-7">GLPI #@Model.GlpiTicketId · @(Model.ClientEntityName ?? "Entidade não identificada")</div>
+                <div class="text-muted fs-7">
+                    <a href="@glpiTicketUrl" target="_blank" rel="noopener noreferrer" class="text-muted text-hover-primary" title="Abrir chamado original no GLPI">
+                        GLPI #@Model.GlpiTicketId <i class="ki-duotone ki-exit-up fs-7 ms-1"><span class="path1"></span><span class="path2"></span></i>
+                    </a>
+                    · @(Model.ClientEntityName ?? "Entidade não identificada")
+                </div>
                 <h1 class="fs-2 fw-bold">@Model.Subject</h1>
             </div>
             <a href="@(ViewData["ReturnUrl"] as string ?? Url.Action("Index"))" class="btn btn-light-primary">
