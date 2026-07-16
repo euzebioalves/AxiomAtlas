@@ -209,6 +209,10 @@
 
 @section Scripts {
     <script>
+        if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+        window.scrollTo(0, 0);
+        window.addEventListener('pageshow', () => window.scrollTo(0, 0));
+
         const modalElement = document.getElementById('attachmentPreviewModal');
         const previewImage = document.getElementById('attachmentPreviewImage');
         const openAttachmentPreview = (url) => {

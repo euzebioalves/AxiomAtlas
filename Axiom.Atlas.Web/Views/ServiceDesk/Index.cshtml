@@ -3,6 +3,34 @@
 }
 
 <style>
+    html.service-desk-loading,
+    body.service-desk-loading {
+        overflow: hidden !important;
+    }
+
+    .service-desk-loader-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1080;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        background: rgba(var(--bs-body-bg-rgb), .82);
+        backdrop-filter: blur(2px);
+    }
+
+    .service-desk-loader-panel {
+        width: min(100%, 28rem);
+        padding: 2.5rem;
+        text-align: center;
+        background: var(--bs-body-bg);
+        border: 1px solid var(--bs-border-color);
+        border-radius: .75rem;
+        box-shadow: var(--bs-box-shadow-lg);
+    }
+
     .service-desk-row-highlight > td {
         background-color: var(--bs-primary-light) !important;
         transition: background-color .6s ease;
@@ -12,6 +40,14 @@
         box-shadow: inset 3px 0 0 var(--bs-primary);
     }
 </style>
+
+<div id="improvementsLoader" class="service-desk-loader-overlay" aria-live="polite" aria-busy="true">
+    <div class="service-desk-loader-panel">
+        <span class="spinner-border text-primary mb-4" role="status"></span>
+        <div id="improvementsLoaderMessage" class="fw-semibold text-gray-700">Consultando solicitações de melhoria no GLPI...</div>
+        <div id="improvementsLoaderDetail" class="text-muted fs-7 mt-1">Isso pode levar alguns instantes.</div>
+    </div>
+</div>
 
 <div class="app-content flex-column-fluid">
     <div class="app-container container-xxl">
@@ -26,11 +62,6 @@
         </div>
 
         <div class="card card-flush position-relative">
-            <div id="improvementsLoader" class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center align-items-center bg-body z-index-3 rounded" aria-live="polite">
-                <span class="spinner-border text-primary mb-4" role="status"></span>
-                <div class="fw-semibold text-gray-700">Consultando solicitações de melhoria no GLPI...</div>
-                <div class="text-muted fs-7 mt-1">Isso pode levar alguns instantes.</div>
-            </div>
             <div id="improvementResults" aria-busy="true"></div>
         </div>
     </div>
@@ -41,6 +72,8 @@
         (() => {
             const results = document.getElementById('improvementResults');
             const loader = document.getElementById('improvementsLoader');
+            const loaderMessage = document.getElementById('improvementsLoaderMessage');
+            const loaderDetail = document.getElementById('improvementsLoaderDetail');
             const allowedPageSizes = new Set([10, 25, 50, 100]);
             const allowedStatuses = new Set(['not_solved', 'all', 'new', 'processing_assigned', 'processing_planned', 'pending', 'solved', 'closed']);
             let revalidationTimer;
@@ -62,9 +95,21 @@
                 };
             };
 
-            const setLoading = isLoading => {
+            const setLoading = (isLoading, isNavigating = false) => {
                 loader.classList.toggle('d-none', !isLoading);
+                loader.setAttribute('aria-busy', String(isLoading));
                 results.setAttribute('aria-busy', String(isLoading));
+                document.documentElement.classList.toggle('service-desk-loading', isLoading);
+                document.body.classList.toggle('service-desk-loading', isLoading);
+
+                if (isLoading) {
+                    loaderMessage.textContent = isNavigating
+                        ? 'Preparando a tela de tratamento do chamado...'
+                        : 'Consultando solicitações de melhoria no GLPI...';
+                    loaderDetail.textContent = isNavigating
+                        ? 'Consultando os dados necessários no GLPI e no OpenProject.'
+                        : 'Isso pode levar alguns instantes.';
+                }
             };
 
             const escapeHtml = value => String(value ?? '')
@@ -191,7 +236,7 @@
                 window.clearTimeout(revalidationTimer);
                 activeListRequest?.abort();
                 results.querySelectorAll('[data-treat-ticket]').forEach(button => button.disabled = true);
-                setLoading(true);
+                setLoading(true, true);
                 try {
                     const response = await fetch('/ServiceDesk/Import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query }) });
                     const data = await response.json();
@@ -202,6 +247,7 @@
                         returnPageSize: pageSize,
                         returnStatus: status
                     });
+                    window.scrollTo(0, 0);
                     window.location.assign(`/ServiceDesk/Workspace/${data.id}?${returnQuery}`);
                 } catch (error) {
                     isNavigatingToWorkspace = false;
@@ -215,6 +261,8 @@
                 const { page, pageSize, status } = currentParams();
                 loadPage(page, pageSize, status, false);
             });
+
+            window.addEventListener('pageshow', () => setLoading(false));
 
             const { page, pageSize, status } = currentParams();
             loadPage(page, pageSize, status, false, true);
