@@ -273,18 +273,19 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                 .Where(x => x.OpenProjectWorkPackageId != null || x.GlpiDevOpsUrl != null || x.OpenProjectWorkPackageUrl != null)
                 .ToDictionaryAsync(x => x.GlpiTicketId, cancellationToken);
             var snapshots = await FetchTicketSnapshotsAsync(client, sessionToken, candidates, fieldMetadata.DevOpsFieldKey, cancellationToken);
-            var pluginRecords = await GetPluginFieldsTicketRecordsAsync(
-                client,
-                sessionToken,
-                snapshots.Select(x => x.TicketId).ToHashSet(),
-                cancellationToken);
-            var currentDevOpsUrls = pluginRecords.ToDictionary(
-                x => x.Key,
-                x => ReadPluginFieldsDevOpsUrl(x.Value, fieldMetadata.DevOpsFieldKey));
+            // The Ticket search already returns the current ChamadoDevops value through
+            // forcedisplay. Reading every historic Fields record made synchronization slow
+            // and could overwrite a fresh link before the local projection was updated.
+            var currentDevOpsUrls = snapshots.ToDictionary(
+                x => x.TicketId,
+                x => string.IsNullOrWhiteSpace(x.DevOpsUrl) ? null : x.DevOpsUrl.Trim());
             var entityPaths = await GetEntityPathsAsync(client, sessionToken, snapshots.Select(x => x.EntityId), cancellationToken);
+            var activeOpenProjectBaseUrl = await _openProjectService.GetActiveOpenProjectBaseUrlAsync();
             var workPackageIds = snapshots
                 .Select(x => currentDevOpsUrls.TryGetValue(x.TicketId, out var devOpsUrl)
-                    ? ExtractWorkPackageId(devOpsUrl)
+                    ? IsWorkPackageFromActiveOpenProject(devOpsUrl, activeOpenProjectBaseUrl)
+                        ? ExtractWorkPackageId(devOpsUrl)
+                        : null
                     : null)
                 .Where(x => x.HasValue)
                 .Select(x => x!.Value)
@@ -309,7 +310,7 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
 
                 workspaces.TryGetValue(snapshot.TicketId, out var workspace);
 
-                // The Fields plugin is the source of truth. Do not keep a locally remembered
+                // The live Ticket search is the source of truth. Do not keep a locally remembered
                 // association visible when the ChamadoDevops value was changed or cleared in GLPI.
                 currentDevOpsUrls.TryGetValue(snapshot.TicketId, out var devOpsUrl);
                 var workPackageId = ExtractWorkPackageId(devOpsUrl);
@@ -359,9 +360,19 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             }
 
             var workPackageId = ExtractWorkPackageId(workspace.GlpiDevOpsUrl);
-            var workPackage = workPackageId.HasValue
-                ? await _openProjectService.GetWorkPackageSummaryAsync(workPackageId.Value)
-                : null;
+            Axiom.Atlas.Application.DTOs.TimeEntries.OpenProjectWorkPackageSummaryDto? workPackage = null;
+            if (workPackageId.HasValue)
+            {
+                try
+                {
+                    workPackage = await _openProjectService.GetWorkPackageSummaryAsync(workPackageId.Value);
+                }
+                catch
+                {
+                    // The association itself must remain visible even when metadata from
+                    // OpenProject is temporarily unavailable.
+                }
+            }
 
             ticket.WorkPackageId = workPackageId;
             ticket.WorkPackageUrl = workPackageId.HasValue ? workspace.GlpiDevOpsUrl : null;
@@ -1050,6 +1061,18 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
         {
             var match = Regex.Match(url ?? string.Empty, @"/work_packages/(\d+)", RegexOptions.IgnoreCase);
             return match.Success && int.TryParse(match.Groups[1].Value, out var id) ? id : null;
+        }
+
+        private static bool IsWorkPackageFromActiveOpenProject(string? workPackageUrl, string? activeBaseUrl)
+        {
+            if (!Uri.TryCreate(workPackageUrl, UriKind.Absolute, out var workPackageUri) ||
+                !Uri.TryCreate(activeBaseUrl, UriKind.Absolute, out var activeUri))
+            {
+                return false;
+            }
+
+            return string.Equals(workPackageUri.Host, activeUri.Host, StringComparison.OrdinalIgnoreCase) &&
+                   workPackageUri.Port == activeUri.Port;
         }
 
         private static string? BuildTicketWebUrl(string? baseUrl, long ticketId)
