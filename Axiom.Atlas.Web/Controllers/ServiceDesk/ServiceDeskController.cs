@@ -15,21 +15,31 @@ namespace Axiom.Atlas.Web.Controllers.ServiceDesk
         }
 
         [HttpGet]
-        public async Task<IActionResult> List(int page = 1, int pageSize = 25, string? status = null)
+        public async Task<IActionResult> List(int page = 1, int pageSize = 25, string? status = null, bool refresh = false)
         {
             try
             {
-                var response = await CreateClient().GetAsync($"api/glpi/tickets/improvements?page={page}&pageSize={pageSize}&status={Uri.EscapeDataString(status ?? "not_solved")}");
+                var response = await CreateClient().GetAsync(
+                    $"api/glpi/tickets/improvements?page={page}&pageSize={pageSize}&status={Uri.EscapeDataString(status ?? "not_solved")}&refresh={refresh.ToString().ToLowerInvariant()}");
                 if (response.IsSuccessStatusCode)
                 {
                     return PartialView("_ImprovementTicketsTable", await response.Content.ReadFromJsonAsync<GlpiImprovementTicketsResponse>() ?? new GlpiImprovementTicketsResponse());
                 }
 
-                return StatusCode((int)response.StatusCode, new { message = "Não foi possível carregar as solicitações de melhoria do GLPI." });
+                var detail = await ReadErrorDetailAsync(response);
+                return StatusCode((int)response.StatusCode, new
+                {
+                    message = "Não foi possível carregar as solicitações de melhoria do GLPI.",
+                    detail
+                });
             }
-            catch (Exception)
+            catch (Exception exception)
             {
-                return StatusCode(503, new { message = "Não foi possível comunicar com o serviço de integração do GLPI." });
+                return StatusCode(503, new
+                {
+                    message = "Não foi possível comunicar com o serviço de integração do GLPI.",
+                    detail = exception.Message
+                });
             }
         }
 
@@ -97,6 +107,32 @@ namespace Axiom.Atlas.Web.Controllers.ServiceDesk
             var token = User.FindFirst("JWToken")?.Value;
             if (!string.IsNullOrWhiteSpace(token)) client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
             return client;
+        }
+
+        private static async Task<string> ReadErrorDetailAsync(HttpResponseMessage response)
+        {
+            try
+            {
+                var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>();
+                if (!string.IsNullOrWhiteSpace(error?.Message))
+                {
+                    return error.Message;
+                }
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // Fall back to the response text when the integration did not return JSON.
+            }
+
+            var content = await response.Content.ReadAsStringAsync();
+            return string.IsNullOrWhiteSpace(content)
+                ? $"A integração retornou HTTP {(int)response.StatusCode} ({response.ReasonPhrase})."
+                : content;
+        }
+
+        private sealed class ApiErrorResponse
+        {
+            public string? Message { get; init; }
         }
     }
 }

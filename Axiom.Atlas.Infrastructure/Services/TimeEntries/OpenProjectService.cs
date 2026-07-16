@@ -703,13 +703,21 @@ namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
         public async Task<OpenProjectWorkPackageSummaryDto?> GetWorkPackageSummaryAsync(int wpId)
         {
             var client = await CreateConfiguredClientAsync();
-            var response = await client.GetAsync($"api/v3/work_packages/{wpId}");
+            return await GetWorkPackageSummaryAsync(client, wpId);
+        }
+
+        private static async Task<OpenProjectWorkPackageSummaryDto?> GetWorkPackageSummaryAsync(
+            HttpClient client,
+            int wpId,
+            CancellationToken cancellationToken = default)
+        {
+            using var response = await client.GetAsync($"api/v3/work_packages/{wpId}", cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
                 return null;
             }
 
-            var workPackage = await response.Content.ReadFromJsonAsync<OpenProjectWpResponse>();
+            var workPackage = await response.Content.ReadFromJsonAsync<OpenProjectWpResponse>(cancellationToken);
             if (workPackage == null)
             {
                 return null;
@@ -738,18 +746,36 @@ namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
             var client = await CreateConfiguredClientAsync();
             foreach (var batch in ids.Chunk(100))
             {
+                var batchIds = batch.ToArray();
                 var filters = JsonSerializer.Serialize(new[]
                 {
                     new Dictionary<string, object>
                     {
-                        ["id"] = new { @operator = "=", values = batch }
+                        // The OpenProject API expects filter values as strings, even for numeric IDs.
+                        ["id"] = new { @operator = "=", values = batchIds.Select(id => id.ToString()).ToArray() }
                     }
                 });
                 using var response = await client.GetAsync(
-                    $"api/v3/work_packages?filters={Uri.EscapeDataString(filters)}&pageSize={batch.Length}",
+                    $"api/v3/work_packages?filters={Uri.EscapeDataString(filters)}&pageSize={batchIds.Length}",
                     cancellationToken);
                 if (!response.IsSuccessStatusCode)
                 {
+                    _logger.LogWarning(
+                        "OpenProject rejected the batch lookup for work packages {WorkPackageIds} with HTTP {StatusCode}. Falling back to direct lookups.",
+                        string.Join(", ", batchIds),
+                        (int)response.StatusCode);
+
+                    foreach (var fallbackBatch in batchIds.Chunk(8))
+                    {
+                        var fallbackResults = await Task.WhenAll(
+                            fallbackBatch.Select(id => GetWorkPackageSummaryAsync(client, id, cancellationToken)));
+
+                        foreach (var fallbackResult in fallbackResults.Where(result => result is not null))
+                        {
+                            summaries[fallbackResult!.Id] = fallbackResult;
+                        }
+                    }
+
                     continue;
                 }
 

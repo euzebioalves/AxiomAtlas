@@ -185,6 +185,17 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                     await _context.SaveChangesAsync();
                 }
 
+                // The queue is only a local read model. A failure while refreshing it must not
+                // turn a confirmed GLPI link into an error for the operator.
+                try
+                {
+                    await RefreshImprovementTicketWorkPackageProjectionAsync(workspace);
+                }
+                catch
+                {
+                    // The scheduled synchronization will reconcile the projection shortly.
+                }
+
                 return ToDto(workspace);
             }
             finally
@@ -265,15 +276,24 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                 return;
             }
 
-            var workspaces = await _context.GlpiTicketWorkspaces.AsNoTracking()
+            var workspaces = await _context.GlpiTicketWorkspaces
                 .Where(x => x.OpenProjectWorkPackageId != null || x.GlpiDevOpsUrl != null || x.OpenProjectWorkPackageUrl != null)
                 .ToDictionaryAsync(x => x.GlpiTicketId, cancellationToken);
             var snapshots = await FetchTicketSnapshotsAsync(client, sessionToken, candidates, fieldMetadata.DevOpsFieldKey, cancellationToken);
+            // The Ticket search already returns the current ChamadoDevops value through
+            // forcedisplay. Reading every historic Fields record made synchronization slow
+            // and could overwrite a fresh link before the local projection was updated.
+            var currentDevOpsUrls = snapshots.ToDictionary(
+                x => x.TicketId,
+                x => string.IsNullOrWhiteSpace(x.DevOpsUrl) ? null : x.DevOpsUrl.Trim());
             var entityPaths = await GetEntityPathsAsync(client, sessionToken, snapshots.Select(x => x.EntityId), cancellationToken);
+            var activeOpenProjectBaseUrl = await _openProjectService.GetActiveOpenProjectBaseUrlAsync();
             var workPackageIds = snapshots
-                .Select(x => workspaces.TryGetValue(x.TicketId, out var workspace)
-                    ? workspace.OpenProjectWorkPackageId ?? ExtractWorkPackageId(x.DevOpsUrl ?? workspace.GlpiDevOpsUrl ?? workspace.OpenProjectWorkPackageUrl)
-                    : ExtractWorkPackageId(x.DevOpsUrl))
+                .Select(x => currentDevOpsUrls.TryGetValue(x.TicketId, out var devOpsUrl)
+                    ? IsWorkPackageFromActiveOpenProject(devOpsUrl, activeOpenProjectBaseUrl)
+                        ? ExtractWorkPackageId(devOpsUrl)
+                        : null
+                    : null)
                 .Where(x => x.HasValue)
                 .Select(x => x!.Value)
                 .Distinct()
@@ -296,8 +316,20 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                 }
 
                 workspaces.TryGetValue(snapshot.TicketId, out var workspace);
-                var devOpsUrl = snapshot.DevOpsUrl ?? workspace?.GlpiDevOpsUrl ?? workspace?.OpenProjectWorkPackageUrl;
-                var workPackageId = workspace?.OpenProjectWorkPackageId ?? ExtractWorkPackageId(devOpsUrl);
+
+                // The live Ticket search is the source of truth. Do not keep a locally remembered
+                // association visible when the ChamadoDevops value was changed or cleared in GLPI.
+                currentDevOpsUrls.TryGetValue(snapshot.TicketId, out var devOpsUrl);
+                var workPackageId = ExtractWorkPackageId(devOpsUrl);
+                if (!workPackageId.HasValue)
+                {
+                    devOpsUrl = null;
+                }
+
+                if (workspace is not null)
+                {
+                    workspace.GlpiDevOpsUrl = devOpsUrl;
+                }
                 workPackages.TryGetValue(workPackageId ?? 0, out var workPackage);
                 entityPaths.TryGetValue(snapshot.EntityId ?? 0, out var entityPath);
 
@@ -324,6 +356,39 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             }
 
             await _context.SaveChangesAsync(cancellationToken);
+        }
+
+        private async Task RefreshImprovementTicketWorkPackageProjectionAsync(GlpiTicketWorkspace workspace)
+        {
+            var ticket = await _context.GlpiImprovementTickets.FindAsync(workspace.GlpiTicketId);
+            if (ticket is null)
+            {
+                return;
+            }
+
+            var workPackageId = ExtractWorkPackageId(workspace.GlpiDevOpsUrl);
+            Axiom.Atlas.Application.DTOs.TimeEntries.OpenProjectWorkPackageSummaryDto? workPackage = null;
+            if (workPackageId.HasValue)
+            {
+                try
+                {
+                    workPackage = await _openProjectService.GetWorkPackageSummaryAsync(workPackageId.Value);
+                }
+                catch
+                {
+                    // The association itself must remain visible even when metadata from
+                    // OpenProject is temporarily unavailable.
+                }
+            }
+
+            ticket.WorkPackageId = workPackageId;
+            ticket.WorkPackageUrl = workPackageId.HasValue ? workspace.GlpiDevOpsUrl : null;
+            ticket.WorkPackageStatus = workPackage?.StatusName;
+            ticket.WorkPackageCreator = workPackage?.CreatorName;
+            ticket.WorkPackageCreatedAt = workPackage?.CreatedAt;
+            ticket.LastSynchronizedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
         }
 
         private async Task<List<GlpiTicketSnapshot>> FetchTicketSnapshotsAsync(
@@ -616,6 +681,51 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             return null;
         }
 
+        private static async Task<Dictionary<long, JsonElement>> GetPluginFieldsTicketRecordsAsync(
+            HttpClient client,
+            string sessionToken,
+            IReadOnlySet<long> ticketIds,
+            CancellationToken cancellationToken)
+        {
+            var recordsByTicket = new Dictionary<long, JsonElement>();
+            if (ticketIds.Count == 0)
+            {
+                return recordsByTicket;
+            }
+
+            const int pageSize = 1000;
+            var firstPage = await GetPluginFieldsTicketRecordsPageAsync(client, sessionToken, 0, pageSize - 1);
+            AddRequestedPluginRecords(firstPage.Records, ticketIds, recordsByTicket);
+
+            for (var start = pageSize; start < firstPage.TotalCount && recordsByTicket.Count < ticketIds.Count; start += pageSize)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var page = await GetPluginFieldsTicketRecordsPageAsync(
+                    client,
+                    sessionToken,
+                    start,
+                    Math.Min(start + pageSize - 1, firstPage.TotalCount - 1));
+                AddRequestedPluginRecords(page.Records, ticketIds, recordsByTicket);
+            }
+
+            return recordsByTicket;
+        }
+
+        private static void AddRequestedPluginRecords(
+            IEnumerable<JsonElement> records,
+            IReadOnlySet<long> ticketIds,
+            IDictionary<long, JsonElement> recordsByTicket)
+        {
+            foreach (var record in records)
+            {
+                var ticketId = TryReadLong(record, "items_id");
+                if (ticketId.HasValue && ticketIds.Contains(ticketId.Value))
+                {
+                    recordsByTicket[ticketId.Value] = record;
+                }
+            }
+        }
+
         private static async Task<(List<JsonElement> Records, int TotalCount)> GetPluginFieldsTicketRecordsPageAsync(
             HttpClient client,
             string sessionToken,
@@ -906,6 +1016,16 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             return null;
         }
 
+        private static string? ReadPluginFieldsDevOpsUrl(JsonElement pluginRecord, string? configuredFieldKey)
+        {
+            var value = FindConfiguredFieldValue(pluginRecord, configuredFieldKey)
+                ?? FindConfiguredFieldValue(pluginRecord, "atividadedevopfield")
+                ?? FindConfiguredFieldValue(pluginRecord, "chamadodevopsfield")
+                ?? FindConfiguredFieldValue(pluginRecord, "chamadodevops");
+
+            return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
         private static JsonElement? FindConfiguredFieldElement(JsonElement element, string? key)
         {
             if (string.IsNullOrWhiteSpace(key))
@@ -948,6 +1068,18 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
         {
             var match = Regex.Match(url ?? string.Empty, @"/work_packages/(\d+)", RegexOptions.IgnoreCase);
             return match.Success && int.TryParse(match.Groups[1].Value, out var id) ? id : null;
+        }
+
+        private static bool IsWorkPackageFromActiveOpenProject(string? workPackageUrl, string? activeBaseUrl)
+        {
+            if (!Uri.TryCreate(workPackageUrl, UriKind.Absolute, out var workPackageUri) ||
+                !Uri.TryCreate(activeBaseUrl, UriKind.Absolute, out var activeUri))
+            {
+                return false;
+            }
+
+            return string.Equals(workPackageUri.Host, activeUri.Host, StringComparison.OrdinalIgnoreCase) &&
+                   workPackageUri.Port == activeUri.Port;
         }
 
         private static string? BuildTicketWebUrl(string? baseUrl, long ticketId)

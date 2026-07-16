@@ -3,6 +3,34 @@
 }
 
 <style>
+    html.service-desk-loading,
+    body.service-desk-loading {
+        overflow: hidden !important;
+    }
+
+    .service-desk-loader-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 1080;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        background: rgba(var(--bs-body-bg-rgb), .82);
+        backdrop-filter: blur(2px);
+    }
+
+    .service-desk-loader-panel {
+        width: min(100%, 28rem);
+        padding: 2.5rem;
+        text-align: center;
+        background: var(--bs-body-bg);
+        border: 1px solid var(--bs-border-color);
+        border-radius: .75rem;
+        box-shadow: var(--bs-box-shadow-lg);
+    }
+
     .service-desk-row-highlight > td {
         background-color: var(--bs-primary-light) !important;
         transition: background-color .6s ease;
@@ -12,6 +40,14 @@
         box-shadow: inset 3px 0 0 var(--bs-primary);
     }
 </style>
+
+<div id="improvementsLoader" class="service-desk-loader-overlay" aria-live="polite" aria-busy="true">
+    <div class="service-desk-loader-panel">
+        <span class="spinner-border text-primary mb-4" role="status"></span>
+        <div id="improvementsLoaderMessage" class="fw-semibold text-gray-700">Consultando solicitações de melhoria no GLPI...</div>
+        <div id="improvementsLoaderDetail" class="text-muted fs-7 mt-1">Isso pode levar alguns instantes.</div>
+    </div>
+</div>
 
 <div class="app-content flex-column-fluid">
     <div class="app-container container-xxl">
@@ -26,11 +62,6 @@
         </div>
 
         <div class="card card-flush position-relative">
-            <div id="improvementsLoader" class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center align-items-center bg-body z-index-3 rounded" aria-live="polite">
-                <span class="spinner-border text-primary mb-4" role="status"></span>
-                <div class="fw-semibold text-gray-700">Consultando solicitações de melhoria no GLPI...</div>
-                <div class="text-muted fs-7 mt-1">Isso pode levar alguns instantes.</div>
-            </div>
             <div id="improvementResults" aria-busy="true"></div>
         </div>
     </div>
@@ -41,8 +72,14 @@
         (() => {
             const results = document.getElementById('improvementResults');
             const loader = document.getElementById('improvementsLoader');
+            const loaderMessage = document.getElementById('improvementsLoaderMessage');
+            const loaderDetail = document.getElementById('improvementsLoaderDetail');
             const allowedPageSizes = new Set([10, 25, 50, 100]);
             const allowedStatuses = new Set(['not_solved', 'all', 'new', 'processing_assigned', 'processing_planned', 'pending', 'solved', 'closed']);
+            let revalidationTimer;
+            let activeListRequest;
+            let latestListRequest = 0;
+            let isNavigatingToWorkspace = false;
 
             const currentParams = () => {
                 const query = new URLSearchParams(window.location.search);
@@ -58,9 +95,36 @@
                 };
             };
 
-            const setLoading = isLoading => {
+            const setLoading = (isLoading, isNavigating = false) => {
                 loader.classList.toggle('d-none', !isLoading);
+                loader.setAttribute('aria-busy', String(isLoading));
                 results.setAttribute('aria-busy', String(isLoading));
+                document.documentElement.classList.toggle('service-desk-loading', isLoading);
+                document.body.classList.toggle('service-desk-loading', isLoading);
+
+                if (isLoading) {
+                    loaderMessage.textContent = isNavigating
+                        ? 'Preparando a tela de tratamento do chamado...'
+                        : 'Consultando solicitações de melhoria no GLPI...';
+                    loaderDetail.textContent = isNavigating
+                        ? 'Consultando os dados necessários no GLPI e no OpenProject.'
+                        : 'Isso pode levar alguns instantes.';
+                }
+            };
+
+            const escapeHtml = value => String(value ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#039;');
+
+            const renderError = (message, detail) => {
+                const detailMarkup = detail
+                    ? `<div class="mt-3 pt-3 border-top border-danger-subtle"><div class="fw-semibold mb-1">Detalhe técnico</div><div class="fs-7 text-gray-700 text-break">${escapeHtml(detail)}</div></div>`
+                    : '';
+
+                results.innerHTML = `<div class="card-body"><div class="alert alert-danger mb-0"><div class="d-flex align-items-start"><i class="ki-duotone ki-information-5 fs-2 me-3 mt-1"></i><div><div class="fw-bold">${escapeHtml(message)}</div>${detailMarkup}</div></div></div></div>`;
             };
 
             const highlightTicket = ticketId => {
@@ -74,17 +138,39 @@
                 window.setTimeout(() => row.classList.remove('service-desk-row-highlight'), 5000);
             };
 
-            const loadPage = async (page, pageSize, status, updateUrl = true) => {
-                setLoading(true);
+            const loadPage = async (page, pageSize, status, updateUrl = true, forceRefresh = false, silent = false) => {
+                if (isNavigatingToWorkspace) return;
+
+                activeListRequest?.abort();
+                const requestController = new AbortController();
+                activeListRequest = requestController;
+                const requestId = ++latestListRequest;
+                if (!silent) setLoading(true);
                 try {
-                    const response = await fetch(`/ServiceDesk/List?page=${page}&pageSize=${pageSize}&status=${encodeURIComponent(status)}`);
+                    const response = await fetch(
+                        `/ServiceDesk/List?page=${page}&pageSize=${pageSize}&status=${encodeURIComponent(status)}&refresh=${forceRefresh}`,
+                        { signal: requestController.signal });
                     if (!response.ok) {
                         const error = await response.json().catch(() => ({}));
-                        throw new Error(error.message || 'Não foi possível consultar as solicitações de melhoria.');
+                        const requestError = new Error(error.message || 'Não foi possível consultar as solicitações de melhoria.');
+                        requestError.detail = error.detail;
+                        throw requestError;
                     }
 
-                    results.innerHTML = await response.text();
-                    window.KTComponents?.init();
+                    const markup = await response.text();
+                    if (isNavigatingToWorkspace || requestId !== latestListRequest) return;
+
+                    const incomingVersion = new DOMParser()
+                        .parseFromString(markup, 'text/html')
+                        .querySelector('[data-projection-version]')?.dataset.projectionVersion;
+                    const currentVersion = results.querySelector('[data-projection-version]')?.dataset.projectionVersion;
+                    const shouldRender = !silent || incomingVersion !== currentVersion;
+
+                    if (shouldRender) {
+                        results.innerHTML = markup;
+                        window.KTComponents?.init();
+                        highlightTicket(currentParams().highlight);
+                    }
                     if (updateUrl) {
                         const url = new URL(window.location.href);
                         url.searchParams.set('page', page);
@@ -93,11 +179,20 @@
                         window.history.pushState({}, '', url);
                     }
 
-                    highlightTicket(currentParams().highlight);
+                    // The API returns the local projection while the remote reconciliation runs.
+                    // Re-read only the local data until it completes; do not enqueue another scan.
+                    window.clearTimeout(revalidationTimer);
+                    if (results.querySelector('[data-synchronization-pending="true"]')) {
+                        revalidationTimer = window.setTimeout(() => {
+                            loadPage(page, pageSize, status, false, false, true);
+                        }, 5000);
+                    }
                 } catch (error) {
-                    results.innerHTML = `<div class="card-body"><div class="alert alert-danger d-flex align-items-center mb-0"><i class="ki-duotone ki-information-5 fs-2 me-3"></i>${error.message}</div></div>`;
+                    if (error.name === 'AbortError' || isNavigatingToWorkspace || requestId !== latestListRequest) return;
+                    if (!silent) renderError(error.message || 'Não foi possível consultar as solicitações de melhoria.', error.detail);
                 } finally {
-                    setLoading(false);
+                    if (activeListRequest === requestController) activeListRequest = undefined;
+                    if (!silent && !isNavigatingToWorkspace && requestId === latestListRequest) setLoading(false);
                 }
             };
 
@@ -112,12 +207,14 @@
                 if (event.target.closest('#refreshImprovements')) {
                     event.preventDefault();
                     const { page, pageSize, status } = currentParams();
-                    loadPage(page, pageSize, status, false);
+                    loadPage(page, pageSize, status, false, true);
+                    return;
                 }
 
                 const treatmentButton = event.target.closest('[data-treat-ticket]');
                 if (treatmentButton) {
                     event.preventDefault();
+                    event.stopPropagation();
                     importTicketForTreatment(treatmentButton.dataset.treatTicket);
                 }
             });
@@ -133,7 +230,13 @@
             });
 
             const importTicketForTreatment = async query => {
-                setLoading(true);
+                if (isNavigatingToWorkspace) return;
+
+                isNavigatingToWorkspace = true;
+                window.clearTimeout(revalidationTimer);
+                activeListRequest?.abort();
+                results.querySelectorAll('[data-treat-ticket]').forEach(button => button.disabled = true);
+                setLoading(true, true);
                 try {
                     const response = await fetch('/ServiceDesk/Import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query }) });
                     const data = await response.json();
@@ -144,9 +247,12 @@
                         returnPageSize: pageSize,
                         returnStatus: status
                     });
-                    window.location = `/ServiceDesk/Workspace/${data.id}?${returnQuery}`;
+                    window.scrollTo(0, 0);
+                    window.location.assign(`/ServiceDesk/Workspace/${data.id}?${returnQuery}`);
                 } catch (error) {
+                    isNavigatingToWorkspace = false;
                     setLoading(false);
+                    results.querySelectorAll('[data-treat-ticket]').forEach(button => button.disabled = false);
                     Swal.fire({ icon: 'error', text: error.message });
                 }
             };
@@ -156,8 +262,10 @@
                 loadPage(page, pageSize, status, false);
             });
 
+            window.addEventListener('pageshow', () => setLoading(false));
+
             const { page, pageSize, status } = currentParams();
-            loadPage(page, pageSize, status, false);
+            loadPage(page, pageSize, status, false, true);
         })();
     </script>
 }
