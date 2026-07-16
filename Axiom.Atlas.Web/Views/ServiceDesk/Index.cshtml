@@ -44,6 +44,9 @@
             const allowedPageSizes = new Set([10, 25, 50, 100]);
             const allowedStatuses = new Set(['not_solved', 'all', 'new', 'processing_assigned', 'processing_planned', 'pending', 'solved', 'closed']);
             let revalidationTimer;
+            let activeListRequest;
+            let latestListRequest = 0;
+            let isNavigatingToWorkspace = false;
 
             const currentParams = () => {
                 const query = new URLSearchParams(window.location.search);
@@ -91,15 +94,25 @@
             };
 
             const loadPage = async (page, pageSize, status, updateUrl = true, forceRefresh = false) => {
+                if (isNavigatingToWorkspace) return;
+
+                activeListRequest?.abort();
+                const requestController = new AbortController();
+                activeListRequest = requestController;
+                const requestId = ++latestListRequest;
                 setLoading(true);
                 try {
-                    const response = await fetch(`/ServiceDesk/List?page=${page}&pageSize=${pageSize}&status=${encodeURIComponent(status)}&refresh=${forceRefresh}`);
+                    const response = await fetch(
+                        `/ServiceDesk/List?page=${page}&pageSize=${pageSize}&status=${encodeURIComponent(status)}&refresh=${forceRefresh}`,
+                        { signal: requestController.signal });
                     if (!response.ok) {
                         const error = await response.json().catch(() => ({}));
                         const requestError = new Error(error.message || 'Não foi possível consultar as solicitações de melhoria.');
                         requestError.detail = error.detail;
                         throw requestError;
                     }
+
+                    if (isNavigatingToWorkspace || requestId !== latestListRequest) return;
 
                     results.innerHTML = await response.text();
                     window.KTComponents?.init();
@@ -122,9 +135,11 @@
                         }, 5000);
                     }
                 } catch (error) {
+                    if (error.name === 'AbortError' || isNavigatingToWorkspace || requestId !== latestListRequest) return;
                     renderError(error.message || 'Não foi possível consultar as solicitações de melhoria.', error.detail);
                 } finally {
-                    setLoading(false);
+                    if (activeListRequest === requestController) activeListRequest = undefined;
+                    if (!isNavigatingToWorkspace && requestId === latestListRequest) setLoading(false);
                 }
             };
 
@@ -140,11 +155,13 @@
                     event.preventDefault();
                     const { page, pageSize, status } = currentParams();
                     loadPage(page, pageSize, status, false, true);
+                    return;
                 }
 
                 const treatmentButton = event.target.closest('[data-treat-ticket]');
                 if (treatmentButton) {
                     event.preventDefault();
+                    event.stopPropagation();
                     importTicketForTreatment(treatmentButton.dataset.treatTicket);
                 }
             });
@@ -160,6 +177,12 @@
             });
 
             const importTicketForTreatment = async query => {
+                if (isNavigatingToWorkspace) return;
+
+                isNavigatingToWorkspace = true;
+                window.clearTimeout(revalidationTimer);
+                activeListRequest?.abort();
+                results.querySelectorAll('[data-treat-ticket]').forEach(button => button.disabled = true);
                 setLoading(true);
                 try {
                     const response = await fetch('/ServiceDesk/Import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query }) });
@@ -171,9 +194,11 @@
                         returnPageSize: pageSize,
                         returnStatus: status
                     });
-                    window.location = `/ServiceDesk/Workspace/${data.id}?${returnQuery}`;
+                    window.location.assign(`/ServiceDesk/Workspace/${data.id}?${returnQuery}`);
                 } catch (error) {
+                    isNavigatingToWorkspace = false;
                     setLoading(false);
+                    results.querySelectorAll('[data-treat-ticket]').forEach(button => button.disabled = false);
                     Swal.fire({ icon: 'error', text: error.message });
                 }
             };
