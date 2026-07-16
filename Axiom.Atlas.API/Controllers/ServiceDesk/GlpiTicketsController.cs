@@ -13,10 +13,15 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
     {
         private readonly GlpiService _glpiService;
         private readonly GlpiImprovementTicketSynchronizationQueue _synchronizationQueue;
-        public GlpiTicketsController(GlpiService glpiService, GlpiImprovementTicketSynchronizationQueue synchronizationQueue)
+        private readonly IConfiguration _configuration;
+        public GlpiTicketsController(
+            GlpiService glpiService,
+            GlpiImprovementTicketSynchronizationQueue synchronizationQueue,
+            IConfiguration configuration)
         {
             _glpiService = glpiService;
             _synchronizationQueue = synchronizationQueue;
+            _configuration = configuration;
         }
 
         [HttpPost("import")]
@@ -46,6 +51,10 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
 
                 var tickets = await _glpiService.GetImprovementTicketsAsync(page, pageSize, status);
                 tickets.SynchronizationPending = _synchronizationQueue.IsSynchronizationPending;
+                tickets.SynchronizationIntervalSeconds = Math.Clamp(
+                    _configuration.GetValue<int?>("GlpiSynchronization:IntervalSeconds") ?? 300,
+                    60,
+                    3600);
                 return Ok(tickets);
             }
             catch (Exception exception)

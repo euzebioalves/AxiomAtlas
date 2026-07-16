@@ -93,14 +93,14 @@
                 window.setTimeout(() => row.classList.remove('service-desk-row-highlight'), 5000);
             };
 
-            const loadPage = async (page, pageSize, status, updateUrl = true, forceRefresh = false) => {
+            const loadPage = async (page, pageSize, status, updateUrl = true, forceRefresh = false, silent = false) => {
                 if (isNavigatingToWorkspace) return;
 
                 activeListRequest?.abort();
                 const requestController = new AbortController();
                 activeListRequest = requestController;
                 const requestId = ++latestListRequest;
-                setLoading(true);
+                if (!silent) setLoading(true);
                 try {
                     const response = await fetch(
                         `/ServiceDesk/List?page=${page}&pageSize=${pageSize}&status=${encodeURIComponent(status)}&refresh=${forceRefresh}`,
@@ -112,10 +112,20 @@
                         throw requestError;
                     }
 
+                    const markup = await response.text();
                     if (isNavigatingToWorkspace || requestId !== latestListRequest) return;
 
-                    results.innerHTML = await response.text();
-                    window.KTComponents?.init();
+                    const incomingVersion = new DOMParser()
+                        .parseFromString(markup, 'text/html')
+                        .querySelector('[data-projection-version]')?.dataset.projectionVersion;
+                    const currentVersion = results.querySelector('[data-projection-version]')?.dataset.projectionVersion;
+                    const shouldRender = !silent || incomingVersion !== currentVersion;
+
+                    if (shouldRender) {
+                        results.innerHTML = markup;
+                        window.KTComponents?.init();
+                        highlightTicket(currentParams().highlight);
+                    }
                     if (updateUrl) {
                         const url = new URL(window.location.href);
                         url.searchParams.set('page', page);
@@ -124,22 +134,20 @@
                         window.history.pushState({}, '', url);
                     }
 
-                    highlightTicket(currentParams().highlight);
-
                     // The API returns the local projection while the remote reconciliation runs.
                     // Re-read only the local data until it completes; do not enqueue another scan.
                     window.clearTimeout(revalidationTimer);
                     if (results.querySelector('[data-synchronization-pending="true"]')) {
                         revalidationTimer = window.setTimeout(() => {
-                            loadPage(page, pageSize, status, false, false);
+                            loadPage(page, pageSize, status, false, false, true);
                         }, 5000);
                     }
                 } catch (error) {
                     if (error.name === 'AbortError' || isNavigatingToWorkspace || requestId !== latestListRequest) return;
-                    renderError(error.message || 'Não foi possível consultar as solicitações de melhoria.', error.detail);
+                    if (!silent) renderError(error.message || 'Não foi possível consultar as solicitações de melhoria.', error.detail);
                 } finally {
                     if (activeListRequest === requestController) activeListRequest = undefined;
-                    if (!isNavigatingToWorkspace && requestId === latestListRequest) setLoading(false);
+                    if (!silent && !isNavigatingToWorkspace && requestId === latestListRequest) setLoading(false);
                 }
             };
 

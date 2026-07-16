@@ -42,6 +42,7 @@ namespace Axiom.Atlas.Application.DTOs.ServiceDesk
         public string StatusFilter { get; set; } = "not_solved";
         public DateTime? LastSynchronizedAt { get; set; }
         public bool SynchronizationPending { get; set; }
+        public int SynchronizationIntervalSeconds { get; set; } = 300;
         public int TotalPages => Math.Max(1, (int)Math.Ceiling(TotalCount / (double)Math.Max(1, PageSize)));
     }
 

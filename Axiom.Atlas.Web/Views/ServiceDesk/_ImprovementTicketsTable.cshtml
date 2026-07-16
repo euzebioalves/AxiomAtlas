@@ -5,16 +5,22 @@
     var firstPage = Math.Max(1, Model.Page - 2);
     var lastPage = Math.Min(Model.TotalPages, firstPage + 4);
     firstPage = Math.Max(1, lastPage - 4);
+    var synchronizationIntervalSeconds = Math.Clamp(Model.SynchronizationIntervalSeconds, 60, 3600);
+    var synchronizationCadence = synchronizationIntervalSeconds % 60 == 0
+        ? $"{synchronizationIntervalSeconds / 60} min"
+        : $"{synchronizationIntervalSeconds} s";
+    var synchronizationVersion = $"{Model.LastSynchronizedAt?.Ticks ?? 0}-{Model.TotalCount}-{Model.StatusFilter}-{Model.Page}-{Model.PageSize}-{Model.SynchronizationPending}";
 }
 
-<div class="card-header pt-7" data-synchronization-pending="@Model.SynchronizationPending.ToString().ToLowerInvariant()">
+<div class="card-header pt-7" data-synchronization-pending="@Model.SynchronizationPending.ToString().ToLowerInvariant()" data-projection-version="@synchronizationVersion">
     <div class="card-title flex-column align-items-start">
         <h3 class="mb-1">Fila de melhorias</h3>
         <div class="d-flex flex-wrap align-items-center gap-2 text-muted fs-7 fw-semibold">
             <span>@Model.TotalCount chamado(s) na fila local</span>
+            <span>· GLPI e OpenProject são conciliados automaticamente a cada @synchronizationCadence</span>
             @if (Model.LastSynchronizedAt.HasValue)
             {
-                <span>· Atualizada em @Model.LastSynchronizedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
+                <span>· Última sincronização concluída em @Model.LastSynchronizedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
             }
             @if (Model.SynchronizationPending)
             {
