@@ -185,9 +185,16 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                     await _context.SaveChangesAsync();
                 }
 
-                // The queue is a local projection. Refresh it immediately after a successful
-                // GLPI update so the operator sees the new User Story when returning to the list.
-                await RefreshImprovementTicketWorkPackageProjectionAsync(workspace);
+                // The queue is only a local read model. A failure while refreshing it must not
+                // turn a confirmed GLPI link into an error for the operator.
+                try
+                {
+                    await RefreshImprovementTicketWorkPackageProjectionAsync(workspace);
+                }
+                catch
+                {
+                    // The scheduled synchronization will reconcile the projection shortly.
+                }
 
                 return ToDto(workspace);
             }
