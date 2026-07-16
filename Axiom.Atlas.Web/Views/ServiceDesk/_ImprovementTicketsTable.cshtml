@@ -7,7 +7,7 @@
     firstPage = Math.Max(1, lastPage - 4);
 }
 
-<div class="card-header pt-7">
+<div class="card-header pt-7" data-synchronization-pending="@Model.SynchronizationPending.ToString().ToLowerInvariant()">
     <div class="card-title flex-column align-items-start">
         <h3 class="mb-1">Fila de melhorias</h3>
         <div class="d-flex flex-wrap align-items-center gap-2 text-muted fs-7 fw-semibold">

@@ -39,12 +39,8 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
             {
                 if (refresh)
                 {
-                    // A manual refresh is explicit: wait for GLPI and OpenProject reconciliation
-                    // before reading the local queue again.
-                    await _glpiService.SynchronizeImprovementTicketsAsync(HttpContext.RequestAborted);
-                }
-                else
-                {
+                    // GLPI plus OpenProject reconciliation can take longer than a browser request.
+                    // Queue it and return the local projection immediately (stale while revalidate).
                     _synchronizationQueue.RequestSynchronization();
                 }
 

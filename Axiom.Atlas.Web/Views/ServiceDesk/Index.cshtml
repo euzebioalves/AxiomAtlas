@@ -43,6 +43,7 @@
             const loader = document.getElementById('improvementsLoader');
             const allowedPageSizes = new Set([10, 25, 50, 100]);
             const allowedStatuses = new Set(['not_solved', 'all', 'new', 'processing_assigned', 'processing_planned', 'pending', 'solved', 'closed']);
+            let revalidationTimer;
 
             const currentParams = () => {
                 const query = new URLSearchParams(window.location.search);
@@ -111,6 +112,15 @@
                     }
 
                     highlightTicket(currentParams().highlight);
+
+                    // The API returns the local projection while the remote reconciliation runs.
+                    // Re-read only the local data until it completes; do not enqueue another scan.
+                    window.clearTimeout(revalidationTimer);
+                    if (results.querySelector('[data-synchronization-pending="true"]')) {
+                        revalidationTimer = window.setTimeout(() => {
+                            loadPage(page, pageSize, status, false, false);
+                        }, 5000);
+                    }
                 } catch (error) {
                     renderError(error.message || 'Não foi possível consultar as solicitações de melhoria.', error.detail);
                 } finally {
@@ -174,7 +184,7 @@
             });
 
             const { page, pageSize, status } = currentParams();
-            loadPage(page, pageSize, status, false);
+            loadPage(page, pageSize, status, false, true);
         })();
     </script>
 }

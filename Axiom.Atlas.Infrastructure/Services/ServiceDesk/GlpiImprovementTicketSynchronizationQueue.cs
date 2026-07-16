@@ -15,7 +15,10 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
 
         public void RequestSynchronization()
         {
-            if (Interlocked.CompareExchange(ref _pending, 1, 0) != 0)
+            // A refresh request while a reconciliation is already running must reuse it.
+            // Otherwise page polling could enqueue an endless sequence of full GLPI scans.
+            if (Volatile.Read(ref _processing) == 1 ||
+                Interlocked.CompareExchange(ref _pending, 1, 0) != 0)
             {
                 return;
             }
