@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using System.Security.Claims;
 
 namespace Axiom.Atlas.API.Controllers.Users
 {
@@ -43,16 +45,16 @@ namespace Axiom.Atlas.API.Controllers.Users
         }
 
         [HttpPut("update-profile")]
-        [Authorize(AuthenticationSchemes = "Identity.Bearer")]
+        [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
         public async Task<IActionResult> UpdateProfile([FromForm] UpdateProfileRequest request)
         {
-            var username = request.Username;
-            if (string.IsNullOrWhiteSpace(username))
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrWhiteSpace(userId))
             {
-                return BadRequest(new { message = "Nome de usuário é obrigatório." });
+                return Unauthorized(new { message = "Usuário autenticado não identificado." });
             }
 
-            var user = await _userRepository.GetByUsernameAsync(username);
+            var user = await _userManager.FindByIdAsync(userId);
             if (user == null) return NotFound();
 
             user.FullName = request.FullName ?? user.FullName;
@@ -72,6 +74,7 @@ namespace Axiom.Atlas.API.Controllers.Users
 
         // 1. LISTAR TODOS
         [HttpGet]
+        [Authorize(Policy = "AdministrationOnly")]
         public async Task<IActionResult> GetAll()
         {
             var users = await _userManager.Users
@@ -127,6 +130,7 @@ namespace Axiom.Atlas.API.Controllers.Users
 
         // 2. OBTER POR ID
         [HttpGet("{id}")]
+        [Authorize(Policy = "AdministrationOnly")]
         public async Task<IActionResult> GetById(Guid id)
         {
             var user = await _userManager.FindByIdAsync(id.ToString());
@@ -163,6 +167,7 @@ namespace Axiom.Atlas.API.Controllers.Users
 
         // 3. CRIAR NOVO USUÁRIO (A Mágica do Identity)
         [HttpPost]
+        [Authorize(Policy = "AdministrationOnly")]
         public async Task<IActionResult> Create([FromBody] UserCreateDto dto)
         {
             // 1. Validações básicas
@@ -211,6 +216,7 @@ namespace Axiom.Atlas.API.Controllers.Users
 
         // 4. ATUALIZAR USUÁRIO
         [HttpPut("{id}")]
+        [Authorize(Policy = "AdministrationOnly")]
         public async Task<IActionResult> Update(Guid id, [FromBody] UserUpdateDto dto)
         {
             if (id != dto.Id)
@@ -280,6 +286,7 @@ namespace Axiom.Atlas.API.Controllers.Users
 
         // 5. EXCLUIR / INATIVAR
         [HttpDelete("{id}")]
+        [Authorize(Policy = "AdministrationOnly")]
         public async Task<IActionResult> Delete(Guid id)
         {
             var user = await _userManager.FindByIdAsync(id.ToString());
@@ -299,6 +306,7 @@ namespace Axiom.Atlas.API.Controllers.Users
         }
 
         [HttpPut("{id}/ToggleStatus")]
+        [Authorize(Policy = "AdministrationOnly")]
         public async Task<IActionResult> ToggleStatus(Guid id, [FromServices] AppDbContext context)
         {
             // O UserManager busca o usuário (e o Entity Framework já começa a vigiá-lo)

@@ -3,6 +3,7 @@ using Axiom.Atlas.Web.Services.Auth;
 
 var builder = WebApplication.CreateBuilder(args);
 var apiBaseUrl = builder.Configuration["ApiSettings:BaseUrl"] ?? "https://localhost:7255/";
+var acceptDevelopmentCertificates = builder.Environment.IsDevelopment();
 
 // 1. Registros Básicos do MVC
 builder.Services.AddControllersWithViews();
@@ -12,26 +13,28 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddTransient<AuthHeaderHandler>();
 
 // 3. Registrando o Serviço HTTP (Apenas UMA vez, com todas as regras)
-builder.Services.AddHttpClient("Api", client =>
+var apiClientBuilder = builder.Services.AddHttpClient("Api", client =>
 {
     client.BaseAddress = new Uri(apiBaseUrl);
-})
-.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-{
-    ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
 });
 
-builder.Services.AddHttpClient<IAuthService, AuthService>(client =>
+if (acceptDevelopmentCertificates)
+{
+    apiClientBuilder.ConfigurePrimaryHttpMessageHandler(CreateDevelopmentHttpClientHandler);
+}
+
+var authClientBuilder = builder.Services.AddHttpClient<IAuthService, AuthService>(client =>
 {
     // A URL base que ele vai usar para bater na API
     client.BaseAddress = new Uri(apiBaseUrl);
-})
-.ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+});
+
+if (acceptDevelopmentCertificates)
 {
-    // Ignora erros de certificado SSL em ambiente de desenvolvimento local
-    ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true
-})
-.AddHttpMessageHandler<AuthHeaderHandler>();
+    authClientBuilder.ConfigurePrimaryHttpMessageHandler(CreateDevelopmentHttpClientHandler);
+}
+
+authClientBuilder.AddHttpMessageHandler<AuthHeaderHandler>();
 
 // 4. Configuração do Cookie de Autenticação (A "memória" do login no navegador)
 builder.Services.AddAuthentication("CookieAuth")
@@ -41,7 +44,25 @@ builder.Services.AddAuthentication("CookieAuth")
         options.LoginPath = "/Auth/Login";
         options.AccessDeniedPath = "/Auth/AccessDenied";
         options.SlidingExpiration = true;
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = acceptDevelopmentCertificates
+            ? CookieSecurePolicy.SameAsRequest
+            : CookieSecurePolicy.Always;
     });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdministrationOnly", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(context => context.User.Claims
+            .Where(claim => claim.Type == System.Security.Claims.ClaimTypes.Role)
+            .Select(claim => claim.Value)
+            .Any(role => role.Equals("Admin", StringComparison.OrdinalIgnoreCase) ||
+                         role.Equals("Administrador", StringComparison.OrdinalIgnoreCase)));
+    });
+});
 
 var app = builder.Build();
 
@@ -77,3 +98,9 @@ catch (System.Reflection.ReflectionTypeLoadException ex)
 }
 
 app.Run();
+
+static HttpClientHandler CreateDevelopmentHttpClientHandler() => new()
+{
+    // O certificado de desenvolvimento local não deve ser aceito fora deste ambiente.
+    ServerCertificateCustomValidationCallback = (_, _, _, _) => true
+};

@@ -59,4 +59,31 @@
         public string? GlpiVersion { get; set; }
         public List<string> Warnings { get; set; } = new();
     }
+
+    public class IntegrationSynchronizationOverviewDto
+    {
+        public int PendingCount { get; set; }
+        public int ProcessingCount { get; set; }
+        public int FailedCount { get; set; }
+        public int SucceededCount { get; set; }
+        public DateTime? LastCompletedAt { get; set; }
+        public List<IntegrationSynchronizationJobDetailsDto> Jobs { get; set; } = new();
+    }
+
+    public class IntegrationSynchronizationJobDetailsDto
+    {
+        public Guid Id { get; set; }
+        public string Type { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public string CorrelationKey { get; set; } = string.Empty;
+        public long? GlpiTicketId { get; set; }
+        public int? OpenProjectWorkPackageId { get; set; }
+        public int AttemptCount { get; set; }
+        public int MaxAttempts { get; set; }
+        public DateTime AvailableAt { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? StartedAt { get; set; }
+        public DateTime? CompletedAt { get; set; }
+        public string? LastError { get; set; }
+    }
 }

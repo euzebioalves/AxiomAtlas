@@ -4,5 +4,6 @@
   <Project Path="Axiom.Atlas.Domain/Axiom.Atlas.Domain.csproj" Id="993aaa35-d305-4d03-a0c3-7e6003593c3c" />
   <Project Path="Axiom.Atlas.Infrastructure/Axiom.Atlas.Infrastructure.csproj" Id="7264f9a6-dd29-4587-9b49-4bdded0bbd7f" />
   <Project Path="Axiom.Atlas.Persistence/Axiom.Atlas.Persistence.csproj" Id="1aa91ad4-83f8-451d-94ba-1b0735e57536" />
+  <Project Path="Axiom.Atlas.Tests/Axiom.Atlas.Tests.csproj" />
   <Project Path="Axiom.Atlas.Web/Axiom.Atlas.Web.csproj" />
 </Solution>

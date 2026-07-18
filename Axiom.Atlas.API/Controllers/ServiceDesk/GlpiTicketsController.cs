@@ -46,11 +46,12 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
                 {
                     // GLPI plus OpenProject reconciliation can take longer than a browser request.
                     // Queue it and return the local projection immediately (stale while revalidate).
-                    _synchronizationQueue.RequestSynchronization();
+                    await _synchronizationQueue.RequestSynchronizationAsync(
+                        User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name);
                 }
 
                 var tickets = await _glpiService.GetImprovementTicketsAsync(page, pageSize, status);
-                tickets.SynchronizationPending = _synchronizationQueue.IsSynchronizationPending;
+                tickets.SynchronizationPending = await _synchronizationQueue.IsSynchronizationPendingAsync();
                 tickets.SynchronizationIntervalSeconds = Math.Clamp(
                     _configuration.GetValue<int?>("GlpiSynchronization:IntervalSeconds") ?? 300,
                     60,
@@ -86,6 +87,29 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
             try { return Ok(await _glpiService.CreateUserStoryAsync(id, request)); }
             catch (KeyNotFoundException) { return NotFound(); }
             catch (Exception exception) { return BadRequest(new { message = exception.Message }); }
+        }
+
+        [HttpPost("{id:guid}/glpi-link/reprocess")]
+        public async Task<IActionResult> ReprocessGlpiLink(Guid id)
+        {
+            var workspace = await _glpiService.GetWorkspaceAsync(id);
+            if (workspace == null) return NotFound();
+            if (!workspace.OpenProjectWorkPackageId.HasValue)
+            {
+                return BadRequest(new { message = "Crie ou vincule uma User Story antes de sincronizar o GLPI." });
+            }
+
+            var job = await _synchronizationQueue.RequestGlpiLinkUpdateAsync(
+                id,
+                workspace.GlpiTicketId,
+                workspace.OpenProjectWorkPackageId,
+                User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name);
+            return Accepted(new
+            {
+                job.Id,
+                status = job.Status.ToString(),
+                message = "O vínculo com o GLPI foi colocado na fila de sincronização."
+            });
         }
 
         [HttpGet("{id:guid}/attachments/{documentId:int}")]

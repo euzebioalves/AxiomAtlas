@@ -1,5 +1,6 @@
 ﻿using Axiom.Atlas.Web.Model.Roles;
 using Axiom.Atlas.Web.Model.Users;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -7,6 +8,7 @@ using System.Text.Json;
 namespace Axiom.Atlas.Web.Controllers.Users
 {
     [Route("Users")]
+    [Authorize]
     public class UsersController : Controller
     {
         private readonly IWebHostEnvironment _env;
@@ -19,6 +21,7 @@ namespace Axiom.Atlas.Web.Controllers.Users
         }
 
         [HttpGet("/Users/GetAvatar")]
+        [AllowAnonymous]
         public async Task<IActionResult> GetAvatar([FromQuery] string username)
         {
             var defaultImagePath = Path.Combine(_env.WebRootPath, "resources", "images", "1.png");
@@ -117,6 +120,7 @@ namespace Axiom.Atlas.Web.Controllers.Users
         }
 
         [HttpGet]
+        [Authorize(Policy = "AdministrationOnly")]
         public async Task<IActionResult> Index()
         {
             var client = _httpClientFactory.CreateClient("Api");
@@ -154,6 +158,7 @@ namespace Axiom.Atlas.Web.Controllers.Users
         }
 
         [HttpPost("Create")]
+        [Authorize(Policy = "AdministrationOnly")]
         public async Task<IActionResult> Create([FromBody] UserCreateViewModel model)
         {
             if (string.IsNullOrWhiteSpace(model.FullName) || string.IsNullOrWhiteSpace(model.Email) || string.IsNullOrWhiteSpace(model.Password))
@@ -185,6 +190,7 @@ namespace Axiom.Atlas.Web.Controllers.Users
 
         // 1. BUSCAR USUÁRIO PARA PREENCHER O MODAL
         [HttpGet("GetUserForEdit/{id}")]
+        [Authorize(Policy = "AdministrationOnly")]
         public async Task<IActionResult> GetUserForEdit(Guid id)
         {
             var client = _httpClientFactory.CreateClient("Api");
@@ -210,6 +216,7 @@ namespace Axiom.Atlas.Web.Controllers.Users
 
         // 2. ENVIAR OS DADOS ATUALIZADOS
         [HttpPost("Edit/{id}")]
+        [Authorize(Policy = "AdministrationOnly")]
         public async Task<IActionResult> Edit(Guid id, [FromBody] UserUpdateViewModel model)
         {
             if (id != model.Id)
@@ -239,6 +246,7 @@ namespace Axiom.Atlas.Web.Controllers.Users
         }
 
         [HttpDelete("Delete/{id}")]
+        [Authorize(Policy = "AdministrationOnly")]
         public async Task<IActionResult> Delete(Guid id)
         {
             var client = _httpClientFactory.CreateClient("Api");
@@ -261,6 +269,7 @@ namespace Axiom.Atlas.Web.Controllers.Users
         }
 
         [HttpPut("ToggleStatus/{id}")]
+        [Authorize(Policy = "AdministrationOnly")]
         public async Task<IActionResult> ToggleStatus(Guid id)
         {
             var client = _httpClientFactory.CreateClient("Api");

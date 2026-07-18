@@ -16,15 +16,18 @@ namespace Axiom.Atlas.Infrastructure.Services.Auth
         private readonly IConfiguration _configuration;
         private readonly IUserRepository _userRepository;
         private readonly IPasswordHasher<User> _passwordHasher;
+        private readonly UserManager<User> _userManager;
 
         public AuthService(
             IUserRepository userRepository,
             IConfiguration configuration,
-            IPasswordHasher<User> passwordHasher)
+            IPasswordHasher<User> passwordHasher,
+            UserManager<User> userManager)
         {
             _userRepository = userRepository;
             _configuration = configuration;
             _passwordHasher = passwordHasher;
+            _userManager = userManager;
         }
 
         public async Task<LoginResponse?> AuthenticateAsync(string username, string password)
@@ -35,7 +38,8 @@ namespace Axiom.Atlas.Infrastructure.Services.Auth
                 return null;
             }
 
-            var token = GenerateJwtToken(user);
+            var roles = await _userManager.GetRolesAsync(user);
+            var token = GenerateJwtToken(user, roles);
             var safeUsername = Uri.EscapeDataString(user.UserName ?? string.Empty);
 
             return new LoginResponse
@@ -47,7 +51,8 @@ namespace Axiom.Atlas.Infrastructure.Services.Auth
                 PhoneNumber = user.PhoneNumber ?? string.Empty,
                 JobTitle = user.JobTitle,
                 IsActive = user.IsActive,
-                ProfilePictureUrl = $"https://localhost:7255/api/Users/profile-picture/{safeUsername}"
+                ProfilePictureUrl = $"https://localhost:7255/api/Users/profile-picture/{safeUsername}",
+                Roles = roles.ToArray()
             };
         }
 
@@ -63,9 +68,9 @@ namespace Axiom.Atlas.Infrastructure.Services.Auth
                    result == PasswordVerificationResult.SuccessRehashNeeded;
         }
 
-        private string GenerateJwtToken(User user)
+        private string GenerateJwtToken(User user, IEnumerable<string> roles)
         {
-            var claims = new[]
+            var claims = new List<Claim>
             {
                 new Claim(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
                 new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
@@ -76,6 +81,9 @@ namespace Axiom.Atlas.Infrastructure.Services.Auth
                 new Claim("FullName", user.FullName),
                 new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
             };
+
+            // Papéis precisam viajar no JWT: a API é a autoridade para rotas administrativas.
+            claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
 
             var secretKey = _configuration["JwtSettings:SecretKey"]
                 ?? throw new InvalidOperationException("JwtSettings:SecretKey não configurado.");

@@ -5,6 +5,7 @@ using Axiom.Atlas.Domain.Entities.ServiceDesk;
 using Axiom.Atlas.Persistence;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System.Collections.Concurrent;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
@@ -21,18 +22,28 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly AppDbContext _context;
         private readonly IDataProtector _protector;
-        private readonly OpenProjectService _openProjectService;
+    private readonly OpenProjectService _openProjectService;
+    private readonly GlpiImprovementTicketSynchronizationQueue _synchronizationQueue;
+    private readonly ILogger<GlpiService> _logger;
         private static readonly ConcurrentDictionary<string, CachedGlpiSession> GlpiSessions = new();
         private static readonly ConcurrentDictionary<string, GlpiSearchFieldMetadata> SearchFieldMetadata = new();
         private static readonly ConcurrentDictionary<string, SemaphoreSlim> SessionLocks = new();
         private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> WorkspaceLocks = new();
 
-        public GlpiService(IHttpClientFactory httpClientFactory, AppDbContext context, IDataProtectionProvider provider, OpenProjectService openProjectService)
+        public GlpiService(
+            IHttpClientFactory httpClientFactory,
+        AppDbContext context,
+        IDataProtectionProvider provider,
+        OpenProjectService openProjectService,
+        GlpiImprovementTicketSynchronizationQueue synchronizationQueue,
+        ILogger<GlpiService> logger)
         {
             _httpClientFactory = httpClientFactory;
             _context = context;
             _protector = provider.CreateProtector("AxiomAtlas.Integrations");
-            _openProjectService = openProjectService;
+        _openProjectService = openProjectService;
+        _synchronizationQueue = synchronizationQueue;
+        _logger = logger;
         }
 
         public async Task<GlpiConnectionTestResult> TestConnectionAsync(TestGlpiConnectionRequest request)
@@ -73,6 +84,7 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             }
             catch (Exception exception)
             {
+                _logger.LogWarning(exception, "Não foi possível validar a conexão com o GLPI.");
                 return new GlpiConnectionTestResult { Message = exception.Message };
             }
         }
@@ -179,10 +191,19 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
 
                 if (!string.Equals(workspace.GlpiDevOpsUrl, workspace.OpenProjectWorkPackageUrl, StringComparison.OrdinalIgnoreCase))
                 {
-                    await UpdateGlpiDevOpsUrlAsync(workspace, workspace.OpenProjectWorkPackageUrl);
-                    workspace.GlpiDevOpsUrl = workspace.OpenProjectWorkPackageUrl;
-                    workspace.UpdatedAt = DateTime.UtcNow;
-                    await _context.SaveChangesAsync();
+                    try
+                    {
+                        await LinkWorkspaceToGlpiCoreAsync(workspace, CancellationToken.None);
+                    }
+                    catch
+                    {
+                        // The Work Package is already durable. Persist a repair job instead of asking the
+                        // operator to recreate it when only the remote GLPI field update was unavailable.
+                        await _synchronizationQueue.RequestGlpiLinkUpdateAsync(
+                            workspace.Id,
+                            workspace.GlpiTicketId,
+                            workspace.OpenProjectWorkPackageId);
+                    }
                 }
 
                 // The queue is only a local read model. A failure while refreshing it must not
@@ -244,6 +265,9 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
 
         public async Task SynchronizeImprovementTicketsAsync(CancellationToken cancellationToken = default)
         {
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            _logger.LogInformation("Iniciando sincronização de solicitações de melhoria do GLPI.");
+
             var setting = await _context.Integrations.AsNoTracking()
                 .FirstOrDefaultAsync(x => x.Provider == "GLPI" && x.IsActive, cancellationToken)
                 ?? throw new InvalidOperationException("Configure e ative uma integração GLPI antes de sincronizar as demandas.");
@@ -263,6 +287,7 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             using var result = await GetJsonAsync(client, sessionToken, endpoint, cancellationToken);
             if (!result.RootElement.TryGetProperty("data", out var rows) || rows.ValueKind != JsonValueKind.Array)
             {
+                _logger.LogWarning("A sincronização do GLPI foi concluída sem uma coleção de chamados válida.");
                 return;
             }
 
@@ -273,6 +298,7 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                 .ToList();
             if (candidates.Count == 0)
             {
+                _logger.LogInformation("A sincronização do GLPI não encontrou solicitações de melhoria elegíveis.");
                 return;
             }
 
@@ -356,6 +382,11 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             }
 
             await _context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "Sincronização de solicitações de melhoria do GLPI concluída. {TicketCount} chamado(s) processado(s) em {ElapsedMilliseconds} ms.",
+                synchronizedTicketIds.Count,
+                stopwatch.ElapsedMilliseconds);
         }
 
         private async Task RefreshImprovementTicketWorkPackageProjectionAsync(GlpiTicketWorkspace workspace)
@@ -575,7 +606,68 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
         public async Task<GlpiTicketWorkspaceDto?> GetWorkspaceAsync(Guid id)
         {
             var workspace = await _context.GlpiTicketWorkspaces.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id);
-            return workspace == null ? null : ToDto(workspace);
+            if (workspace == null) return null;
+            var dto = ToDto(workspace);
+            var job = await _synchronizationQueue.GetLatestGlpiLinkJobAsync(id);
+            if (job != null && !string.Equals(workspace.GlpiDevOpsUrl, workspace.OpenProjectWorkPackageUrl, StringComparison.OrdinalIgnoreCase))
+            {
+                dto.GlpiLinkSynchronization = ToSynchronizationDto(job);
+            }
+            return dto;
+        }
+
+        public async Task<GlpiTicketWorkspaceDto> LinkWorkspaceToGlpiAsync(Guid workspaceId, CancellationToken cancellationToken = default)
+        {
+            var workspaceLock = WorkspaceLocks.GetOrAdd(workspaceId, _ => new SemaphoreSlim(1, 1));
+            await workspaceLock.WaitAsync(cancellationToken);
+            try
+            {
+                var workspace = await _context.GlpiTicketWorkspaces.FindAsync([workspaceId], cancellationToken)
+                    ?? throw new KeyNotFoundException("Chamado importado não encontrado.");
+                await LinkWorkspaceToGlpiCoreAsync(workspace, cancellationToken);
+                return ToDto(workspace);
+            }
+            finally
+            {
+                workspaceLock.Release();
+            }
+        }
+
+        private async Task LinkWorkspaceToGlpiCoreAsync(GlpiTicketWorkspace workspace, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(workspace.OpenProjectWorkPackageUrl))
+            {
+                throw new InvalidOperationException("Não há User Story vinculada para enviar ao GLPI.");
+            }
+
+            if (string.Equals(workspace.GlpiDevOpsUrl, workspace.OpenProjectWorkPackageUrl, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation(
+                    "O vínculo GLPI já estava atualizado para o chamado {GlpiTicketId}.",
+                    workspace.GlpiTicketId);
+                return;
+            }
+
+            _logger.LogInformation(
+                "Atualizando o vínculo da Work Package no GLPI para o chamado {GlpiTicketId}.",
+                workspace.GlpiTicketId);
+            await UpdateGlpiDevOpsUrlAsync(workspace, workspace.OpenProjectWorkPackageUrl);
+            workspace.GlpiDevOpsUrl = workspace.OpenProjectWorkPackageUrl;
+            workspace.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "Vínculo da Work Package no GLPI atualizado para o chamado {GlpiTicketId}.",
+                workspace.GlpiTicketId);
+
+            try
+            {
+                await RefreshImprovementTicketWorkPackageProjectionAsync(workspace);
+            }
+            catch
+            {
+                // The next projection refresh will reconcile the read model.
+            }
         }
 
         public async Task<(byte[] Content, string ContentType)> DownloadAttachmentAsync(Guid workspaceId, int documentId)
@@ -1204,6 +1296,17 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
         }
         private string UnprotectRequired(string? token, string label) => string.IsNullOrWhiteSpace(token) ? throw new InvalidOperationException($"{label} do GLPI não configurado.") : _protector.Unprotect(token);
         private static GlpiTicketWorkspaceDto ToDto(GlpiTicketWorkspace x) => new() { Id = x.Id, GlpiTicketId = x.GlpiTicketId, Subject = x.Subject, EntityPath = x.EntityPath, ClientEntityName = x.ClientEntityName, Classification = x.Classification, TicketPayloadJson = x.TicketPayloadJson, FollowUpsJson = x.FollowUpsJson, AttachmentsJson = x.AttachmentsJson, RequirementMarkdown = x.RequirementMarkdown, OpenProjectWorkPackageId = x.OpenProjectWorkPackageId, OpenProjectWorkPackageUrl = x.OpenProjectWorkPackageUrl, GlpiDevOpsFieldId = x.GlpiDevOpsFieldId, GlpiDevOpsUrl = x.GlpiDevOpsUrl };
+
+        private static IntegrationSynchronizationJobDto ToSynchronizationDto(IntegrationSynchronizationJob job) => new()
+        {
+            Id = job.Id,
+            Type = job.Type.ToString(),
+            Status = job.Status.ToString(),
+            AttemptCount = job.AttemptCount,
+            MaxAttempts = job.MaxAttempts,
+            NextAttemptAt = job.Status == IntegrationSynchronizationJobStatus.Pending ? job.AvailableAt : null,
+            LastError = job.LastError
+        };
 
         private HttpClient CreateClient(string baseUrl, string appToken)
         {

@@ -10,5 +10,6 @@
         public string JobTitle { get; set; } = string.Empty;
         public string ProfilePictureUrl { get; set; } = string.Empty;
         public bool IsActive { get; set; }
+        public IReadOnlyCollection<string> Roles { get; set; } = Array.Empty<string>();
     }
 }

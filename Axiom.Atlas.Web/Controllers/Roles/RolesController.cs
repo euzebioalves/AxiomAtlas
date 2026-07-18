@@ -6,7 +6,7 @@ using System.Text.Json;
 
 namespace Axiom.Atlas.Web.Controllers.Roles
 {
-    [Authorize]
+    [Authorize(Policy = "AdministrationOnly")]
     public class RolesController : Controller
     {
         private readonly IHttpClientFactory _httpClientFactory;
