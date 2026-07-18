@@ -36,6 +36,7 @@ namespace Axiom.Atlas.Persistence
         public DbSet<IntegrationSettings> Integrations { get; set; }
         public DbSet<GlpiTicketWorkspace> GlpiTicketWorkspaces { get; set; }
         public DbSet<GlpiImprovementTicket> GlpiImprovementTickets { get; set; }
+        public DbSet<IntegrationSynchronizationJob> IntegrationSynchronizationJobs { get; set; }
 
         //Desktop notifications
         public DbSet<UserDesktopNotificationSetting> UserDesktopNotificationSettings { get; set; }
@@ -171,6 +172,19 @@ namespace Axiom.Atlas.Persistence
                 entity.Property(x => x.WorkPackageStatus).HasMaxLength(200);
                 entity.Property(x => x.WorkPackageCreator).HasMaxLength(300);
                 entity.HasIndex(x => new { x.IsInImprovementQueue, x.StatusCode, x.OpenedAt });
+            });
+
+            builder.Entity<IntegrationSynchronizationJob>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(100);
+                entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(50);
+                entity.Property(x => x.CorrelationKey).HasMaxLength(200).IsRequired();
+                entity.Property(x => x.RequestedByUserId).HasMaxLength(100);
+                entity.Property(x => x.LastError).HasColumnType("text");
+                entity.HasIndex(x => new { x.Status, x.AvailableAt });
+                entity.HasIndex(x => new { x.Type, x.CorrelationKey, x.CreatedAt });
+                entity.HasIndex(x => x.WorkspaceId);
             });
 
             builder.Entity<UserDesktopNotificationSetting>(entity =>

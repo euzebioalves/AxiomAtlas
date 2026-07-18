@@ -49,6 +49,8 @@ namespace Axiom.Atlas.Web.Controllers.Auth
             new Claim("JWToken", loginResult.Token)
         };
 
+                claims.AddRange(loginResult.Roles.Select(role => new Claim(ClaimTypes.Role, role)));
+
                 var claimsIdentity = new ClaimsIdentity(claims, "CookieAuth");
 
                 var authProperties = new AuthenticationProperties

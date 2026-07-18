@@ -1,5 +1,6 @@
 ﻿using Axiom.Atlas.Application.DTOs.Integrations;
 using Axiom.Atlas.Domain.Entities.Integrations;
+using Axiom.Atlas.Domain.Entities.ServiceDesk;
 using Axiom.Atlas.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -8,32 +9,36 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Axiom.Atlas.Infrastructure.Services.TimeEntries;
 using Axiom.Atlas.Infrastructure.Services.ServiceDesk;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace Axiom.Atlas.API.Controllers.Integrations
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme, Policy = "AdministrationOnly")]
     public class IntegrationsController : ControllerBase
     {
         private readonly AppDbContext _context;
         private readonly IDataProtector _protector;
         private readonly OpenProjectService _openProjectService;
         private readonly GlpiService _glpiService;
+        private readonly GlpiImprovementTicketSynchronizationQueue _synchronizationQueue;
 
         // Injetamos o contexto do banco e o provedor de proteção de dados
         public IntegrationsController(
             AppDbContext context,
             IDataProtectionProvider provider,
             OpenProjectService openProjectService,
-            GlpiService glpiService)
+            GlpiService glpiService,
+            GlpiImprovementTicketSynchronizationQueue synchronizationQueue)
         {
             _context = context;
             // O nome "AxiomAtlas.Integrations" é o propósito. Serve como um "sal" extra.
             _protector = provider.CreateProtector("AxiomAtlas.Integrations");
             _openProjectService = openProjectService;
             _glpiService = glpiService;
+            _synchronizationQueue = synchronizationQueue;
         }
 
         [HttpPost("openproject")]
@@ -174,6 +179,77 @@ namespace Axiom.Atlas.API.Controllers.Integrations
         {
             var result = await _glpiService.TestConnectionAsync(request);
             return result.Success ? Ok(result) : BadRequest(result);
+        }
+
+        [HttpGet("synchronizations")]
+        public async Task<IActionResult> GetSynchronizations([FromQuery] string? status = null, [FromQuery] int take = 50)
+        {
+            var safeTake = Math.Clamp(take, 10, 200);
+            var baseQuery = _context.IntegrationSynchronizationJobs.AsNoTracking();
+            var counts = await baseQuery
+                .GroupBy(x => x.Status)
+                .Select(x => new { Status = x.Key, Count = x.Count() })
+                .ToListAsync();
+
+            var jobsQuery = baseQuery;
+            if (!string.IsNullOrWhiteSpace(status) &&
+                Enum.TryParse<IntegrationSynchronizationJobStatus>(status, true, out var parsedStatus))
+            {
+                jobsQuery = jobsQuery.Where(x => x.Status == parsedStatus);
+            }
+
+            var persistedJobs = await jobsQuery
+                .OrderByDescending(x => x.CreatedAt)
+                .Take(safeTake)
+                .ToListAsync();
+
+            var jobs = persistedJobs.Select(x => new IntegrationSynchronizationJobDetailsDto
+                {
+                    Id = x.Id,
+                    Type = x.Type.ToString(),
+                    Status = x.Status.ToString(),
+                    CorrelationKey = x.CorrelationKey,
+                    GlpiTicketId = x.GlpiTicketId,
+                    OpenProjectWorkPackageId = x.OpenProjectWorkPackageId,
+                    AttemptCount = x.AttemptCount,
+                    MaxAttempts = x.MaxAttempts,
+                    AvailableAt = x.AvailableAt,
+                    CreatedAt = x.CreatedAt,
+                    StartedAt = x.StartedAt,
+                    CompletedAt = x.CompletedAt,
+                    LastError = x.LastError
+                })
+                .ToList();
+
+            return Ok(new IntegrationSynchronizationOverviewDto
+            {
+                PendingCount = counts.FirstOrDefault(x => x.Status == IntegrationSynchronizationJobStatus.Pending)?.Count ?? 0,
+                ProcessingCount = counts.FirstOrDefault(x => x.Status == IntegrationSynchronizationJobStatus.Processing)?.Count ?? 0,
+                FailedCount = counts.FirstOrDefault(x => x.Status == IntegrationSynchronizationJobStatus.Failed)?.Count ?? 0,
+                SucceededCount = counts.FirstOrDefault(x => x.Status == IntegrationSynchronizationJobStatus.Succeeded)?.Count ?? 0,
+                LastCompletedAt = await baseQuery
+                    .Where(x => x.Status == IntegrationSynchronizationJobStatus.Succeeded)
+                    .MaxAsync(x => x.CompletedAt),
+                Jobs = jobs
+            });
+        }
+
+        [HttpPost("synchronizations/{id:guid}/retry")]
+        public async Task<IActionResult> RetrySynchronization(Guid id)
+        {
+            var requestedBy = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name;
+            var job = await _synchronizationQueue.RetryAsync(id, requestedBy);
+            if (job == null)
+            {
+                return NotFound(new { message = "Operação de integração não encontrada." });
+            }
+
+            return Accepted(new
+            {
+                id = job.Id,
+                status = job.Status.ToString(),
+                message = "Nova tentativa adicionada à fila de integração."
+            });
         }
 
         private Task UpsertGlpiEnvironmentSetting(

@@ -1,4 +1,5 @@
 ﻿using Axiom.Atlas.Web.Model.Integrations;
+using Axiom.Atlas.Application.DTOs.Integrations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Net.Http.Headers;
@@ -7,7 +8,7 @@ using IHttpClientFactory = System.Net.Http.IHttpClientFactory;
 
 namespace Axiom.Atlas.Web.Controllers.Integrations
 {
-    [Authorize]
+    [Authorize(Policy = "AdministrationOnly")]
     public class IntegrationsController : Controller
     {
         private readonly IHttpClientFactory _httpClientFactory;
@@ -162,6 +163,48 @@ namespace Axiom.Atlas.Web.Controllers.Integrations
                 ContentType = "application/json",
                 Content = await response.Content.ReadAsStringAsync()
             };
+        }
+
+        [HttpGet]
+        public IActionResult Operations() => View();
+
+        [HttpGet]
+        public async Task<IActionResult> SynchronizationJobs(string? status = null, int take = 50)
+        {
+            var client = CreateApiClient();
+            var response = await client.GetAsync($"api/integrations/synchronizations?status={Uri.EscapeDataString(status ?? string.Empty)}&take={Math.Clamp(take, 10, 200)}");
+            if (!response.IsSuccessStatusCode)
+            {
+                return StatusCode((int)response.StatusCode, await response.Content.ReadAsStringAsync());
+            }
+
+            var model = await response.Content.ReadFromJsonAsync<IntegrationSynchronizationOverviewDto>() ?? new();
+            return PartialView("_SynchronizationJobs", model);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> RetrySynchronizationJob(Guid id)
+        {
+            var client = CreateApiClient();
+            var response = await client.PostAsync($"api/integrations/synchronizations/{id}/retry", null);
+            return new ContentResult
+            {
+                StatusCode = (int)response.StatusCode,
+                ContentType = "application/json",
+                Content = await response.Content.ReadAsStringAsync()
+            };
+        }
+
+        private HttpClient CreateApiClient()
+        {
+            var client = _httpClientFactory.CreateClient("Api");
+            var token = User.FindFirst("JWToken")?.Value;
+            if (!string.IsNullOrWhiteSpace(token))
+            {
+                client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            }
+
+            return client;
         }
     }
 }

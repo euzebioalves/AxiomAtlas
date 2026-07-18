@@ -1,7 +1,9 @@
+using Axiom.Atlas.Domain.Entities.ServiceDesk;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System.Diagnostics;
 
 namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
 {
@@ -27,43 +29,61 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            _queue.RequestSynchronization();
+            await _queue.RecoverInterruptedJobsAsync(stoppingToken);
+            await _queue.RequestSynchronizationAsync();
             var nextScheduledSynchronization = DateTimeOffset.UtcNow;
 
             while (!stoppingToken.IsCancellationRequested)
             {
-                var requested = _queue.TryDequeue();
-                if (requested || DateTimeOffset.UtcNow >= nextScheduledSynchronization)
+                if (DateTimeOffset.UtcNow >= nextScheduledSynchronization)
                 {
-                    _queue.SetProcessing(true);
-                    try
-                    {
-                        using var scope = _scopeFactory.CreateScope();
-                        var glpiService = scope.ServiceProvider.GetRequiredService<GlpiService>();
-                        await glpiService.SynchronizeImprovementTicketsAsync(stoppingToken);
-                        _logger.LogInformation("Fila local de solicitações de melhoria sincronizada com o GLPI.");
-                    }
-                    catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-                    {
-                        break;
-                    }
-                    catch (InvalidOperationException exception)
-                    {
-                        _logger.LogDebug(exception, "Sincronização GLPI aguardando uma integração ativa e válida.");
-                    }
-                    catch (Exception exception)
-                    {
-                        _logger.LogError(exception, "Falha ao sincronizar a fila local de solicitações de melhoria.");
-                    }
-                    finally
-                    {
-                        _queue.SetProcessing(false);
-                    }
-
+                    await _queue.RequestSynchronizationAsync();
                     nextScheduledSynchronization = DateTimeOffset.UtcNow.Add(_interval);
                 }
 
-                await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
+                var job = await _queue.ClaimNextAsync(stoppingToken);
+                if (job == null)
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(1), stoppingToken);
+                    continue;
+                }
+
+                try
+                {
+                    var stopwatch = Stopwatch.StartNew();
+                    using var logScope = _logger.BeginScope(new Dictionary<string, object?>
+                    {
+                        ["IntegrationJobId"] = job.Id,
+                        ["IntegrationJobType"] = job.Type.ToString(),
+                        ["CorrelationKey"] = job.CorrelationKey,
+                        ["GlpiTicketId"] = job.GlpiTicketId,
+                        ["OpenProjectWorkPackageId"] = job.OpenProjectWorkPackageId
+                    });
+                    using var scope = _scopeFactory.CreateScope();
+                    var glpiService = scope.ServiceProvider.GetRequiredService<GlpiService>();
+                    if (job.Type == IntegrationSynchronizationJobType.RefreshGlpiImprovementTickets)
+                    {
+                        await glpiService.SynchronizeImprovementTicketsAsync(stoppingToken);
+                    }
+                    else if (job.Type == IntegrationSynchronizationJobType.UpdateGlpiWorkPackageLink && job.WorkspaceId.HasValue)
+                    {
+                        await glpiService.LinkWorkspaceToGlpiAsync(job.WorkspaceId.Value, stoppingToken);
+                    }
+
+                    await _queue.MarkSucceededAsync(job.Id, stoppingToken);
+                    _logger.LogInformation(
+                        "Operação persistida de integração concluída em {ElapsedMilliseconds} ms.",
+                        stopwatch.ElapsedMilliseconds);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception exception)
+                {
+                    _logger.LogError(exception, "Falha na operação persistida de integração.");
+                    await _queue.MarkFailedAsync(job.Id, exception, stoppingToken);
+                }
             }
         }
     }

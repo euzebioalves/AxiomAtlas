@@ -5,7 +5,7 @@ using System.Net.Http.Headers;
 
 namespace Axiom.Atlas.Web.Controllers.AuditLog
 {
-    [Authorize] // Protege a tela
+    [Authorize(Policy = "AdministrationOnly")]
     public class AuditLogController : Controller
     {
         private readonly IHttpClientFactory _httpClientFactory;

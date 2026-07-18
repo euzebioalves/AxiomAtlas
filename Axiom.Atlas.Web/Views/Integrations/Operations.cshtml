@@ -1,0 +1,115 @@
+@{
+    ViewData["Title"] = "Operações de Integração";
+}
+
+<div class="app-container container-fluid">
+    <div class="card mb-5 mb-xl-8">
+        <div class="card-body py-8">
+            <div class="d-flex flex-stack flex-wrap gap-4">
+                <div>
+                    <span class="badge badge-light-primary mb-3">Integrações</span>
+                    <h1 class="fw-bold fs-2x mb-2">Operações de integração</h1>
+                    <div class="text-muted fw-semibold">Acompanhe a fila persistida, as tentativas automáticas e os erros de comunicação com GLPI e OpenProject.</div>
+                </div>
+                <button id="refresh-synchronizations" type="button" class="btn btn-light-primary">
+                    <i class="ki-duotone ki-arrows-circle fs-2"><span class="path1"></span><span class="path2"></span></i>
+                    Atualizar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header border-0 pt-6">
+            <div class="card-title">
+                <div class="d-flex align-items-center position-relative my-1">
+                    <i class="ki-duotone ki-filter-search fs-3 position-absolute ms-5"><span class="path1"></span><span class="path2"></span></i>
+                    <select id="synchronization-status" class="form-select form-select-solid ps-12 w-250px" aria-label="Filtrar operações por estado">
+                        <option value="">Todos os estados</option>
+                        <option value="Pending">Pendente</option>
+                        <option value="Processing">Em processamento</option>
+                        <option value="Failed">Com falha</option>
+                        <option value="Succeeded">Concluída</option>
+                    </select>
+                </div>
+            </div>
+            <div class="card-toolbar">
+                <span class="text-muted fs-7">A fila é retomada automaticamente após reinicializações.</span>
+            </div>
+        </div>
+        <div class="card-body pt-0">
+            <div id="synchronization-jobs-container" class="py-10 text-center">
+                <span class="spinner-border spinner-border-sm text-primary me-2" role="status"></span>
+                <span class="text-muted">Carregando operações de integração...</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const container = document.getElementById('synchronization-jobs-container');
+            const status = document.getElementById('synchronization-status');
+            const refreshButton = document.getElementById('refresh-synchronizations');
+            let refreshTimer;
+
+            const showLoading = () => {
+                container.innerHTML = '<div class="py-10 text-center"><span class="spinner-border spinner-border-sm text-primary me-2" role="status"></span><span class="text-muted">Atualizando operações de integração...</span></div>';
+            };
+
+            const configureTooltips = () => {
+                document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(element => {
+                    bootstrap.Tooltip.getOrCreateInstance(element);
+                });
+            };
+
+            const bindRetry = () => {
+                container.querySelectorAll('.js-retry-synchronization').forEach(button => {
+                    button.addEventListener('click', async () => {
+                        button.disabled = true;
+                        try {
+                            const response = await fetch(`/Integrations/RetrySynchronizationJob/${button.dataset.jobId}`, { method: 'POST' });
+                            if (!response.ok) {
+                                const result = await response.json().catch(() => null);
+                                throw new Error(result?.message || 'Não foi possível adicionar uma nova tentativa.');
+                            }
+                            await loadJobs(false);
+                        } catch (error) {
+                            window.Swal?.fire({ icon: 'error', title: 'Falha ao reprocessar', text: error.message });
+                            button.disabled = false;
+                        }
+                    });
+                });
+            };
+
+            const scheduleRefresh = () => {
+                window.clearTimeout(refreshTimer);
+                if (container.querySelector('[data-has-active-jobs="true"]')) {
+                    refreshTimer = window.setTimeout(() => loadJobs(false), 10000);
+                }
+            };
+
+            const loadJobs = async (showSpinner) => {
+                if (showSpinner) showLoading();
+                refreshButton.disabled = true;
+                try {
+                    const response = await fetch(`/Integrations/SynchronizationJobs?status=${encodeURIComponent(status.value)}&take=75`);
+                    if (!response.ok) throw new Error('Não foi possível consultar a fila de integração.');
+                    container.innerHTML = await response.text();
+                    configureTooltips();
+                    bindRetry();
+                    scheduleRefresh();
+                } catch (error) {
+                    container.innerHTML = `<div class="alert alert-danger d-flex align-items-center p-5 mb-0"><i class="ki-duotone ki-information-5 fs-2hx text-danger me-4"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i><div class="d-flex flex-column"><span class="fw-bold">Não foi possível carregar as operações.</span><span>${error.message}</span></div></div>`;
+                } finally {
+                    refreshButton.disabled = false;
+                }
+            };
+
+            refreshButton.addEventListener('click', () => loadJobs(true));
+            status.addEventListener('change', () => loadJobs(true));
+            loadJobs(false);
+        })();
+    </script>
+}

@@ -23,7 +23,31 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
+if (string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+{
+    if (builder.Environment.IsProduction())
+    {
+        throw new InvalidOperationException(
+            "DataProtection:KeysPath deve apontar para um diretório persistente na produção.");
+    }
+
+    // Preserve the framework default development key ring so existing encrypted
+    // local integration settings remain readable after application upgrades.
+    dataProtectionKeysPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "ASP.NET",
+        "DataProtection-Keys");
+}
+
+dataProtectionKeysPath = Path.GetFullPath(dataProtectionKeysPath);
+Directory.CreateDirectory(dataProtectionKeysPath);
+
+var jwtSettings = builder.Configuration.GetSection("JwtSettings");
+var jwtSecretKey = GetJwtSecretKey(jwtSettings, builder.Environment);
+
 builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
     .SetApplicationName("Axiom.Atlas");
 builder.Services.AddControllers();
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -50,8 +74,6 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    var jwtSettings = builder.Configuration.GetSection("JwtSettings");
-    var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JwtSettings:SecretKey não configurado.");
     options.TokenValidationParameters = new TokenValidationParameters
     {
         ValidateIssuer = true,
@@ -60,7 +82,7 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuerSigningKey = true,
         ValidIssuer = jwtSettings["Issuer"],
         ValidAudience = jwtSettings["Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey))
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretKey))
     };
     options.Events = new JwtBearerEvents
     {
@@ -76,7 +98,18 @@ builder.Services.AddAuthentication(options =>
         }
     };
 });
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdministrationOnly", policy =>
+    {
+        policy.RequireAuthenticatedUser();
+        policy.RequireAssertion(context => context.User.Claims
+            .Where(claim => claim.Type == System.Security.Claims.ClaimTypes.Role)
+            .Select(claim => claim.Value)
+            .Any(role => role.Equals("Admin", StringComparison.OrdinalIgnoreCase) ||
+                         role.Equals("Administrador", StringComparison.OrdinalIgnoreCase)));
+    });
+});
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AxiomAtlasPolicy", policy =>
@@ -200,6 +233,11 @@ if (app.Environment.IsDevelopment())
 
     app.MapGet("/", () => Results.Redirect("/swagger"));
 }
+else
+{
+    app.UseExceptionHandler();
+    app.UseHsts();
+}
 app.UseRouting();
 
 app.UseCors("AxiomAtlasPolicy");
@@ -212,9 +250,66 @@ app.UseAuthorization();
 
 app.UseStaticFiles();
 
+app.MapGet("/health/live", () => Results.Ok(new
+{
+    status = "Healthy",
+    service = "Axiom Atlas API",
+    timestamp = DateTimeOffset.UtcNow
+})).AllowAnonymous();
+
+app.MapGet("/health/ready", async (AppDbContext context, ILoggerFactory loggerFactory, CancellationToken cancellationToken) =>
+{
+    var logger = loggerFactory.CreateLogger("Axiom.Atlas.Health");
+    try
+    {
+        if (!await context.Database.CanConnectAsync(cancellationToken))
+        {
+            return Results.Problem(
+                title: "Banco de dados indisponível.",
+                statusCode: StatusCodes.Status503ServiceUnavailable);
+        }
+
+        return Results.Ok(new
+        {
+            status = "Healthy",
+            database = "Available",
+            timestamp = DateTimeOffset.UtcNow
+        });
+    }
+    catch (Exception exception)
+    {
+        logger.LogError(exception, "O health check de prontidão não conseguiu acessar o banco de dados.");
+        return Results.Problem(
+            title: "Banco de dados indisponível.",
+            statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+}).AllowAnonymous();
+
 app.MapControllers();
 app.MapOpenApi("/openapi/{documentName}.json");
 
 app.MapIdentityApi<User>();
 
 app.Run();
+
+static string GetJwtSecretKey(IConfigurationSection jwtSettings, IHostEnvironment environment)
+{
+    var secretKey = jwtSettings["SecretKey"];
+    var issuer = jwtSettings["Issuer"];
+    var audience = jwtSettings["Audience"];
+
+    if (string.IsNullOrWhiteSpace(secretKey) || string.IsNullOrWhiteSpace(issuer) || string.IsNullOrWhiteSpace(audience))
+    {
+        throw new InvalidOperationException(
+            "JwtSettings:SecretKey, JwtSettings:Issuer e JwtSettings:Audience devem estar configurados.");
+    }
+
+    if (environment.IsProduction() &&
+        (secretKey.Length < 32 || secretKey.Contains("CHANGE_ME", StringComparison.OrdinalIgnoreCase)))
+    {
+        throw new InvalidOperationException(
+            "JwtSettings:SecretKey deve ser uma chave exclusiva de pelo menos 32 caracteres na produção.");
+    }
+
+    return secretKey;
+}

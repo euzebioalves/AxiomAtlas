@@ -1,4 +1,5 @@
 @using System.Reflection
+@using System.Security.Claims
 @{
     // A versao informativa inclui o hash do commit quando o projeto esta em um repositorio Git.
     // O rodape deve apresentar somente a versao publicada do produto.
@@ -15,6 +16,11 @@
         : Url.Content(profilePictureClaim);
     var userName = User?.Identity?.Name ?? "Usuário";
     var jobTitle = User?.FindFirst("JobTitle")?.Value ?? "Axiom Atlas";
+    var isAdministrator = User?.Claims
+        .Where(claim => claim.Type == ClaimTypes.Role)
+        .Select(claim => claim.Value)
+        .Any(role => string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
+                  || string.Equals(role, "Administrador", StringComparison.OrdinalIgnoreCase)) ?? false;
 
     string Active(string controller, string action = "")
     {
@@ -282,12 +288,15 @@
                                                     <span class="menu-title">Minha Jornada</span>
                                                 </a>
                                             </div>
-                                            <div class="menu-item">
-                                                <a class="menu-link @Active("TimeClock", "GlobalSettings")" asp-controller="TimeClock" asp-action="GlobalSettings">
-                                                    <span class="menu-bullet"><span class="bullet bullet-dot"></span></span>
-                                                    <span class="menu-title">Config. Globais do Ponto</span>
-                                                </a>
-                                            </div>
+                                            @if (isAdministrator)
+                                            {
+                                                <div class="menu-item">
+                                                    <a class="menu-link @Active("TimeClock", "GlobalSettings")" asp-controller="TimeClock" asp-action="GlobalSettings">
+                                                        <span class="menu-bullet"><span class="bullet bullet-dot"></span></span>
+                                                        <span class="menu-title">Config. Globais do Ponto</span>
+                                                    </a>
+                                                </div>
+                                            }
                                         </div>
                                     </div>
 
@@ -307,11 +316,13 @@
                                         </div>
                                     </div>
 
-                                    <div class="menu-item pt-5">
-                                        <div class="menu-content">
-                                            <span class="menu-heading fw-bold text-uppercase fs-7">Administração</span>
+                                    @if (isAdministrator)
+                                    {
+                                        <div class="menu-item pt-5">
+                                            <div class="menu-content">
+                                                <span class="menu-heading fw-bold text-uppercase fs-7">Administração</span>
+                                            </div>
                                         </div>
-                                    </div>
 
                                     <div data-kt-menu-trigger="click" class="menu-item menu-accordion @Open("Users", "Roles")">
                                         <span class="menu-link">
@@ -361,8 +372,15 @@
                                                     <span class="menu-title">GLPI Service Desk</span>
                                                 </a>
                                             </div>
+                                            <div class="menu-item">
+                                                <a class="menu-link @Active("Integrations", "Operations")" asp-controller="Integrations" asp-action="Operations">
+                                                    <span class="menu-bullet"><span class="bullet bullet-dot"></span></span>
+                                                    <span class="menu-title">Operações</span>
+                                                </a>
+                                            </div>
                                         </div>
-                                    </div>
+                                        </div>
+                                    }
                                 </div>
                             </div>
                         </div>

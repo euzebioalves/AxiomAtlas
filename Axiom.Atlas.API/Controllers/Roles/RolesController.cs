@@ -9,7 +9,7 @@ namespace Axiom.Atlas.API.Controllers.Roles
 {
     [Route("api/[controller]")]
     [ApiController]
-    [Authorize] // Protege a API
+    [Authorize(Policy = "AdministrationOnly")]
     public class RolesController : ControllerBase
     {
         private readonly RoleManager<IdentityRole<Guid>> _roleManager;

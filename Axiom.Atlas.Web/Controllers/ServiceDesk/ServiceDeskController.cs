@@ -93,6 +93,13 @@ namespace Axiom.Atlas.Web.Controllers.ServiceDesk
             return new ContentResult { Content = await response.Content.ReadAsStringAsync(), ContentType = "application/json", StatusCode = (int)response.StatusCode };
         }
 
+        [HttpPost]
+        public async Task<IActionResult> ReprocessGlpiLink(Guid id)
+        {
+            var response = await CreateClient().PostAsync($"api/glpi/tickets/{id}/glpi-link/reprocess", null);
+            return new ContentResult { Content = await response.Content.ReadAsStringAsync(), ContentType = "application/json", StatusCode = (int)response.StatusCode };
+        }
+
         [HttpGet]
         public async Task<IActionResult> Attachment(Guid id, int documentId)
         {

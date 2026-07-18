@@ -17,6 +17,18 @@ namespace Axiom.Atlas.Application.DTOs.ServiceDesk
         public string? OpenProjectWorkPackageUrl { get; set; }
         public string? GlpiDevOpsFieldId { get; set; }
         public string? GlpiDevOpsUrl { get; set; }
+        public IntegrationSynchronizationJobDto? GlpiLinkSynchronization { get; set; }
+    }
+
+    public class IntegrationSynchronizationJobDto
+    {
+        public Guid Id { get; set; }
+        public string Type { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public int AttemptCount { get; set; }
+        public int MaxAttempts { get; set; }
+        public DateTime? NextAttemptAt { get; set; }
+        public string? LastError { get; set; }
     }
     public class SaveRequirementDraftRequest { public string? RequirementMarkdown { get; set; } }
 

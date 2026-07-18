@@ -1,0 +1,102 @@
+@using System.Globalization
+@using Axiom.Atlas.Application.DTOs.Integrations
+@model IntegrationSynchronizationOverviewDto
+@{
+    var culture = new CultureInfo("pt-BR");
+    string FormatDate(DateTime? value) => value.HasValue ? value.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm", culture) : "-";
+    string StatusLabel(string status) => status switch
+    {
+        "Pending" => "Pendente",
+        "Processing" => "Em processamento",
+        "Failed" => "Com falha",
+        "Succeeded" => "Concluída",
+        _ => status
+    };
+    string StatusClass(string status) => status switch
+    {
+        "Pending" => "badge-light-warning",
+        "Processing" => "badge-light-primary",
+        "Failed" => "badge-light-danger",
+        "Succeeded" => "badge-light-success",
+        _ => "badge-light"
+    };
+    string TypeLabel(string type) => type switch
+    {
+        "RefreshGlpiImprovementTickets" => "Atualizar fila GLPI",
+        "UpdateGlpiWorkPackageLink" => "Vincular WP no GLPI",
+        _ => type
+    };
+    var activeJobs = Model.PendingCount + Model.ProcessingCount > 0;
+}
+
+<div data-has-active-jobs="@activeJobs.ToString().ToLowerInvariant()">
+    <div class="row g-5 g-xl-8 mb-8">
+        <div class="col-sm-6 col-xl-3"><div class="card bg-light-warning border-0 h-100"><div class="card-body"><span class="text-gray-700 fw-semibold">Pendentes</span><div class="fs-2hx fw-bold text-warning">@Model.PendingCount</div><span class="text-muted fs-7">Aguardando execução</span></div></div></div>
+        <div class="col-sm-6 col-xl-3"><div class="card bg-light-primary border-0 h-100"><div class="card-body"><span class="text-gray-700 fw-semibold">Em execução</span><div class="fs-2hx fw-bold text-primary">@Model.ProcessingCount</div><span class="text-muted fs-7">Processando agora</span></div></div></div>
+        <div class="col-sm-6 col-xl-3"><div class="card bg-light-danger border-0 h-100"><div class="card-body"><span class="text-gray-700 fw-semibold">Com falha</span><div class="fs-2hx fw-bold text-danger">@Model.FailedCount</div><span class="text-muted fs-7">Disponíveis para reprocessar</span></div></div></div>
+        <div class="col-sm-6 col-xl-3"><div class="card bg-light-success border-0 h-100"><div class="card-body"><span class="text-gray-700 fw-semibold">Concluídas</span><div class="fs-2hx fw-bold text-success">@Model.SucceededCount</div><span class="text-muted fs-7">Última: @FormatDate(Model.LastCompletedAt)</span></div></div></div>
+    </div>
+
+    @if (!Model.Jobs.Any())
+    {
+        <div class="text-center py-10 text-muted">Nenhuma operação de integração encontrada para este filtro.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table align-middle table-row-dashed fs-6 gy-5 mb-0">
+                <thead>
+                    <tr class="text-start text-gray-500 fw-bold fs-7 text-uppercase gs-0">
+                        <th>Operação</th>
+                        <th>Estado</th>
+                        <th>Referência</th>
+                        <th>Tentativas</th>
+                        <th>Agendada em</th>
+                        <th>Concluída em</th>
+                        <th>Detalhe</th>
+                        <th class="text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody class="fw-semibold text-gray-600">
+                    @foreach (var job in Model.Jobs)
+                    {
+                        <tr>
+                            <td><span class="text-gray-800 fw-bold">@TypeLabel(job.Type)</span></td>
+                            <td><span class="badge @StatusClass(job.Status)">@StatusLabel(job.Status)</span></td>
+                            <td>
+                                @if (job.GlpiTicketId.HasValue) { <span class="badge badge-light-primary me-1">GLPI #@job.GlpiTicketId</span> }
+                                @if (job.OpenProjectWorkPackageId.HasValue) { <span class="badge badge-light-info">WP #@job.OpenProjectWorkPackageId</span> }
+                                @if (!job.GlpiTicketId.HasValue && !job.OpenProjectWorkPackageId.HasValue) { <span class="text-muted">Fila de melhorias</span> }
+                            </td>
+                            <td>@job.AttemptCount / @job.MaxAttempts</td>
+                            <td>@FormatDate(job.AvailableAt)</td>
+                            <td>@FormatDate(job.CompletedAt)</td>
+                            <td class="mw-300px">
+                                @if (string.IsNullOrWhiteSpace(job.LastError))
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                                else
+                                {
+                                    <span class="text-gray-700 d-inline-block text-truncate mw-300px" title="@job.LastError">@job.LastError</span>
+                                }
+                            </td>
+                            <td class="text-end">
+                                @if (job.Status is "Failed" or "Succeeded")
+                                {
+                                    <button type="button" class="btn btn-icon btn-light-primary btn-sm js-retry-synchronization" data-job-id="@job.Id" data-bs-toggle="tooltip" title="Adicionar nova tentativa">
+                                        <i class="ki-duotone ki-arrows-circle fs-3"><span class="path1"></span><span class="path2"></span></i>
+                                    </button>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">-</span>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
