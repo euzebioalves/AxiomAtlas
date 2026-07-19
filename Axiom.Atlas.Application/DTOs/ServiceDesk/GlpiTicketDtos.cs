@@ -73,4 +73,50 @@ namespace Axiom.Atlas.Application.DTOs.ServiceDesk
         public string? WorkPackageCreator { get; set; }
         public int? WorkPackageDaysOpen { get; set; }
     }
+
+    /// <summary>
+    /// Read model for the operational board. It intentionally uses the local GLPI projection
+    /// so the board remains responsive while the integrations reconcile in the background.
+    /// </summary>
+    public class UnifiedBacklogResponse
+    {
+        public List<UnifiedBacklogItemDto> Items { get; set; } = new();
+        public UnifiedBacklogSummaryDto Summary { get; set; } = new();
+        public DateTime? LastSynchronizedAt { get; set; }
+        public bool SynchronizationPending { get; set; }
+        public int SynchronizationIntervalSeconds { get; set; } = 300;
+    }
+
+    public class UnifiedBacklogSummaryDto
+    {
+        public int Total { get; set; }
+        public int Triage { get; set; }
+        public int Analysis { get; set; }
+        public int Delivery { get; set; }
+        public int Attention { get; set; }
+        public int Completed { get; set; }
+    }
+
+    public class UnifiedBacklogItemDto
+    {
+        public long GlpiTicketId { get; set; }
+        public string Subject { get; set; } = string.Empty;
+        public string? GlpiTicketUrl { get; set; }
+        public DateTime? OpenedAt { get; set; }
+        public int DaysOpen { get; set; }
+        public string? ClientEntityName { get; set; }
+        public string GlpiStatusName { get; set; } = "Não informado";
+        public Guid? WorkspaceId { get; set; }
+        public bool IsOwnedByCurrentUser { get; set; }
+        public int? WorkPackageId { get; set; }
+        public string? WorkPackageUrl { get; set; }
+        public string? WorkPackageStatus { get; set; }
+        public string? WorkPackageCreator { get; set; }
+        public int? WorkPackageDaysOpen { get; set; }
+        public string Stage { get; set; } = "triage";
+        public string StageLabel { get; set; } = "Triagem GLPI";
+        public string Priority { get; set; } = "Normal";
+        public string PriorityReason { get; set; } = string.Empty;
+        public bool IsGlpiLinkPending { get; set; }
+    }
 }

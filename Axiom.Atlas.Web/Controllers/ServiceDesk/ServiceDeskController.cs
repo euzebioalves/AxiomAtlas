@@ -14,6 +14,47 @@ namespace Axiom.Atlas.Web.Controllers.ServiceDesk
             return View();
         }
 
+        public IActionResult Kanban()
+        {
+            return View();
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> KanbanData()
+        {
+            try
+            {
+                var response = await CreateClient().GetAsync("api/glpi/tickets/kanban");
+                var content = await response.Content.ReadAsStringAsync();
+                return new ContentResult
+                {
+                    Content = content,
+                    ContentType = "application/json",
+                    StatusCode = (int)response.StatusCode
+                };
+            }
+            catch (Exception exception)
+            {
+                return StatusCode(503, new
+                {
+                    message = "Não foi possível carregar o quadro unificado de melhorias.",
+                    detail = exception.Message
+                });
+            }
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> RefreshKanban()
+        {
+            var response = await CreateClient().PostAsync("api/glpi/tickets/improvements/synchronize", null);
+            return new ContentResult
+            {
+                Content = await response.Content.ReadAsStringAsync(),
+                ContentType = "application/json",
+                StatusCode = (int)response.StatusCode
+            };
+        }
+
         [HttpGet]
         public async Task<IActionResult> List(int page = 1, int pageSize = 25, string? status = null, bool refresh = false)
         {
@@ -52,7 +93,7 @@ namespace Axiom.Atlas.Web.Controllers.ServiceDesk
         }
 
         [HttpGet]
-        public async Task<IActionResult> Workspace(Guid id, int returnPage = 1, int returnPageSize = 25, string? returnStatus = null)
+        public async Task<IActionResult> Workspace(Guid id, int returnPage = 1, int returnPageSize = 25, string? returnStatus = null, string? returnSource = null)
         {
             var response = await CreateClient().GetAsync($"api/glpi/tickets/{id}");
             if (!response.IsSuccessStatusCode) return RedirectToAction(nameof(Index));
@@ -61,13 +102,15 @@ namespace Axiom.Atlas.Web.Controllers.ServiceDesk
             if (workspace is null) return RedirectToAction(nameof(Index));
 
             var pageSize = new[] { 10, 25, 50, 100 }.Contains(returnPageSize) ? returnPageSize : 25;
-            ViewData["ReturnUrl"] = Url.Action(nameof(Index), new
-            {
-                page = Math.Max(1, returnPage),
-                pageSize,
-                status = string.IsNullOrWhiteSpace(returnStatus) ? "not_solved" : returnStatus,
-                highlight = workspace.GlpiTicketId
-            });
+            ViewData["ReturnUrl"] = string.Equals(returnSource, "kanban", StringComparison.OrdinalIgnoreCase)
+                ? Url.Action(nameof(Kanban), new { highlight = workspace.GlpiTicketId })
+                : Url.Action(nameof(Index), new
+                {
+                    page = Math.Max(1, returnPage),
+                    pageSize,
+                    status = string.IsNullOrWhiteSpace(returnStatus) ? "not_solved" : returnStatus,
+                    highlight = workspace.GlpiTicketId
+                });
 
             return View(workspace);
         }

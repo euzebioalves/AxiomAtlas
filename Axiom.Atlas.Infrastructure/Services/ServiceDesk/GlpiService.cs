@@ -263,6 +263,47 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             };
         }
 
+        public async Task<UnifiedBacklogResponse> GetUnifiedBacklogAsync(string? currentUserId)
+        {
+            var tickets = await _context.GlpiImprovementTickets.AsNoTracking()
+                .Where(x => x.IsInImprovementQueue)
+                .OrderBy(x => x.OpenedAt)
+                .ThenBy(x => x.GlpiTicketId)
+                .ToListAsync();
+
+            var workspaceRows = await _context.GlpiTicketWorkspaces.AsNoTracking()
+                .Select(x => new WorkspaceBacklogProjection(
+                    x.Id,
+                    x.GlpiTicketId,
+                    x.OpenProjectWorkPackageId,
+                    x.OpenProjectWorkPackageUrl,
+                    x.GlpiDevOpsUrl,
+                    x.CreatedByUserId))
+                .ToListAsync();
+            var workspaces = workspaceRows.ToDictionary(x => x.GlpiTicketId);
+
+            var items = tickets.Select(ticket =>
+            {
+                workspaces.TryGetValue(ticket.GlpiTicketId, out var workspace);
+                return ToUnifiedBacklogItem(ticket, workspace, currentUserId);
+            }).ToList();
+
+            return new UnifiedBacklogResponse
+            {
+                Items = items,
+                LastSynchronizedAt = tickets.Count == 0 ? null : tickets.Max(x => x.LastSynchronizedAt),
+                Summary = new UnifiedBacklogSummaryDto
+                {
+                    Total = items.Count,
+                    Triage = items.Count(x => x.Stage == "triage"),
+                    Analysis = items.Count(x => x.Stage == "analysis"),
+                    Delivery = items.Count(x => x.Stage == "delivery"),
+                    Attention = items.Count(x => x.Stage == "attention"),
+                    Completed = items.Count(x => x.Stage == "completed")
+                }
+            };
+        }
+
         public async Task SynchronizeImprovementTicketsAsync(CancellationToken cancellationToken = default)
         {
             var stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -602,6 +643,76 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                     : null
             };
         }
+
+        private static UnifiedBacklogItemDto ToUnifiedBacklogItem(
+            GlpiImprovementTicket ticket,
+            WorkspaceBacklogProjection? workspace,
+            string? currentUserId)
+        {
+            var daysOpen = ticket.OpenedAt.HasValue
+                ? Math.Max(0, (int)(DateTime.UtcNow.Date - ticket.OpenedAt.Value.Date).TotalDays)
+                : 0;
+            var isGlpiLinkPending = workspace?.OpenProjectWorkPackageId is not null && !ticket.WorkPackageId.HasValue;
+            var hasWorkPackageAlert = ContainsAny(ticket.WorkPackageStatus, "test failed", "rejected", "falhou", "rejeitad");
+            var isCompleted = ticket.StatusCode is 5 or 6;
+            var stage = isCompleted
+                ? "completed"
+                : isGlpiLinkPending || hasWorkPackageAlert
+                    ? "attention"
+                    : ticket.WorkPackageId.HasValue
+                        ? "delivery"
+                        : workspace is not null
+                            ? "analysis"
+                            : "triage";
+
+            var priority = isGlpiLinkPending || hasWorkPackageAlert
+                ? "Crítica"
+                : daysOpen >= 30 && stage == "triage"
+                    ? "Alta"
+                    : daysOpen >= 14 && stage == "analysis"
+                        ? "Alta"
+                        : "Normal";
+            var reason = isGlpiLinkPending
+                ? "A User Story existe no Axiom, mas o vínculo não está confirmado no GLPI."
+                : hasWorkPackageAlert
+                    ? "A Work Package exige atenção pelo status atual no OpenProject."
+                    : priority == "Alta"
+                        ? $"Demanda parada há {daysOpen} dia(s) nesta etapa."
+                        : "Prioridade operacional baseada na idade e no estágio atual.";
+
+            return new UnifiedBacklogItemDto
+            {
+                GlpiTicketId = ticket.GlpiTicketId,
+                Subject = ticket.Subject,
+                GlpiTicketUrl = ticket.GlpiTicketUrl,
+                OpenedAt = ticket.OpenedAt,
+                DaysOpen = daysOpen,
+                ClientEntityName = ticket.ClientEntityName,
+                GlpiStatusName = ticket.StatusName,
+                WorkspaceId = workspace?.Id,
+                IsOwnedByCurrentUser = workspace is not null && !string.IsNullOrWhiteSpace(currentUserId) && string.Equals(workspace.CreatedByUserId, currentUserId, StringComparison.OrdinalIgnoreCase),
+                WorkPackageId = ticket.WorkPackageId,
+                WorkPackageUrl = ticket.WorkPackageUrl,
+                WorkPackageStatus = ticket.WorkPackageStatus,
+                WorkPackageCreator = ticket.WorkPackageCreator,
+                WorkPackageDaysOpen = ticket.WorkPackageCreatedAt is { } createdAt ? Math.Max(0, (int)(DateTime.UtcNow.Date - createdAt.Date).TotalDays) : null,
+                Stage = stage,
+                StageLabel = stage switch
+                {
+                    "analysis" => "Análise de requisitos",
+                    "delivery" => "User Story em andamento",
+                    "attention" => "Atenção necessária",
+                    "completed" => "Concluídas",
+                    _ => "Triagem GLPI"
+                },
+                Priority = priority,
+                PriorityReason = reason,
+                IsGlpiLinkPending = isGlpiLinkPending
+            };
+        }
+
+        private static bool ContainsAny(string? value, params string[] terms) =>
+            !string.IsNullOrWhiteSpace(value) && terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase));
 
         public async Task<GlpiTicketWorkspaceDto?> GetWorkspaceAsync(Guid id)
         {
@@ -1351,6 +1462,13 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
         }
 
         private sealed record SearchTicketCandidate(long TicketId, string? DevOpsUrl);
+        private sealed record WorkspaceBacklogProjection(
+            Guid Id,
+            long GlpiTicketId,
+            int? OpenProjectWorkPackageId,
+            string? OpenProjectWorkPackageUrl,
+            string? GlpiDevOpsUrl,
+            string CreatedByUserId);
         private sealed record GlpiTicketSnapshot(long TicketId, string Subject, int? EntityId, DateTime? OpenedAt, int? StatusCode, string? DevOpsUrl);
         private sealed record CachedGlpiSession(string Token, DateTimeOffset ExpiresAt);
         private sealed record GlpiSearchFieldMetadata(

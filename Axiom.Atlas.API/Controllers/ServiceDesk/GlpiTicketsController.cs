@@ -64,6 +64,34 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
             }
         }
 
+        [HttpGet("kanban")]
+        public async Task<IActionResult> GetUnifiedBacklog()
+        {
+            try
+            {
+                var backlog = await _glpiService.GetUnifiedBacklogAsync(
+                    User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name);
+                backlog.SynchronizationPending = await _synchronizationQueue.IsSynchronizationPendingAsync();
+                backlog.SynchronizationIntervalSeconds = Math.Clamp(
+                    _configuration.GetValue<int?>("GlpiSynchronization:IntervalSeconds") ?? 300,
+                    60,
+                    3600);
+                return Ok(backlog);
+            }
+            catch (Exception exception)
+            {
+                return BadRequest(new { message = exception.Message });
+            }
+        }
+
+        [HttpPost("improvements/synchronize")]
+        public async Task<IActionResult> SynchronizeImprovementTickets()
+        {
+            await _synchronizationQueue.RequestSynchronizationAsync(
+                User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name);
+            return Accepted(new { message = "Atualização da fila solicitada. O quadro será reconciliado em segundo plano." });
+        }
+
         [HttpGet("{id:guid}")]
         public async Task<IActionResult> Get(Guid id) => (await _glpiService.GetWorkspaceAsync(id)) is { } workspace ? Ok(workspace) : NotFound();
 

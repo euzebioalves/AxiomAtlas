@@ -1,0 +1,211 @@
+@{
+    ViewData["Title"] = "Quadro de melhorias";
+}
+
+<div class="app-content flex-column-fluid" id="kt_app_content">
+    <div class="app-container container-xxl">
+        <div class="card card-flush mb-7">
+            <div class="card-body py-7 d-flex flex-wrap justify-content-between align-items-center gap-5">
+                <div>
+                    <span class="badge badge-light-primary mb-2">Gestão da fila</span>
+                    <h1 class="fw-bold mb-2">Quadro unificado de melhorias</h1>
+                    <div class="text-muted fw-semibold">Acompanhe a demanda desde o GLPI até a Work Package no OpenProject, sem perder a rastreabilidade.</div>
+                    <div id="kanban-sync-info" class="text-muted fs-8 mt-3">Carregando a projeção local da fila...</div>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <button id="kanban-refresh" type="button" class="btn btn-light-primary">
+                        <i class="ki-duotone ki-arrows-circle fs-2"><span class="path1"></span><span class="path2"></span></i>
+                        Atualizar fontes
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div id="kanban-alert" class="d-none alert alert-danger d-flex align-items-center p-5 mb-7"></div>
+
+        <div id="kanban-loading" class="d-flex justify-content-center align-items-center py-15">
+            <span class="spinner-border text-primary me-3" role="status"></span>
+            <span class="text-muted fw-semibold">Montando o quadro de melhorias...</span>
+        </div>
+
+        <div id="kanban-board" class="d-none improvement-kanban-board"></div>
+    </div>
+</div>
+
+<style>
+    .improvement-kanban-board {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(285px, 1fr));
+        gap: 1.25rem;
+        overflow-x: auto;
+        padding-bottom: 1.25rem;
+        align-items: start;
+    }
+
+    .improvement-kanban-column {
+        border: 1px solid var(--bs-border-color);
+        border-radius: .625rem;
+        background: var(--bs-body-bg);
+        min-height: 32rem;
+        overflow: hidden;
+    }
+
+    .improvement-kanban-column__header {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--bs-border-color);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .75rem;
+    }
+
+    .improvement-kanban-column__content {
+        padding: 1rem;
+        display: grid;
+        gap: .85rem;
+    }
+
+    .improvement-kanban-ticket {
+        border: 1px solid var(--bs-border-color);
+        border-radius: .5rem;
+        background: var(--bs-gray-100);
+        padding: 1rem;
+        transition: border-color .15s ease, transform .15s ease, box-shadow .15s ease;
+    }
+
+    [data-bs-theme="dark"] .improvement-kanban-ticket { background: var(--bs-gray-800); }
+    .improvement-kanban-ticket:hover { border-color: var(--bs-primary); transform: translateY(-1px); box-shadow: 0 .25rem .75rem rgba(0, 0, 0, .08); }
+    .improvement-kanban-ticket.is-highlighted { border-color: var(--bs-primary); box-shadow: 0 0 0 .2rem rgba(var(--bs-primary-rgb), .18); }
+    .improvement-kanban-ticket__subject { color: var(--bs-body-color); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.8rem; }
+    .improvement-kanban-ticket__meta { color: var(--bs-gray-600); font-size: .8rem; }
+    .improvement-kanban-ticket__footer { border-top: 1px dashed var(--bs-border-color); margin-top: .9rem; padding-top: .8rem; }
+    .improvement-kanban-empty { color: var(--bs-gray-600); text-align: center; padding: 2.5rem 1rem; font-size: .9rem; }
+
+    @@media (max-width: 991.98px) {
+        .improvement-kanban-board { grid-template-columns: repeat(5, minmax(260px, 82vw)); }
+    }
+</style>
+
+<script>
+    (() => {
+        const board = document.getElementById('kanban-board');
+        const loading = document.getElementById('kanban-loading');
+        const alertBox = document.getElementById('kanban-alert');
+        const syncInfo = document.getElementById('kanban-sync-info');
+        const refreshButton = document.getElementById('kanban-refresh');
+        const highlight = new URLSearchParams(window.location.search).get('highlight');
+        const stages = [
+            { key: 'attention', label: 'Atenção necessária', icon: 'ki-shield-cross', badge: 'badge-light-danger' },
+            { key: 'triage', label: 'Triagem GLPI', icon: 'ki-category', badge: 'badge-light-primary' },
+            { key: 'analysis', label: 'Análise de requisitos', icon: 'ki-note-2', badge: 'badge-light-warning' },
+            { key: 'delivery', label: 'User Story em andamento', icon: 'ki-element-11', badge: 'badge-light-success' },
+            { key: 'completed', label: 'Concluídas', icon: 'ki-check-circle', badge: 'badge-light-info' }
+        ];
+
+        const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' })[character]);
+        const formatDate = value => value ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : 'Ainda não sincronizado';
+        const priorityClass = priority => priority === 'Crítica' ? 'badge-light-danger' : priority === 'Alta' ? 'badge-light-warning' : 'badge-light-primary';
+
+        function ticketCard(item) {
+            const workspaceUrl = item.workspaceId
+                ? `/ServiceDesk/Workspace/${item.workspaceId}?returnSource=kanban`
+                : null;
+            const workPackage = item.workPackageId
+                ? `<a href="${escapeHtml(item.workPackageUrl || '#')}" target="_blank" rel="noopener" class="badge badge-light-success">WP #${item.workPackageId}<i class="ki-duotone ki-exit-right-corner fs-7 ms-1"></i></a>`
+                : '<span class="text-muted">Sem User Story</span>';
+            const action = workspaceUrl
+                ? `<a href="${workspaceUrl}" class="btn btn-sm btn-light-primary">${item.isGlpiLinkPending ? 'Corrigir vínculo' : 'Continuar'}</a>`
+                : `<button type="button" class="btn btn-sm btn-primary" data-treat-ticket="${item.glpiTicketId}">Tratar</button>`;
+            return `<article class="improvement-kanban-ticket ${String(item.glpiTicketId) === highlight ? 'is-highlighted' : ''}">
+                <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+                    <a href="${escapeHtml(item.glpiTicketUrl || '#')}" target="_blank" rel="noopener" class="fw-bold">#${item.glpiTicketId}<i class="ki-duotone ki-exit-right-corner fs-7 ms-1"></i></a>
+                    <span class="badge ${priorityClass(item.priority)}" title="${escapeHtml(item.priorityReason)}">${escapeHtml(item.priority)}</span>
+                </div>
+                <div class="improvement-kanban-ticket__subject fw-semibold mb-3">${escapeHtml(item.subject)}</div>
+                <div class="improvement-kanban-ticket__meta d-flex flex-column gap-1">
+                    <span><i class="ki-duotone ki-briefcase fs-7 me-1"></i>${escapeHtml(item.clientEntityName || 'Cliente não identificado')}</span>
+                    <span><i class="ki-duotone ki-calendar fs-7 me-1"></i>${item.daysOpen} dia(s) no GLPI</span>
+                    <span><i class="ki-duotone ki-information-5 fs-7 me-1"></i>${escapeHtml(item.glpiStatusName)}</span>
+                </div>
+                <div class="improvement-kanban-ticket__footer d-flex justify-content-between align-items-center gap-2">
+                    <div>${workPackage}</div>
+                    ${action}
+                </div>
+            </article>`;
+        }
+
+        function render(data) {
+            const items = Array.isArray(data.items) ? data.items : [];
+            board.innerHTML = stages.map(stage => {
+                const stageItems = items.filter(item => item.stage === stage.key);
+                return `<section class="improvement-kanban-column">
+                    <header class="improvement-kanban-column__header">
+                        <div class="d-flex align-items-center gap-2"><i class="ki-duotone ${stage.icon} fs-2 text-primary"></i><span class="fw-bold">${stage.label}</span></div>
+                        <span class="badge ${stage.badge}">${stageItems.length}</span>
+                    </header>
+                    <div class="improvement-kanban-column__content">${stageItems.length ? stageItems.map(ticketCard).join('') : '<div class="improvement-kanban-empty">Nenhuma demanda nesta etapa.</div>'}</div>
+                </section>`;
+            }).join('');
+            const seconds = data.synchronizationIntervalSeconds || 300;
+            syncInfo.textContent = `Projeção local atualizada em ${formatDate(data.lastSynchronizedAt)}. GLPI e OpenProject são reconciliados a cada ${Math.round(seconds / 60)} min.${data.synchronizationPending ? ' Atualização em andamento.' : ''}`;
+            board.classList.remove('d-none');
+            loading.classList.add('d-none');
+            if (highlight) document.querySelector('.is-highlighted')?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+        }
+
+        async function loadBoard() {
+            alertBox.classList.add('d-none');
+            try {
+                const response = await fetch('/ServiceDesk/KanbanData');
+                const payload = await response.json();
+                if (!response.ok) throw new Error(payload.detail || payload.message || 'Não foi possível carregar o quadro.');
+                render(payload);
+            } catch (error) {
+                loading.classList.add('d-none');
+                alertBox.textContent = error.message;
+                alertBox.classList.remove('d-none');
+            }
+        }
+
+        refreshButton.addEventListener('click', async () => {
+            refreshButton.disabled = true;
+            try {
+                const response = await fetch('/ServiceDesk/RefreshKanban', { method: 'POST' });
+                const payload = await response.json();
+                if (!response.ok) throw new Error(payload.message || 'Não foi possível solicitar a atualização.');
+                syncInfo.textContent = payload.message || 'Atualização solicitada. O quadro será reconciliado em segundo plano.';
+                setTimeout(loadBoard, 1200);
+            } catch (error) {
+                alertBox.textContent = error.message;
+                alertBox.classList.remove('d-none');
+            } finally {
+                refreshButton.disabled = false;
+            }
+        });
+
+        board.addEventListener('click', async event => {
+            const button = event.target.closest('[data-treat-ticket]');
+            if (!button) return;
+            button.disabled = true;
+            const originalText = button.textContent;
+            button.textContent = 'Abrindo...';
+            try {
+                const response = await fetch('/ServiceDesk/Import', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: button.dataset.treatTicket })
+                });
+                const payload = await response.json();
+                if (!response.ok) throw new Error(payload.message || 'Não foi possível abrir o tratamento do chamado.');
+                window.location.assign(`/ServiceDesk/Workspace/${payload.id}?returnSource=kanban`);
+            } catch (error) {
+                button.disabled = false;
+                button.textContent = originalText;
+                alertBox.textContent = error.message;
+                alertBox.classList.remove('d-none');
+            }
+        });
+
+        loadBoard();
+    })();
+</script>
