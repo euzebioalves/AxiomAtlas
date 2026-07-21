@@ -240,11 +240,13 @@ O guia detalhado esta em [docs/ProductionConfiguration.md](docs/ProductionConfig
 
 Cada push em `main` aciona o workflow de release. Ele:
 
-1. identifica a ultima tag semantica `vMAJOR.MINOR.PATCH`;
-2. incrementa automaticamente o `PATCH` quando necessario;
-3. compila e publica API e Web;
-4. gera pacotes ZIP de distribuicao;
-5. cria a tag Git e a GitHub Release com notas automaticas.
+1. compara o `VersionPrefix` do projeto Web com a ultima tag semantica `vMAJOR.MINOR.PATCH`;
+2. incrementa automaticamente o `PATCH` usando o `version-update.js`;
+3. grava a nova versao em `Axiom.Atlas.Web.csproj` e a persiste na `main` com um commit automatico;
+4. compila e publica API e Web usando essa mesma versao;
+5. gera pacotes ZIP de distribuicao, a tag Git e a GitHub Release com notas automaticas.
+
+Depois de uma release, ambientes locais e de teste devem receber o commit automatico da `main` e ser reiniciados ou recompilados para que o badge lateral exiba a nova versao.
 
 O workflow de CI continua validando build e testes antes da integracao das alteracoes.
 

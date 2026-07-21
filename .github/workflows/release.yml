@@ -8,9 +8,14 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
 jobs:
   release:
     name: Build and publish release
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
 
     steps:
@@ -24,32 +29,35 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - name: Determine release version
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Increment and persist release version
         id: version
         shell: pwsh
         run: |
-          $tagPattern = '^v(\d+)\.(\d+)\.(\d+)$'
-          $currentTag = git tag --points-at HEAD --list 'v*' |
-            Where-Object { $_ -match $tagPattern } |
-            Sort-Object -Descending |
+          $latestTag = git tag --list 'v*' --sort=-version:refname |
+            Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } |
             Select-Object -First 1
 
-          if ($currentTag) {
-            $version = $currentTag.Substring(1)
+          $arguments = @()
+          if ($latestTag) {
+            $arguments += '--minimum'
+            $arguments += $latestTag.TrimStart('v')
           }
-          else {
-            $latestTag = git tag --list 'v*' --sort=-version:refname |
-              Where-Object { $_ -match $tagPattern } |
-              Select-Object -First 1
 
-            if (-not $latestTag) {
-              $version = '1.0.1'
-            }
-            else {
-              $latestTag -match $tagPattern | Out-Null
-              $version = '{0}.{1}.{2}' -f $Matches[1], $Matches[2], ([int]$Matches[3] + 1)
-            }
+          $version = & node version-update.js @arguments
+          if ($LASTEXITCODE -ne 0) {
+            throw 'Could not increment the persistent project version.'
           }
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Axiom.Atlas.Web/Axiom.Atlas.Web.csproj
+          git commit -m "chore: bump version to $version [skip ci]"
+          git push origin HEAD:main
 
           "version=$version" >> $env:GITHUB_OUTPUT
 
@@ -64,11 +72,12 @@ jobs:
         env:
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: |
+          $revision = git rev-parse HEAD
           $properties = @(
             "/p:Version=$env:RELEASE_VERSION",
             "/p:AssemblyVersion=$env:RELEASE_VERSION",
             "/p:FileVersion=$env:RELEASE_VERSION",
-            "/p:InformationalVersion=$env:RELEASE_VERSION+$env:GITHUB_SHA",
+            "/p:InformationalVersion=$env:RELEASE_VERSION+$revision",
             '/p:IncludeSourceRevisionInInformationalVersion=false'
           )
 
