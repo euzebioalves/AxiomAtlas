@@ -1,5 +1,6 @@
 using Axiom.Atlas.Web.Handlers.Auth;
 using Axiom.Atlas.Web.Services.Auth;
+using Axiom.Atlas.Web.Services.Releases;
 
 var builder = WebApplication.CreateBuilder(args);
 var apiBaseUrl = builder.Configuration["ApiSettings:BaseUrl"] ?? "https://localhost:7255/";
@@ -8,6 +9,17 @@ var acceptDevelopmentCertificates = builder.Environment.IsDevelopment();
 // 1. Registros Básicos do MVC
 builder.Services.AddControllersWithViews();
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddMemoryCache();
+builder.Services.Configure<ReleaseNotesOptions>(
+    builder.Configuration.GetSection(ReleaseNotesOptions.SectionName));
+
+builder.Services.AddHttpClient<IGitHubReleaseNotesService, GitHubReleaseNotesService>(client =>
+{
+    client.BaseAddress = new Uri("https://api.github.com/");
+    client.Timeout = TimeSpan.FromSeconds(15);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("AxiomAtlas-ReleaseNotes/1.0");
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
+});
 
 // 2. Registrando o Handler (Interceptador)
 builder.Services.AddTransient<AuthHeaderHandler>();

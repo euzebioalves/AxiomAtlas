@@ -1,0 +1,93 @@
+@model Axiom.Atlas.Web.Model.Releases.ReleaseNotesViewModel
+@{
+    ViewData["Title"] = "Notas de versão";
+}
+
+<div class="d-flex flex-column flex-column-fluid">
+    <div id="kt_app_toolbar" class="app-toolbar py-3 py-lg-6">
+        <div id="kt_app_toolbar_container" class="app-container container-xxl d-flex flex-stack">
+            <div class="page-title d-flex flex-column justify-content-center flex-wrap me-3">
+                <h1 class="page-heading d-flex text-gray-900 fw-bold fs-3 flex-column justify-content-center my-0">Notas de versão</h1>
+                <ul class="breadcrumb breadcrumb-separatorless fw-semibold fs-7 my-0 pt-1">
+                    <li class="breadcrumb-item text-muted"><a asp-controller="Home" asp-action="Index" class="text-muted text-hover-primary">Home</a></li>
+                    <li class="breadcrumb-item"><i class="ki-duotone ki-double-right fs-2"></i></li>
+                    <li class="breadcrumb-item text-muted">Sistema</li>
+                    <li class="breadcrumb-item"><i class="ki-duotone ki-double-right fs-2"></i></li>
+                    <li class="breadcrumb-item text-gray-900">Notas de versão</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div id="kt_app_content" class="app-content flex-column-fluid">
+        <div id="kt_app_content_container" class="app-container container-xxl">
+            <div class="card card-flush mb-7">
+                <div class="card-body py-8">
+                    <div class="d-flex align-items-start gap-4">
+                        <span class="symbol symbol-50px symbol-circle bg-light-primary">
+                            <span class="symbol-label"><i class="ki-duotone ki-information-5 fs-2x text-primary"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i></span>
+                        </span>
+                        <div>
+                            <h2 class="fw-bold mb-2">Evolução do Axiom Atlas</h2>
+                            <div class="text-gray-600 fs-6">Acompanhe, em linguagem simples, os recursos, correções e melhorias incluídos em cada versão publicada.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(Model.Notice))
+            {
+                <div class="alert alert-warning d-flex align-items-center p-5 mb-7">
+                    <i class="ki-duotone ki-information-5 fs-2hx text-warning me-4"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>
+                    <div class="d-flex flex-column"><span class="fw-bold">Notas temporariamente indisponíveis</span><span>@Model.Notice</span></div>
+                </div>
+            }
+
+            @if (Model.Releases.Count == 0)
+            {
+                <div class="card card-flush">
+                    <div class="card-body text-center py-15">
+                        <i class="ki-duotone ki-document fs-3x text-gray-400 mb-5"><span class="path1"></span><span class="path2"></span></i>
+                        <div class="text-gray-600 fs-6">Nenhuma nota de versão foi encontrada.</div>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="row g-6">
+                    @foreach (var release in Model.Releases)
+                    {
+                        <div class="col-12">
+                            <div class="card card-flush border border-gray-300">
+                                <div class="card-header">
+                                    <div class="card-title flex-column align-items-start">
+                                        <div class="d-flex align-items-center gap-3">
+                                            <span class="badge badge-light-primary fs-7 fw-bold">@release.Version</span>
+                                            @if (release.PublishedAt.HasValue)
+                                            {
+                                                <span class="text-gray-500 fs-7">Publicada em @release.PublishedAt.Value.ToLocalTime().ToString("dd/MM/yyyy")</span>
+                                            }
+                                        </div>
+                                        <span class="text-gray-900 fs-4 fw-bold mt-2">@release.Title</span>
+                                    </div>
+                                </div>
+                                <div class="card-body pt-0">
+                                    <div class="separator separator-dashed my-1"></div>
+                                    <div class="pt-5 d-flex flex-column gap-3">
+                                        @foreach (var change in release.Changes)
+                                        {
+                                            <div class="d-flex align-items-start gap-3">
+                                                <span class="badge @change.BadgeClass mt-1">@change.Category</span>
+                                                <span class="text-gray-700 fs-6">@change.Description</span>
+                                            </div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+</div>

@@ -398,11 +398,17 @@
                         </div>
                     </div>
 
-                    <div class="app-sidebar-footer flex-column-auto pt-2 pb-6 px-6" id="kt_app_sidebar_footer">
-                        <div class="btn btn-flex flex-center btn-custom btn-primary overflow-hidden text-nowrap px-0 h-40px w-100">
-                            <span class="btn-label">Axiom Atlas <br /> Versão @(version ?? "local")</span>
-                        </div>
-                    </div>
+<div class="app-sidebar-footer flex-column-auto pt-2 pb-6 px-6" id="kt_app_sidebar_footer">
+    <a class="btn btn-flex flex-center btn-custom btn-primary overflow-hidden text-nowrap px-0 h-40px w-100 text-center"
+       asp-controller="Releases"
+       asp-action="Index"
+       title="Ver notas de versão"
+       aria-label="Ver notas da versão @(version ?? "local")">
+        <span class="btn-label d-flex align-items-center justify-content-center h-100 w-100">
+            Versão @(version ?? "local")
+        </span>
+    </a>
+</div>
                 </div>
 
                 <div class="app-main flex-column flex-row-fluid" id="kt_app_main">
