@@ -23,6 +23,39 @@
 
         <div id="kanban-alert" class="d-none alert alert-danger d-flex align-items-center p-5 mb-7"></div>
 
+        <div id="kanban-controls" class="d-none mb-7">
+            <div class="improvement-kanban-kpis mb-5">
+                <button type="button" class="improvement-kanban-kpi" data-kanban-filter="risk">
+                    <span class="improvement-kanban-kpi__icon text-danger"><i class="ki-duotone ki-shield-cross fs-2x"></i></span>
+                    <span><span class="improvement-kanban-kpi__value" id="kanban-kpi-critical">0</span><span class="improvement-kanban-kpi__label">Críticas</span></span>
+                </button>
+                <button type="button" class="improvement-kanban-kpi" data-kanban-filter="risk">
+                    <span class="improvement-kanban-kpi__icon text-warning"><i class="ki-duotone ki-chart-simple-2 fs-2x"></i></span>
+                    <span><span class="improvement-kanban-kpi__value" id="kanban-kpi-risk">0</span><span class="improvement-kanban-kpi__label">Em risco</span></span>
+                </button>
+                <button type="button" class="improvement-kanban-kpi" data-kanban-filter="mine" title="Chamados que você importou ou está tratando no Axiom Atlas">
+                    <span class="improvement-kanban-kpi__icon text-primary"><i class="ki-duotone ki-profile-user fs-2x"></i></span>
+                    <span><span class="improvement-kanban-kpi__value" id="kanban-kpi-mine">0</span><span class="improvement-kanban-kpi__label">Minhas análises</span></span>
+                </button>
+                <button type="button" class="improvement-kanban-kpi" data-kanban-filter="links">
+                    <span class="improvement-kanban-kpi__icon text-warning"><i class="ki-duotone ki-link fs-2x"></i></span>
+                    <span><span class="improvement-kanban-kpi__value" id="kanban-kpi-links">0</span><span class="improvement-kanban-kpi__label">Vínculos pendentes</span></span>
+                </button>
+                <div class="improvement-kanban-kpi improvement-kanban-kpi--static">
+                    <span class="improvement-kanban-kpi__icon text-info"><i class="ki-duotone ki-calendar-8 fs-2x"></i></span>
+                    <span><span class="improvement-kanban-kpi__value" id="kanban-kpi-oldest">0</span><span class="improvement-kanban-kpi__label">Dias da mais antiga</span></span>
+                </div>
+            </div>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <span class="text-muted fw-semibold fs-7 me-1">Exibir:</span>
+                <button type="button" class="btn btn-sm btn-light-primary active" data-kanban-filter="all">Toda a fila</button>
+                <button type="button" class="btn btn-sm btn-light" data-kanban-filter="mine">Minhas análises</button>
+                <button type="button" class="btn btn-sm btn-light" data-kanban-filter="risk">Em risco</button>
+                <button type="button" class="btn btn-sm btn-light" data-kanban-filter="links">Vínculos pendentes</button>
+                <span id="kanban-filter-info" class="text-muted fs-8 ms-2"></span>
+            </div>
+        </div>
+
         <div id="kanban-loading" class="d-flex justify-content-center align-items-center py-15">
             <span class="spinner-border text-primary me-3" role="status"></span>
             <span class="text-muted fw-semibold">Montando o quadro de melhorias...</span>
@@ -41,6 +74,33 @@
         padding-bottom: 1.25rem;
         align-items: start;
     }
+
+    .improvement-kanban-kpis {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 1rem;
+    }
+
+    .improvement-kanban-kpi {
+        appearance: none;
+        border: 1px solid var(--bs-border-color);
+        background: var(--bs-body-bg);
+        border-radius: .625rem;
+        color: var(--bs-body-color);
+        display: flex;
+        align-items: center;
+        gap: .85rem;
+        min-width: 0;
+        padding: 1rem;
+        text-align: left;
+        transition: border-color .15s ease, background-color .15s ease, transform .15s ease;
+    }
+
+    button.improvement-kanban-kpi { cursor: pointer; }
+    button.improvement-kanban-kpi:hover, button.improvement-kanban-kpi.is-active { border-color: var(--bs-primary); background: var(--bs-primary-light); }
+    .improvement-kanban-kpi__icon { display: grid; place-items: center; flex: 0 0 auto; }
+    .improvement-kanban-kpi__value { display: block; font-size: 1.45rem; font-weight: 700; line-height: 1.15; }
+    .improvement-kanban-kpi__label { color: var(--bs-gray-600); display: block; font-size: .78rem; font-weight: 600; margin-top: .15rem; white-space: nowrap; }
 
     .improvement-kanban-column {
         border: 1px solid var(--bs-border-color);
@@ -94,6 +154,19 @@
         border-color: #2b2f3e;
     }
 
+    html[data-bs-theme="dark"] .improvement-kanban-kpi {
+        background: #151822;
+        border-color: #2b2f3e;
+    }
+
+    html[data-bs-theme="dark"] button.improvement-kanban-kpi:hover,
+    html[data-bs-theme="dark"] button.improvement-kanban-kpi.is-active {
+        background: #1a2130;
+        border-color: var(--bs-primary);
+    }
+
+    html[data-bs-theme="dark"] .improvement-kanban-kpi__label { color: #a1a5b7; }
+
     html[data-bs-theme="dark"] .improvement-kanban-column__header {
         background: #1a1d29;
         border-bottom-color: #2b2f3e;
@@ -121,6 +194,11 @@
 
     @@media (max-width: 991.98px) {
         .improvement-kanban-board { grid-template-columns: repeat(5, minmax(260px, 82vw)); }
+        .improvement-kanban-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @@media (max-width: 575.98px) {
+        .improvement-kanban-kpis { grid-template-columns: 1fr; }
     }
 </style>
 
@@ -129,9 +207,12 @@
         const board = document.getElementById('kanban-board');
         const loading = document.getElementById('kanban-loading');
         const alertBox = document.getElementById('kanban-alert');
+        const controls = document.getElementById('kanban-controls');
         const syncInfo = document.getElementById('kanban-sync-info');
         const refreshButton = document.getElementById('kanban-refresh');
         const highlight = new URLSearchParams(window.location.search).get('highlight');
+        let latestData = null;
+        let activeFilter = 'all';
         const stages = [
             { key: 'attention', label: 'Atenção necessária', icon: 'ki-shield-cross', badge: 'badge-light-danger' },
             { key: 'triage', label: 'Triagem GLPI', icon: 'ki-category', badge: 'badge-light-primary' },
@@ -172,8 +253,35 @@
             </article>`;
         }
 
+        function matchesFilter(item) {
+            if (activeFilter === 'mine') return item.isOwnedByCurrentUser;
+            if (activeFilter === 'risk') return item.isAtRisk || item.priority === 'Crítica' || item.priority === 'Alta';
+            if (activeFilter === 'links') return item.isGlpiLinkPending;
+            return true;
+        }
+
+        function renderKpis(summary) {
+            document.getElementById('kanban-kpi-critical').textContent = summary.critical || 0;
+            document.getElementById('kanban-kpi-risk').textContent = summary.atRisk || 0;
+            document.getElementById('kanban-kpi-mine').textContent = summary.myAnalyses || 0;
+            document.getElementById('kanban-kpi-links').textContent = summary.pendingGlpiLinks || 0;
+            document.getElementById('kanban-kpi-oldest').textContent = summary.oldestOpenDays || 0;
+
+            document.querySelectorAll('[data-kanban-filter]').forEach(button => {
+                const selected = button.dataset.kanbanFilter === activeFilter;
+                button.classList.toggle('active', selected);
+                button.classList.toggle('is-active', selected);
+                if (!button.classList.contains('improvement-kanban-kpi')) {
+                    button.classList.toggle('btn-light-primary', selected);
+                    button.classList.toggle('btn-light', !selected);
+                }
+            });
+        }
+
         function render(data) {
-            const items = Array.isArray(data.items) ? data.items : [];
+            latestData = data;
+            const allItems = Array.isArray(data.items) ? data.items : [];
+            const items = allItems.filter(matchesFilter);
             board.innerHTML = stages.map(stage => {
                 const stageItems = items.filter(item => item.stage === stage.key);
                 return `<section class="improvement-kanban-column">
@@ -184,9 +292,12 @@
                     <div class="improvement-kanban-column__content">${stageItems.length ? stageItems.map(ticketCard).join('') : '<div class="improvement-kanban-empty">Nenhuma demanda nesta etapa.</div>'}</div>
                 </section>`;
             }).join('');
+            renderKpis(data.summary || {});
+            document.getElementById('kanban-filter-info').textContent = `${items.length} de ${allItems.length} demanda(s) exibida(s).`;
             const seconds = data.synchronizationIntervalSeconds || 300;
             syncInfo.textContent = `Projeção local atualizada em ${formatDate(data.lastSynchronizedAt)}. GLPI e OpenProject são reconciliados a cada ${Math.round(seconds / 60)} min.${data.synchronizationPending ? ' Atualização em andamento.' : ''}`;
             board.classList.remove('d-none');
+            controls.classList.remove('d-none');
             loading.classList.add('d-none');
             if (highlight) document.querySelector('.is-highlighted')?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
         }
@@ -219,6 +330,13 @@
             } finally {
                 refreshButton.disabled = false;
             }
+        });
+
+        controls.addEventListener('click', event => {
+            const filterButton = event.target.closest('[data-kanban-filter]');
+            if (!filterButton || !latestData) return;
+            activeFilter = filterButton.dataset.kanbanFilter;
+            render(latestData);
         });
 
         board.addEventListener('click', async event => {

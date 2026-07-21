@@ -1,0 +1,148 @@
+@using Axiom.Atlas.Application.DTOs.ServiceDesk
+@model UnifiedBacklogResponse
+@{
+    Layout = null;
+    var generatedAt = ViewData["GeneratedAt"] is DateTime generated ? generated : DateTime.Now;
+    var openItems = Model.Items.Where(item => item.Stage != "completed").ToList();
+    var clientRisks = openItems
+        .GroupBy(item => item.ClientEntityName ?? "Cliente não informado")
+        .Select(group => new
+        {
+            Name = group.Key,
+            Open = group.Count(),
+            AtRisk = group.Count(item => item.IsAtRisk),
+            Critical = group.Count(item => item.Priority == "Crítica"),
+            Oldest = group.Max(item => item.DaysOpen)
+        })
+        .OrderByDescending(item => item.Critical)
+        .ThenByDescending(item => item.AtRisk)
+        .ThenByDescending(item => item.Oldest)
+        .Take(10)
+        .ToList();
+    var stages = new[]
+    {
+        (Label: "Atenção necessária", Amount: Model.Summary.Attention),
+        (Label: "Triagem GLPI", Amount: Model.Summary.Triage),
+        (Label: "Análise de requisitos", Amount: Model.Summary.Analysis),
+        (Label: "User Story em andamento", Amount: Model.Summary.Delivery),
+        (Label: "Concluídas", Amount: Model.Summary.Completed)
+    };
+}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Relatório gerencial de melhorias - Axiom Atlas</title>
+    <style>
+        @@page { size: A4 landscape; margin: 14mm; }
+        :root { --navy: #14213d; --blue: #2563eb; --ink: #182230; --muted: #64748b; --line: #d9e1ea; --surface: #f6f8fb; --danger: #c62852; --warning: #a56a00; --success: #198754; }
+        * { box-sizing: border-box; }
+        body { margin: 0; color: var(--ink); background: #edf1f6; font-family: Arial, Helvetica, sans-serif; }
+        main { width: 1120px; max-width: calc(100% - 48px); margin: 28px auto; padding: 42px; background: #fff; box-shadow: 0 12px 36px rgba(15, 23, 42, .12); }
+        header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; padding-bottom: 24px; border-bottom: 3px solid var(--blue); }
+        .brand { color: var(--blue); font-size: 14px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+        h1 { margin: 8px 0; color: var(--navy); font-size: 30px; }
+        .subtitle { margin: 0; color: var(--muted); font-size: 15px; }
+        .generated { color: var(--muted); font-size: 12px; text-align: right; line-height: 1.55; }
+        .actions { margin: 24px 0; display: flex; justify-content: flex-end; gap: 10px; }
+        button { border: 0; border-radius: 6px; padding: 10px 16px; color: #fff; background: var(--blue); cursor: pointer; font-weight: 700; }
+        button.secondary { color: var(--blue); background: #e7efff; }
+        .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 26px 0; }
+        .kpi { min-height: 110px; padding: 18px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+        .kpi .value { color: var(--blue); font-size: 30px; font-weight: 800; }
+        .kpi .value.danger { color: var(--danger); }
+        .kpi .value.warning { color: var(--warning); }
+        .kpi .label { margin-top: 9px; font-size: 14px; font-weight: 700; }
+        .kpi .note { margin-top: 4px; color: var(--muted); font-size: 12px; }
+        h2 { margin: 32px 0 10px; color: var(--navy); font-size: 19px; }
+        .section-note { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        th { padding: 10px; color: var(--muted); background: var(--surface); font-size: 11px; letter-spacing: .04em; text-align: left; text-transform: uppercase; }
+        td { padding: 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+        td.number { text-align: right; font-weight: 700; }
+        .tag { display: inline-block; padding: 3px 7px; border-radius: 999px; color: #fff; background: var(--blue); font-size: 10px; font-weight: 700; }
+        .tag.danger { background: var(--danger); }
+        .tag.warning { background: var(--warning); }
+        footer { margin-top: 34px; padding-top: 14px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+        @@media print { body { background: #fff; } main { width: auto; max-width: none; margin: 0; padding: 0; box-shadow: none; } .actions { display: none; } }
+    </style>
+</head>
+<body>
+    <main>
+        <header>
+            <div>
+                <div class="brand">Axiom Atlas</div>
+                <h1>Relatório gerencial de melhorias</h1>
+                <p class="subtitle">Visão consolidada da fila GLPI e do fluxo de User Stories no OpenProject.</p>
+            </div>
+            <div class="generated">Gerado em<br /><strong>@generatedAt.ToString("dd/MM/yyyy 'às' HH:mm")</strong></div>
+        </header>
+
+        <div class="actions">
+            <button type="button" class="secondary" onclick="window.close()">Fechar</button>
+            <button type="button" onclick="window.print()">Imprimir / Salvar em PDF</button>
+        </div>
+
+        <section class="kpis">
+            <div class="kpi"><div class="value">@openItems.Count</div><div class="label">Em aberto</div><div class="note">Chamados ainda em acompanhamento</div></div>
+            <div class="kpi"><div class="value warning">@Model.Summary.AtRisk</div><div class="label">Em risco</div><div class="note">Prioridade alta ou crítica</div></div>
+            <div class="kpi"><div class="value danger">@Model.Summary.Critical</div><div class="label">Críticas</div><div class="note">Demandas com atenção imediata</div></div>
+            <div class="kpi"><div class="value">@Model.Summary.OldestOpenDays dias</div><div class="label">Maior espera</div><div class="note">Chamado aberto há mais tempo</div></div>
+        </section>
+
+        <section>
+            <h2>Clientes que exigem atenção</h2>
+            <p class="section-note">Ordenados por criticidade, risco e tempo de espera.</p>
+            <table>
+                <thead><tr><th>Cliente</th><th>Em aberto</th><th>Em risco</th><th>Críticas</th><th>Maior espera</th></tr></thead>
+                <tbody>
+                @foreach (var client in clientRisks)
+                {
+                    <tr><td><strong>@client.Name</strong></td><td class="number">@client.Open</td><td class="number">@client.AtRisk</td><td class="number">@client.Critical</td><td class="number">@client.Oldest dias</td></tr>
+                }
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h2>Gargalos do fluxo</h2>
+            <p class="section-note">Distribuição atual das demandas nas etapas do processo.</p>
+            <table>
+                <thead><tr><th>Etapa</th><th>Quantidade</th><th>Participação da fila</th></tr></thead>
+                <tbody>
+                @foreach (var stage in stages)
+                {
+                    var percentage = Model.Summary.Total == 0 ? 0 : Math.Round(stage.Amount * 100m / Model.Summary.Total, 1);
+                    <tr><td><strong>@stage.Label</strong></td><td class="number">@stage.Amount</td><td class="number">@percentage%</td></tr>
+                }
+                </tbody>
+            </table>
+        </section>
+
+        <section>
+            <h2>Prioridades recomendadas</h2>
+            <p class="section-note">Demandas ordenadas pela prioridade sugerida para atuação do time.</p>
+            <table>
+                <thead><tr><th>Chamado</th><th>Cliente</th><th>GLPI</th><th>Recomendação</th><th>Motivo</th><th>Dias</th></tr></thead>
+                <tbody>
+                @foreach (var item in openItems.OrderBy(item => item.Priority == "Crítica" ? 0 : item.Priority == "Alta" ? 1 : 2).ThenByDescending(item => item.DaysOpen).Take(20))
+                {
+                    var css = item.Priority == "Crítica" ? "danger" : item.Priority == "Alta" ? "warning" : string.Empty;
+                    <tr>
+                        <td><strong>#@item.GlpiTicketId</strong><br />@item.Subject</td>
+                        <td>@(item.ClientEntityName ?? "Não informado")</td>
+                        <td>@item.GlpiStatusName</td>
+                        <td><span class="tag @css">@item.Priority</span></td>
+                        <td>@item.PriorityReason</td>
+                        <td class="number">@item.DaysOpen</td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </section>
+
+        <footer>Relatório gerado pelo Axiom Atlas a partir da projeção local consolidada. GLPI e OpenProject são reconciliados periodicamente.</footer>
+    </main>
+</body>
+</html>

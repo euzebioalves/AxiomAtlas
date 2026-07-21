@@ -1,0 +1,102 @@
+@using Axiom.Atlas.Application.DTOs.ServiceDesk
+@model IReadOnlyList<UnifiedBacklogItemDto>
+@{
+    ViewData["Title"] = ViewData["DashboardDetailsTitle"] ?? "Detalhamento gerencial";
+    var title = ViewData["DashboardDetailsTitle"]?.ToString() ?? "Detalhamento gerencial";
+    var description = ViewData["DashboardDetailsDescription"]?.ToString() ?? string.Empty;
+
+    string PriorityBadge(string priority) => priority switch
+    {
+        "Crítica" => "danger",
+        "Alta" => "warning",
+        _ => "primary"
+    };
+}
+
+<div class="app-content flex-column-fluid" id="kt_app_content">
+    <div class="app-container container-xxl">
+        <div class="card">
+            <div class="card-header border-0 pt-6">
+                <div class="card-title flex-column align-items-start">
+                    <h1 class="fs-2 fw-bold mb-2">@title</h1>
+                    <span class="text-gray-600 fs-6">@description</span>
+                </div>
+                <div class="card-toolbar">
+                    <a href="@Url.Action("Dashboard", "ServiceDesk")" class="btn btn-light-primary">
+                        <i class="ki-duotone ki-arrow-left fs-2"><span class="path1"></span><span class="path2"></span></i>
+                        Voltar ao painel
+                    </a>
+                </div>
+            </div>
+            <div class="card-body pt-0">
+                @if (Model.Count == 0)
+                {
+                    <div class="notice d-flex bg-light-primary rounded border-primary border border-dashed p-6">
+                        <i class="ki-duotone ki-information-5 fs-2tx text-primary me-4"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>
+                        <div class="d-flex flex-stack flex-grow-1">
+                            <div class="fw-semibold">
+                                <h4 class="text-gray-900 fw-bold mb-1">Nenhuma demanda encontrada</h4>
+                                <div class="fs-6 text-gray-700">Não há chamados correspondentes ao recorte selecionado.</div>
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-4">
+                            <thead>
+                                <tr class="fw-bold text-muted text-uppercase fs-7">
+                                    <th>Chamado</th>
+                                    <th>Cliente</th>
+                                    <th>Status GLPI</th>
+                                    <th>Prioridade</th>
+                                    <th>Work Package</th>
+                                    <th class="text-end">Dias em aberto</th>
+                                    <th class="text-end">Ação</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var item in Model)
+                                {
+                                    <tr>
+                                        <td>
+                                            <a href="@item.GlpiTicketUrl" target="_blank" rel="noopener noreferrer" class="fw-bold text-primary">#@item.GlpiTicketId</a>
+                                            <div class="text-gray-600 text-truncate mw-300px">@item.Subject</div>
+                                            <div class="text-gray-500 fs-8">@(item.OpenedAt?.ToString("dd/MM/yyyy") ?? "Data não informada")</div>
+                                        </td>
+                                        <td class="fw-semibold">@(item.ClientEntityName ?? "Não informado")</td>
+                                        <td><span class="badge badge-light-primary">@item.GlpiStatusName</span></td>
+                                        <td><span class="badge badge-light-@PriorityBadge(item.Priority)">@item.Priority</span></td>
+                                        <td>
+                                            @if (item.WorkPackageId.HasValue)
+                                            {
+                                                <a href="@item.WorkPackageUrl" target="_blank" rel="noopener noreferrer" class="badge badge-light-success">WP #@item.WorkPackageId</a>
+                                                <div class="text-gray-600 fs-8 mt-1">@(item.WorkPackageStatus ?? "Status não informado")</div>
+                                            }
+                                            else
+                                            {
+                                                <span class="text-gray-500">Sem User Story</span>
+                                            }
+                                        </td>
+                                        <td class="text-end"><span class="badge badge-light-warning">@item.DaysOpen dias</span></td>
+                                        <td class="text-end">
+                                            @if (item.WorkspaceId.HasValue)
+                                            {
+                                                <a href="@Url.Action("Workspace", "ServiceDesk", new { id = item.WorkspaceId, returnSource = "dashboard" })" class="btn btn-sm btn-light-primary">Tratar</a>
+                                            }
+                                            else
+                                            {
+                                                <a href="@Url.Action("Index", "ServiceDesk", new { highlight = item.GlpiTicketId })" class="btn btn-sm btn-light">Abrir fila</a>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>

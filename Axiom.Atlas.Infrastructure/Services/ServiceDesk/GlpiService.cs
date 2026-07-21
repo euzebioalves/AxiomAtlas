@@ -299,7 +299,12 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                     Analysis = items.Count(x => x.Stage == "analysis"),
                     Delivery = items.Count(x => x.Stage == "delivery"),
                     Attention = items.Count(x => x.Stage == "attention"),
-                    Completed = items.Count(x => x.Stage == "completed")
+                    Completed = items.Count(x => x.Stage == "completed"),
+                    Critical = items.Count(x => x.Priority == "Crítica"),
+                    AtRisk = items.Count(x => x.IsAtRisk),
+                    MyAnalyses = items.Count(x => x.IsOwnedByCurrentUser),
+                    PendingGlpiLinks = items.Count(x => x.IsGlpiLinkPending),
+                    OldestOpenDays = items.Count == 0 ? 0 : items.Max(x => x.DaysOpen)
                 }
             };
         }
@@ -707,6 +712,7 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                 },
                 Priority = priority,
                 PriorityReason = reason,
+                IsAtRisk = priority is "Crítica" or "Alta",
                 IsGlpiLinkPending = isGlpiLinkPending
             };
         }

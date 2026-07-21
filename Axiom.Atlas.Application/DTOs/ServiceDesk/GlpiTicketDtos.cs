@@ -95,6 +95,11 @@ namespace Axiom.Atlas.Application.DTOs.ServiceDesk
         public int Delivery { get; set; }
         public int Attention { get; set; }
         public int Completed { get; set; }
+        public int Critical { get; set; }
+        public int AtRisk { get; set; }
+        public int MyAnalyses { get; set; }
+        public int PendingGlpiLinks { get; set; }
+        public int OldestOpenDays { get; set; }
     }
 
     public class UnifiedBacklogItemDto
@@ -117,6 +122,7 @@ namespace Axiom.Atlas.Application.DTOs.ServiceDesk
         public string StageLabel { get; set; } = "Triagem GLPI";
         public string Priority { get; set; } = "Normal";
         public string PriorityReason { get; set; } = string.Empty;
+        public bool IsAtRisk { get; set; }
         public bool IsGlpiLinkPending { get; set; }
     }
 }

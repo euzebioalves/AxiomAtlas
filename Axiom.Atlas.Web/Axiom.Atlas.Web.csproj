@@ -10,5 +10,6 @@
 	</PropertyGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\Axiom.Atlas.Application\Axiom.Atlas.Application.csproj" />
+		<PackageReference Include="ClosedXML" Version="0.105.0" />
 	</ItemGroup>
 </Project>
