@@ -1,0 +1,305 @@
+@{
+    ViewData["Title"] = "Visão gerencial";
+}
+
+<div class="app-content flex-column-fluid" id="kt_app_content">
+    <div class="app-container container-xxl">
+        <div class="d-flex flex-column gap-7">
+    <div class="card dashboard-hero">
+        <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-5 py-7">
+            <div>
+                <span class="badge badge-light-primary mb-3">Gestão da fila</span>
+                <h1 class="fs-2x fw-bold mb-2">Visão gerencial de melhorias</h1>
+                <p class="text-gray-600 fw-semibold mb-0">Acompanhe riscos de SLA, envelhecimento da fila e as próximas ações recomendadas.</p>
+                <p id="dashboard-synchronization" class="text-gray-500 fs-7 mt-3 mb-0"></p>
+            </div>
+            <div class="d-flex flex-wrap gap-3">
+                <a href="@Url.Action("DashboardReport", "ServiceDesk")" target="_blank" class="btn btn-light-primary">
+                    <i class="ki-duotone ki-printer fs-2"><span class="path1"></span><span class="path2"></span></i>
+                    Imprimir / PDF
+                </a>
+                <a href="@Url.Action("DashboardExcel", "ServiceDesk")" class="btn btn-light-success">
+                    <i class="ki-duotone ki-file-down fs-2"><span class="path1"></span><span class="path2"></span></i>
+                    Exportar Excel
+                </a>
+                <button id="dashboard-refresh" type="button" class="btn btn-primary">
+                    <i class="ki-duotone ki-arrows-circle fs-2"><span class="path1"></span><span class="path2"></span></i>
+                    Atualizar fontes
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div id="dashboard-error" class="alert alert-danger d-none mb-0">
+        <span id="dashboard-error-message"></span>
+    </div>
+
+    <div id="dashboard-loading" class="card">
+        <div class="card-body d-flex align-items-center justify-content-center gap-3 py-12">
+            <span class="spinner-border text-primary" role="status" aria-label="Carregando"></span>
+            <span class="fw-semibold text-gray-600">Preparando a visão gerencial da fila...</span>
+        </div>
+    </div>
+
+    <div id="dashboard-content" class="d-none d-flex flex-column gap-7">
+        <div class="row g-5" id="dashboard-kpis"></div>
+
+        <div class="row g-7">
+            <div class="col-xl-7">
+                <div class="card h-100">
+                    <div class="card-header border-0 pt-6">
+                        <div class="card-title flex-column align-items-start">
+                            <h2 class="fw-bold fs-3 mb-1">Clientes que exigem atenção</h2>
+                            <span class="text-gray-500 fw-semibold fs-7">Ordenados por criticidade, risco e tempo de espera.</span>
+                        </div>
+                    </div>
+                    <div class="card-body pt-0">
+                        <div class="table-responsive">
+                            <table class="table table-row-dashed align-middle gs-0 gy-4 mb-0">
+                                <thead>
+                                    <tr class="text-start text-gray-500 fw-bold fs-7 text-uppercase">
+                                        <th>Cliente</th>
+                                        <th class="text-center">Em aberto</th>
+                                        <th class="text-center">Em risco</th>
+                                        <th class="text-center">Críticas</th>
+                                        <th class="text-end">Maior espera</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="dashboard-client-risks"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-5">
+                <div class="card h-100">
+                    <div class="card-header border-0 pt-6">
+                        <div class="card-title flex-column align-items-start">
+                            <h2 class="fw-bold fs-3 mb-1">Gargalos do fluxo</h2>
+                            <span class="text-gray-500 fw-semibold fs-7">Onde a fila está concentrada neste momento.</span>
+                        </div>
+                    </div>
+                    <div class="card-body pt-2" id="dashboard-stages"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header border-0 pt-6">
+                <div class="card-title flex-column align-items-start">
+                    <h2 class="fw-bold fs-3 mb-1">Prioridades recomendadas</h2>
+                    <span class="text-gray-500 fw-semibold fs-7">Recomendação calculada pela idade do chamado, estado do fluxo e consistência do vínculo entre GLPI e OpenProject.</span>
+                </div>
+            </div>
+            <div class="card-body pt-0">
+                <div class="table-responsive">
+                    <table class="table table-row-dashed align-middle gs-0 gy-4 mb-0">
+                        <thead>
+                            <tr class="text-start text-gray-500 fw-bold fs-7 text-uppercase">
+                                <th>Demanda</th>
+                                <th>Cliente</th>
+                                <th>Recomendação</th>
+                                <th>Motivo</th>
+                                <th class="text-end">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dashboard-priorities"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+        </div>
+    </div>
+
+<style>
+    .dashboard-hero { background: linear-gradient(135deg, rgba(var(--bs-primary-rgb), .10), rgba(var(--bs-info-rgb), .04)); }
+    .dashboard-kpi { min-height: 154px; }
+    .dashboard-kpi-value { font-size: 2rem; line-height: 1; }
+    .dashboard-stage-item + .dashboard-stage-item { border-top: 1px dashed var(--bs-border-color); }
+    .dashboard-client-link { color: inherit; text-decoration: none; }
+    .dashboard-client-link:hover { color: var(--bs-primary); text-decoration: underline; }
+    .dashboard-stage-item { display: block; color: inherit; text-decoration: none; transition: background-color .2s ease, transform .2s ease; }
+    .dashboard-stage-item:hover { background: var(--bs-light-primary); color: var(--bs-primary); transform: translateX(2px); }
+    .dashboard-stage-bar { height: 8px; border-radius: 99px; background: var(--bs-gray-200); overflow: hidden; }
+    [data-bs-theme="dark"] .dashboard-stage-bar { background: #242838; }
+    .dashboard-stage-bar > span { display: block; height: 100%; border-radius: inherit; }
+    .dashboard-priority-row.is-highlighted { animation: dashboard-highlight 2.6s ease-in-out 2; }
+    @@keyframes dashboard-highlight {
+        0%, 100% { background-color: transparent; }
+        50% { background-color: rgba(var(--bs-primary-rgb), .16); }
+    }
+</style>
+
+<script>
+    (() => {
+        const loading = document.getElementById('dashboard-loading');
+        const content = document.getElementById('dashboard-content');
+        const error = document.getElementById('dashboard-error');
+        const errorMessage = document.getElementById('dashboard-error-message');
+        const refreshButton = document.getElementById('dashboard-refresh');
+        const highlight = new URLSearchParams(window.location.search).get('highlight');
+        const priorityRank = { 'Crítica': 0, 'Alta': 1, 'Normal': 2 };
+
+        const escapeHtml = value => String(value ?? '')
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+
+        const formatDateTime = value => value ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : 'Ainda não sincronizada';
+        const formatInterval = seconds => seconds >= 60 ? `${Math.round(seconds / 60)} min` : `${seconds} s`;
+        const priorityClass = priority => priority === 'Crítica' ? 'danger' : priority === 'Alta' ? 'warning' : 'primary';
+        const stageColor = stage => ({ attention: 'danger', triage: 'primary', analysis: 'warning', delivery: 'success', completed: 'info' }[stage] || 'primary');
+        const detailsUrl = '@Url.Action("DashboardDetails", "ServiceDesk")';
+        const buildDetailsUrl = params => `${detailsUrl}?${new URLSearchParams(params).toString()}`;
+
+        async function loadDashboard() {
+            loading.classList.remove('d-none');
+            content.classList.add('d-none');
+            error.classList.add('d-none');
+            try {
+                const response = await fetch('@Url.Action("DashboardData", "ServiceDesk")');
+                const responseBody = await response.text();
+                let payload = null;
+
+                if (responseBody) {
+                    try {
+                        payload = JSON.parse(responseBody);
+                    } catch {
+                        throw new Error(`A consulta retornou uma resposta inválida (HTTP ${response.status}).`);
+                    }
+                }
+
+                if (!response.ok) {
+                    throw new Error(payload?.message || payload?.detail || `Não foi possível carregar a visão gerencial (HTTP ${response.status}).`);
+                }
+
+                if (!payload) {
+                    throw new Error('A consulta retornou uma resposta vazia. Tente atualizar as fontes novamente.');
+                }
+
+                renderDashboard(payload);
+                content.classList.remove('d-none');
+            } catch (exception) {
+                errorMessage.textContent = exception.message;
+                error.classList.remove('d-none');
+            } finally {
+                loading.classList.add('d-none');
+            }
+        }
+
+        function renderDashboard(payload) {
+            const items = payload.items || [];
+            const summary = payload.summary || {};
+            const openItems = items.filter(item => item.stage !== 'completed');
+            const synchronizationText = payload.synchronizationPending
+                ? 'Uma atualização está em andamento. Os indicadores serão reconciliados em segundo plano.'
+                : `Projeção local atualizada em ${formatDateTime(payload.lastSynchronizedAt)}. Fontes reconciliadas a cada ${formatInterval(payload.synchronizationIntervalSeconds || 300)}.`;
+            document.getElementById('dashboard-synchronization').textContent = synchronizationText;
+
+            const kpis = [
+                ['Em aberto', openItems.length, 'Chamados ainda em acompanhamento', 'primary', 'ki-chart-line-star'],
+                ['Em risco', summary.atRisk || 0, 'Prioridade alta ou crítica', 'warning', 'ki-notification-status'],
+                ['Críticas', summary.critical || 0, 'Demandas com atenção imediata', 'danger', 'ki-shield-cross'],
+                ['Maior espera', `${summary.oldestOpenDays || 0} dias`, 'Chamado aberto há mais tempo', 'info', 'ki-calendar-8']
+            ];
+            document.getElementById('dashboard-kpis').innerHTML = kpis.map(([title, value, subtitle, color, icon]) => `
+                <div class="col-md-6 col-xl-3"><div class="card dashboard-kpi border border-${color} border-opacity-25">
+                    <div class="card-body d-flex align-items-center gap-4">
+                        <span class="symbol symbol-50px"><span class="symbol-label bg-light-${color}"><i class="ki-duotone ${icon} fs-2 text-${color}"><span class="path1"></span><span class="path2"></span></i></span></span>
+                        <div><div class="dashboard-kpi-value fw-bold text-${color}">${escapeHtml(value)}</div><div class="fw-bold mt-2">${title}</div><div class="text-gray-500 fs-7">${subtitle}</div></div>
+                    </div>
+                </div></div>`).join('');
+
+            const clients = Object.values(openItems.reduce((result, item) => {
+                const key = item.clientEntityName || 'Cliente não informado';
+                const current = result[key] || { name: key, total: 0, risk: 0, critical: 0, oldest: 0 };
+                current.total += 1;
+                current.risk += item.isAtRisk ? 1 : 0;
+                current.critical += item.priority === 'Crítica' ? 1 : 0;
+                current.oldest = Math.max(current.oldest, item.daysOpen || 0);
+                result[key] = current;
+                return result;
+            }, {})).sort((a, b) => b.critical - a.critical || b.risk - a.risk || b.oldest - a.oldest).slice(0, 8);
+            document.getElementById('dashboard-client-risks').innerHTML = clients.length ? clients.map(client => {
+                const clientUrl = buildDetailsUrl({ client: client.name });
+                return `<tr><td class="fw-bold"><a class="dashboard-client-link" href="${clientUrl}" title="Ver demandas de ${escapeHtml(client.name)}">${escapeHtml(client.name)}</a></td>
+                <td class="text-center"><a class="dashboard-client-link" href="${clientUrl}">${client.total}</a></td>
+                <td class="text-center"><a class="badge badge-light-warning" href="${clientUrl}">${client.risk}</a></td>
+                <td class="text-center"><a class="badge badge-light-danger" href="${clientUrl}">${client.critical}</a></td>
+                <td class="text-end fw-bold"><a class="dashboard-client-link" href="${clientUrl}">${client.oldest} dias</a></td></tr>`;
+            }).join('') : '<tr><td colspan="5" class="text-center text-gray-500 py-8">Não há demandas abertas na projeção local.</td></tr>';
+
+            const stages = [
+                ['attention', 'Atenção necessária', summary.attention || 0],
+                ['triage', 'Triagem GLPI', summary.triage || 0],
+                ['analysis', 'Análise de requisitos', summary.analysis || 0],
+                ['delivery', 'User Story em andamento', summary.delivery || 0],
+                ['completed', 'Concluídas', summary.completed || 0]
+            ];
+            const total = Math.max(summary.total || 0, 1);
+            document.getElementById('dashboard-stages').innerHTML = stages.map(([stage, label, amount]) => `
+                <a href="${buildDetailsUrl({ stage })}" class="dashboard-stage-item py-4" title="Ver demandas em ${label}"><div class="d-flex justify-content-between align-items-center mb-2"><span class="fw-bold">${label}</span><span class="badge badge-light-${stageColor(stage)}">${amount}</span></div>
+                <div class="dashboard-stage-bar"><span class="bg-${stageColor(stage)}" style="width:${Math.min(100, (amount / total) * 100)}%"></span></div></a>`).join('');
+
+            const recommendations = openItems
+                .filter(item => item.priority === 'Crítica' || item.priority === 'Alta' || item.isGlpiLinkPending)
+                .sort((a, b) => (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3) || (b.daysOpen || 0) - (a.daysOpen || 0))
+                .slice(0, 12);
+            document.getElementById('dashboard-priorities').innerHTML = recommendations.length ? recommendations.map(item => `
+                <tr class="dashboard-priority-row" data-ticket-id="${item.glpiTicketId}">
+                    <td><div class="fw-bold text-gray-900">#${item.glpiTicketId}</div><div class="text-gray-600 text-truncate" style="max-width:260px">${escapeHtml(item.subject)}</div><div class="text-gray-500 fs-7">${item.daysOpen || 0} dias em aberto</div></td>
+                    <td class="fw-semibold">${escapeHtml(item.clientEntityName || 'Não informado')}</td>
+                    <td><span class="badge badge-light-${priorityClass(item.priority)}">${escapeHtml(item.priority || 'Normal')}</span></td>
+                    <td class="text-gray-600" style="max-width:310px">${escapeHtml(item.priorityReason || 'Acompanhar a evolução da demanda.')}</td>
+                    <td class="text-end"><button type="button" class="btn btn-sm btn-light-primary dashboard-treat" data-workspace-id="${item.workspaceId || ''}" data-ticket-id="${item.glpiTicketId}"><i class="ki-duotone ki-notepad-edit fs-4"><span class="path1"></span><span class="path2"></span></i>Tratar</button></td>
+                </tr>`).join('') : '<tr><td colspan="5" class="text-center text-gray-500 py-8">Não há demandas críticas ou em risco neste momento.</td></tr>';
+
+            if (highlight) {
+                const row = document.querySelector(`[data-ticket-id="${highlight}"]`);
+                if (row) {
+                    row.classList.add('is-highlighted');
+                    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }
+        }
+
+        document.addEventListener('click', async event => {
+            const button = event.target.closest('.dashboard-treat');
+            if (!button) return;
+            const workspaceId = button.dataset.workspaceId;
+            if (workspaceId) {
+                window.location.href = `/ServiceDesk/Workspace/${workspaceId}?returnSource=dashboard`;
+                return;
+            }
+
+            button.disabled = true;
+            button.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Abrindo';
+            try {
+                const response = await fetch('@Url.Action("Import", "ServiceDesk")', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: button.dataset.ticketId })
+                });
+                const workspace = await response.json();
+                if (!response.ok) throw new Error(workspace.message || 'Não foi possível preparar o chamado.');
+                window.location.href = `/ServiceDesk/Workspace/${workspace.id}?returnSource=dashboard`;
+            } catch (exception) {
+                button.disabled = false;
+                button.innerHTML = '<i class="ki-duotone ki-notepad-edit fs-4"><span class="path1"></span><span class="path2"></span></i>Tratar';
+                window.alert(exception.message);
+            }
+        });
+
+        refreshButton.addEventListener('click', async () => {
+            refreshButton.disabled = true;
+            try {
+                await fetch('@Url.Action("RefreshKanban", "ServiceDesk")', { method: 'POST' });
+                await loadDashboard();
+            } finally {
+                refreshButton.disabled = false;
+            }
+        });
+
+        loadDashboard();
+    })();
+</script>
