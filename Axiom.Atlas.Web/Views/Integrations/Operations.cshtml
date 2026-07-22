@@ -2,24 +2,35 @@
     ViewData["Title"] = "Operações de Integração";
 }
 
-<div class="app-container container-fluid">
-    <div class="card mb-5 mb-xl-8">
-        <div class="card-body py-8">
-            <div class="d-flex flex-stack flex-wrap gap-4">
-                <div>
-                    <span class="badge badge-light-primary mb-3">Integrações</span>
-                    <h1 class="fw-bold fs-2x mb-2">Operações de integração</h1>
-                    <div class="text-muted fw-semibold">Acompanhe a fila persistida, as tentativas automáticas e os erros de comunicação com GLPI e OpenProject.</div>
-                </div>
-                <button id="refresh-synchronizations" type="button" class="btn btn-light-primary">
-                    <i class="ki-duotone ki-arrows-circle fs-2"><span class="path1"></span><span class="path2"></span></i>
-                    Atualizar
-                </button>
+<div class="d-flex flex-column flex-column-fluid">
+    <div id="kt_app_toolbar" class="app-toolbar py-3 py-lg-6">
+        <div id="kt_app_toolbar_container" class="app-container container-xxl d-flex flex-stack">
+            <div class="page-title d-flex flex-column justify-content-center flex-wrap me-3">
+                <h1 class="page-heading d-flex text-gray-900 fw-bold fs-3 flex-column justify-content-center my-0">Operações de integração</h1>
+                <ul class="breadcrumb breadcrumb-separatorless fw-semibold fs-7 my-0 pt-1">
+                    <li class="breadcrumb-item text-muted">
+                        <a asp-controller="Home" asp-action="Index" class="text-muted text-hover-primary">Home</a>
+                    </li>
+                    <li class="breadcrumb-item">
+                        <i class="ki-duotone ki-right fs-7 text-gray-700 mx-n1"><span class="path1"></span><span class="path2"></span></i>
+                    </li>
+                    <li class="breadcrumb-item text-muted">Integrações</li>
+                    <li class="breadcrumb-item">
+                        <i class="ki-duotone ki-right fs-7 text-gray-700 mx-n1"><span class="path1"></span><span class="path2"></span></i>
+                    </li>
+                    <li class="breadcrumb-item text-gray-800">Operações</li>
+                </ul>
             </div>
+            <button id="refresh-synchronizations" type="button" class="btn btn-light-primary">
+                <i class="ki-duotone ki-arrows-circle fs-2"><span class="path1"></span><span class="path2"></span></i>
+                Atualizar
+            </button>
         </div>
     </div>
 
-    <div class="card">
+    <div id="kt_app_content" class="app-content flex-column-fluid">
+        <div id="kt_app_content_container" class="app-container container-xxl">
+            <div class="card">
         <div class="card-header border-0 pt-6">
             <div class="card-title">
                 <div class="d-flex align-items-center position-relative my-1">
@@ -41,6 +52,8 @@
             <div id="synchronization-jobs-container" class="py-10 text-center">
                 <span class="spinner-border spinner-border-sm text-primary me-2" role="status"></span>
                 <span class="text-muted">Carregando operações de integração...</span>
+            </div>
+        </div>
             </div>
         </div>
     </div>

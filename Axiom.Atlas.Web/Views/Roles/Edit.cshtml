@@ -2,6 +2,25 @@
 
 @{
     ViewData["Title"] = $"Editar Permissões - {Model.RoleName}";
+    var moduleLabels = new Dictionary<string, string>
+    {
+        ["Users"] = "Usuários",
+        ["Roles"] = "Perfis",
+        ["TimeEntries"] = "Entradas de tempo",
+        ["TimeClock"] = "Ponto eletrônico",
+        ["TimeClockAudit"] = "Auditoria do ponto",
+        ["TimeClockJourney"] = "Minha jornada",
+        ["TimeClockGlobalSettings"] = "Configurações globais do ponto",
+        ["ServiceDesk"] = "Servicedesk",
+        ["ServiceDeskKanban"] = "Quadro de melhorias",
+        ["ServiceDeskDashboard"] = "Visão gerencial",
+        ["IntegrationsOpenProject"] = "Integração OpenProject",
+        ["IntegrationsGlpi"] = "Integração GLPI",
+        ["IntegrationOperations"] = "Operações de integração",
+        ["AuditLog"] = "Auditoria",
+        ["DesktopNotifications"] = "Notificações",
+        ["Releases"] = "Notas de versão"
+    };
 }
 
 <div class="d-flex flex-column flex-column-fluid">
@@ -66,12 +85,13 @@
                                             .ToList();
                                     }
 
-                                    @foreach (var modulo in modulos)
-                                    {
-                                        <tr>
-                                            <td class="text-gray-800 fs-5 fw-bold">
-                                                @modulo
-                                            </td>
+    @foreach (var modulo in modulos)
+    {
+        var moduleLabel = moduleLabels.TryGetValue(modulo, out var label) ? label : modulo;
+        <tr>
+            <td class="text-gray-800 fs-5 fw-bold">
+                @moduleLabel
+            </td>
                     
                                             <td>
                                                 <div class="d-flex flex-wrap gap-8">

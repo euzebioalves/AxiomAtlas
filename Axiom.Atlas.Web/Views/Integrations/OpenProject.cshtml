@@ -3,7 +3,33 @@
     ViewData["Title"] = "Integração: OpenProject";
 }
 
-<div class="card shadow-sm">
+<div class="d-flex flex-column flex-column-fluid">
+    <div id="kt_app_toolbar" class="app-toolbar py-3 py-lg-6">
+        <div id="kt_app_toolbar_container" class="app-container container-xxl d-flex flex-stack">
+            <div class="page-title d-flex flex-column justify-content-center flex-wrap me-3">
+                <h1 class="page-heading d-flex text-gray-900 fw-bold fs-3 flex-column justify-content-center my-0">Integração OpenProject</h1>
+                <ul class="breadcrumb breadcrumb-separatorless fw-semibold fs-7 my-0 pt-1">
+                    <li class="breadcrumb-item text-muted">
+                        <a asp-controller="Home" asp-action="Index" class="text-muted text-hover-primary">Home</a>
+                    </li>
+                    <li class="breadcrumb-item">
+                        <i class="ki-duotone ki-right fs-7 text-gray-700 mx-n1"><span class="path1"></span><span class="path2"></span></i>
+                    </li>
+                    <li class="breadcrumb-item text-muted">
+                        <a asp-controller="Integrations" asp-action="Operations" class="text-muted text-hover-primary">Integrações</a>
+                    </li>
+                    <li class="breadcrumb-item">
+                        <i class="ki-duotone ki-right fs-7 text-gray-700 mx-n1"><span class="path1"></span><span class="path2"></span></i>
+                    </li>
+                    <li class="breadcrumb-item text-gray-800">OpenProject</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div id="kt_app_content" class="app-content flex-column-fluid">
+        <div id="kt_app_content_container" class="app-container container-xxl">
+            <div class="card shadow-sm">
     <div class="card-header">
         <h3 class="card-title">Configurações do OpenProject</h3>
     </div>
@@ -101,6 +127,9 @@
                 <button type="submit" class="btn btn-primary">Salvar Configurações</button>
             </div>
         </form>
+    </div>
+            </div>
+        </div>
     </div>
 </div>
 
