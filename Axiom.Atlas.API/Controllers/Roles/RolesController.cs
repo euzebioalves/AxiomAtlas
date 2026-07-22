@@ -12,6 +12,32 @@ namespace Axiom.Atlas.API.Controllers.Roles
     [Authorize(Policy = "AdministrationOnly")]
     public class RolesController : ControllerBase
     {
+        private const string PermissionClaimType = "Permission";
+
+        // Catálogo único das permissões configuráveis pela matriz de perfis.
+        private static readonly string[] PermissionCatalog =
+        {
+            "Permissions.Users.View", "Permissions.Users.Create", "Permissions.Users.Edit", "Permissions.Users.Delete",
+            "Permissions.Roles.View", "Permissions.Roles.Create", "Permissions.Roles.Edit", "Permissions.Roles.Delete",
+            "Permissions.TimeEntries.View", "Permissions.TimeEntries.Create", "Permissions.TimeEntries.Edit", "Permissions.TimeEntries.Delete",
+            "Permissions.TimeClock.View", "Permissions.TimeClock.Create", "Permissions.TimeClock.Edit", "Permissions.TimeClock.Delete",
+            "Permissions.TimeClockAudit.View",
+            "Permissions.TimeClockJourney.View", "Permissions.TimeClockJourney.Edit",
+            "Permissions.TimeClockGlobalSettings.View", "Permissions.TimeClockGlobalSettings.Edit",
+            "Permissions.ServiceDesk.View", "Permissions.ServiceDesk.Create", "Permissions.ServiceDesk.Edit",
+            "Permissions.ServiceDeskKanban.View",
+            "Permissions.ServiceDeskDashboard.View",
+            "Permissions.IntegrationsOpenProject.View", "Permissions.IntegrationsOpenProject.Edit",
+            "Permissions.IntegrationsGlpi.View", "Permissions.IntegrationsGlpi.Edit",
+            "Permissions.IntegrationOperations.View", "Permissions.IntegrationOperations.Create",
+            "Permissions.AuditLog.View",
+            "Permissions.DesktopNotifications.View", "Permissions.DesktopNotifications.Edit",
+            "Permissions.Releases.View"
+        };
+
+        private static readonly HashSet<string> PermissionCatalogSet =
+            new(PermissionCatalog, StringComparer.Ordinal);
+
         private readonly RoleManager<IdentityRole<Guid>> _roleManager;
 
         // Injetando o Gerenciador de Papéis do Identity
@@ -120,19 +146,13 @@ namespace Axiom.Atlas.API.Controllers.Roles
 
             // Busca as permissões que o papel já tem no banco
             var existingClaims = await _roleManager.GetClaimsAsync(role);
-            var existingClaimValues = existingClaims.Select(c => c.Value).ToList();
-
-            // Aqui nós definimos todas as permissões possíveis do Axiom Atlas
-            // (No futuro, você pode mover isso para uma classe estática para ficar mais limpo)
-            var allPermissions = new List<string>
-            {
-                "Permissions.Users.View", "Permissions.Users.Create", "Permissions.Users.Edit", "Permissions.Users.Delete",
-                "Permissions.Roles.View", "Permissions.Roles.Create", "Permissions.Roles.Edit", "Permissions.Roles.Delete",
-                "Permissions.TimeEntries.View", "Permissions.TimeEntries.Create", "Permissions.TimeEntries.Edit", "Permissions.TimeEntries.Delete"
-            };
+            var existingClaimValues = existingClaims
+                .Where(c => c.Type == PermissionClaimType)
+                .Select(c => c.Value)
+                .ToHashSet(StringComparer.Ordinal);
 
             // Cruza as permissões do sistema com as que o papel já tem
-            var rolePermissions = allPermissions.Select(p => new RolePermissionDto
+            var rolePermissions = PermissionCatalog.Select(p => new RolePermissionDto
             {
                 Value = p,
                 Selected = existingClaimValues.Contains(p)
@@ -153,22 +173,33 @@ namespace Axiom.Atlas.API.Controllers.Roles
             var role = await _roleManager.FindByIdAsync(id.ToString());
             if (role == null) return NotFound("Papel não encontrado.");
 
-            // Pega as permissões atuais
+            // Remove somente as permissões administradas por esta matriz.
+            // Claims adicionais permanecem intactas para evitar perda de permissões futuras.
             var claims = await _roleManager.GetClaimsAsync(role);
-
-            // Remove todas as permissões antigas para evitar duplicidade
-            foreach (var claim in claims)
+            foreach (var claim in claims.Where(c =>
+                         c.Type == PermissionClaimType && PermissionCatalogSet.Contains(c.Value)))
             {
-                await _roleManager.RemoveClaimAsync(role, claim);
+                var removeResult = await _roleManager.RemoveClaimAsync(role, claim);
+                if (!removeResult.Succeeded)
+                {
+                    return BadRequest(removeResult.Errors);
+                }
             }
 
-            // Filtra apenas as que vieram marcadas como "Selected = true" na tela
-            var selectedPermissions = dto.Permissions.Where(p => p.Selected).ToList();
+            var selectedPermissions = (dto.Permissions ?? new List<RolePermissionDto>())
+                .Where(p => p.Selected && PermissionCatalogSet.Contains(p.Value))
+                .Select(p => p.Value)
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
 
-            // Adiciona as novas permissões no banco
+            // Adiciona as permissões selecionadas no banco.
             foreach (var permission in selectedPermissions)
             {
-                await _roleManager.AddClaimAsync(role, new Claim("Permission", permission.Value));
+                var addResult = await _roleManager.AddClaimAsync(role, new Claim(PermissionClaimType, permission));
+                if (!addResult.Succeeded)
+                {
+                    return BadRequest(addResult.Errors);
+                }
             }
 
             return Ok(new { message = "Permissões atualizadas com sucesso." });

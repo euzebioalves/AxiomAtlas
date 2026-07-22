@@ -4,7 +4,31 @@
     // Mantenha aqui a referência ao seu Layout, se necessário
 }
 
-<div class="card mb-7">
+<div class="d-flex flex-column flex-column-fluid">
+    <div id="kt_app_toolbar" class="app-toolbar py-3 py-lg-6">
+        <div id="kt_app_toolbar_container" class="app-container container-xxl d-flex flex-stack">
+            <div class="page-title d-flex flex-column justify-content-center flex-wrap me-3">
+                <h1 class="page-heading d-flex text-gray-900 fw-bold fs-3 flex-column justify-content-center my-0">Auditoria do sistema</h1>
+                <ul class="breadcrumb breadcrumb-separatorless fw-semibold fs-7 my-0 pt-1">
+                    <li class="breadcrumb-item text-muted">
+                        <a asp-controller="Home" asp-action="Index" class="text-muted text-hover-primary">Home</a>
+                    </li>
+                    <li class="breadcrumb-item">
+                        <i class="ki-duotone ki-right fs-7 text-gray-700 mx-n1"><span class="path1"></span><span class="path2"></span></i>
+                    </li>
+                    <li class="breadcrumb-item text-muted">Administração</li>
+                    <li class="breadcrumb-item">
+                        <i class="ki-duotone ki-right fs-7 text-gray-700 mx-n1"><span class="path1"></span><span class="path2"></span></i>
+                    </li>
+                    <li class="breadcrumb-item text-gray-800">Auditoria</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <div id="kt_app_content" class="app-content flex-column-fluid">
+        <div id="kt_app_content_container" class="app-container container-xxl">
+            <div class="card mb-7">
     <div class="card-body">
         <div class="row align-items-center">
             
@@ -118,7 +142,11 @@
             </div>
         </div>
     </div>
+            </div>
+        </div>
+    </div>
 </div>
+
 @section Scripts {
     <script>
         $(document).ready(function () {
