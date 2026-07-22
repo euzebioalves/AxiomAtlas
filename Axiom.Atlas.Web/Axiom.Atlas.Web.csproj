@@ -6,7 +6,7 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 	</PropertyGroup>
 	<PropertyGroup>
-		<VersionPrefix>1.0.10</VersionPrefix>
+		<VersionPrefix>1.0.11</VersionPrefix>
 	</PropertyGroup>
 	<ItemGroup>
 		<ProjectReference Include="..\Axiom.Atlas.Application\Axiom.Atlas.Application.csproj" />
