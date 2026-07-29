@@ -26,6 +26,11 @@ namespace Axiom.Atlas.Web.Controllers.TimeClock
             return View();
         }
 
+        public IActionResult Absences()
+        {
+            return View();
+        }
+
         public async Task<IActionResult> GlobalSettings()
         {
             var client = await CreateAuthorizedApiClientAsync();
@@ -76,6 +81,14 @@ namespace Axiom.Atlas.Web.Controllers.TimeClock
             return await ProxyResponseAsync(response);
         }
 
+        [HttpPost]
+        public async Task<IActionResult> SaveCalendarPreferences([FromBody] object request)
+        {
+            var client = await CreateAuthorizedApiClientAsync();
+            var response = await client.PutAsJsonAsync("api/TimeClock/settings/calendar-preferences", request);
+            return await ProxyResponseAsync(response);
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetGlobalSettings()
         {
@@ -100,6 +113,31 @@ namespace Axiom.Atlas.Web.Controllers.TimeClock
             return await ProxyResponseAsync(response);
         }
 
+        [HttpPost]
+        [RequestSizeLimit(25_000_000)]
+        public async Task<IActionResult> ImportPunches()
+        {
+            var client = await CreateAuthorizedApiClientAsync();
+            var form = await Request.ReadFormAsync();
+
+            using var multipart = new MultipartFormDataContent();
+            foreach (var key in form.Keys)
+            {
+                multipart.Add(new StringContent(form[key].ToString()), key);
+            }
+
+            foreach (var file in form.Files)
+            {
+                var streamContent = new StreamContent(file.OpenReadStream());
+                streamContent.Headers.ContentType = new MediaTypeHeaderValue(
+                    string.IsNullOrWhiteSpace(file.ContentType) ? "text/csv" : file.ContentType);
+                multipart.Add(streamContent, file.Name, file.FileName);
+            }
+
+            var response = await client.PostAsync("api/TimeClock/punches/import", multipart);
+            return await ProxyResponseAsync(response);
+        }
+
         [HttpDelete]
         [Route("TimeClock/DeletePunch/{id:guid}")]
         public async Task<IActionResult> DeletePunch(Guid id)
@@ -115,6 +153,27 @@ namespace Axiom.Atlas.Web.Controllers.TimeClock
             var client = await CreateAuthorizedApiClientAsync();
             var response = await client.PostAsJsonAsync("api/TimeClock/unjustified-absence", request);
             return await ProxyResponseAsync(response);
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetAbsenceManagement()
+        {
+            var client = await CreateAuthorizedApiClientAsync();
+            var response = await client.GetAsync("api/TimeClock/absences/management");
+            return await ProxyResponseAsync(response);
+        }
+
+        [HttpGet]
+        [Route("TimeClock/DownloadAbsenceAttachment/{absenceId:guid}/{attachmentId:guid}")]
+        public async Task<IActionResult> DownloadAbsenceAttachment(Guid absenceId, Guid attachmentId)
+        {
+            var client = await CreateAuthorizedApiClientAsync();
+            var response = await client.GetAsync($"api/TimeClock/absences/{absenceId}/attachments/{attachmentId}");
+            if (!response.IsSuccessStatusCode) return await ProxyResponseAsync(response);
+
+            var content = await response.Content.ReadAsByteArrayAsync();
+            var contentType = response.Content.Headers.ContentType?.ToString() ?? "application/octet-stream";
+            return File(content, contentType);
         }
 
         [HttpDelete]
@@ -150,6 +209,24 @@ namespace Axiom.Atlas.Web.Controllers.TimeClock
             }
 
             var response = await client.PostAsync("api/TimeClock/absences", multipart);
+            return await ProxyResponseAsync(response);
+        }
+
+        [HttpPost]
+        [RequestSizeLimit(50_000_000)]
+        public async Task<IActionResult> ImportAbsences()
+        {
+            var client = await CreateAuthorizedApiClientAsync();
+            var form = await Request.ReadFormAsync();
+            using var multipart = new MultipartFormDataContent();
+            foreach (var key in form.Keys) multipart.Add(new StringContent(form[key].ToString()), key);
+            foreach (var file in form.Files)
+            {
+                var streamContent = new StreamContent(file.OpenReadStream());
+                streamContent.Headers.ContentType = new MediaTypeHeaderValue(string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType);
+                multipart.Add(streamContent, file.Name, file.FileName);
+            }
+            var response = await client.PostAsync("api/TimeClock/absences/import", multipart);
             return await ProxyResponseAsync(response);
         }
 

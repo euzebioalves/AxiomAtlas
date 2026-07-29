@@ -119,6 +119,10 @@
                     </h3>
 
                     <div class="card-toolbar gap-3">
+                        <button type="button" class="btn btn-sm btn-light-primary" id="btnOpenImportModal">
+                            <i class="ki-duotone ki-file-up fs-2"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>
+                            Importar CSV
+                        </button>
                         <button type="button" class="btn btn-sm btn-light-success" onclick="syncSelected()">
                             <i class="ki-duotone ki-arrows-circle fs-2"><span class="path1"></span><span class="path2"></span></i>
                             Sincronizar Selecionados
@@ -128,13 +132,47 @@
                         </button>
                     </div>
                 </div>
+                <div class="card-body border-bottom py-5">
+                    <div class="d-flex flex-column flex-md-row align-items-md-end gap-5">
+                        <div class="min-w-200px">
+                            <label for="entriesViewMode" class="form-label fs-7 fw-bold text-gray-700 mb-2">Visualizar registros</label>
+                            <select id="entriesViewMode" class="form-select form-select-solid form-select-sm">
+                                <option value="all">Todos os registros</option>
+                                <option value="today">Somente hoje</option>
+                                <option value="period">Por período</option>
+                            </select>
+                        </div>
+                        <div class="min-w-200px">
+                            <label for="entriesSyncStatus" class="form-label fs-7 fw-bold text-gray-700 mb-2">Situação da sincronização</label>
+                            <select id="entriesSyncStatus" class="form-select form-select-solid form-select-sm">
+                                <option value="all">Todas as situações</option>
+                                <option value="pending">Pendentes de sincronização</option>
+                                <option value="synced">Sincronizados com o OpenProject</option>
+                                <option value="error">Com erro de sincronização</option>
+                            </select>
+                        </div>
+                        <div id="entriesDateRange" class="d-none flex-wrap align-items-end gap-3">
+                            <div class="min-w-150px">
+                                <label for="entriesStartDate" class="form-label fs-7 fw-bold text-gray-700 mb-2">Data inicial</label>
+                                <input id="entriesStartDate" type="date" class="form-control form-control-solid form-control-sm" />
+                            </div>
+                            <div class="min-w-150px">
+                                <label for="entriesEndDate" class="form-label fs-7 fw-bold text-gray-700 mb-2">Data final</label>
+                                <input id="entriesEndDate" type="date" class="form-control form-control-solid form-control-sm" />
+                            </div>
+                            <button id="btnApplyEntriesPeriod" type="button" class="btn btn-sm btn-light-primary">
+                                <i class="ki-duotone ki-filter fs-3"><span class="path1"></span><span class="path2"></span></i>Aplicar
+                            </button>
+                        </div>
+                    </div>
+                </div>
                 <div class="card-body py-3">
                     <div class="table-responsive">
                         <table class="table table-row-dashed table-row-gray-300 align-middle gs-0 gy-4">
                             <thead>
                                 <tr class="fw-bold text-muted">
                                     <th class="w-25px">
-                                        <div class="form-check form-check-sm form-check-custom form-check-solid">
+                                        <div id="selectAllContainer" class="form-check form-check-sm form-check-custom form-check-solid">
                                             <input class="form-check-input" type="checkbox" id="selectAll">
                                         </div>
                                     </th>
@@ -157,6 +195,7 @@
                             </tbody>
                         </table>
                     </div>
+                    <div id="entriesPagination" class="d-flex flex-stack flex-wrap gap-3 pt-5"></div>
                 </div>
             </div>
 
@@ -165,6 +204,51 @@
 </div>
 
 <div id="timeEntriesToastHost" class="toast-container position-fixed time-entries-toast-container"></div>
+
+<div class="modal fade" id="timeEntriesImportModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-650px">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <div class="d-flex flex-column">
+                    <h2 class="fw-bold mb-1">Importar entradas de tempo</h2>
+                    <span class="text-muted fw-semibold fs-7">Migre seu histórico para o Axiom Atlas</span>
+                </div>
+                <button type="button" class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal" aria-label="Fechar">
+                    <i class="ki-duotone ki-cross fs-1"><span class="path1"></span><span class="path2"></span></i>
+                </button>
+            </div>
+            <form id="timeEntriesImportForm" class="form" enctype="multipart/form-data">
+                <div class="modal-body px-10 px-lg-15 py-8">
+                    <div class="notice d-flex bg-light-primary rounded border-primary border border-dashed p-6 mb-8">
+                        <i class="ki-duotone ki-information-5 fs-2tx text-primary me-4"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>
+                        <div class="d-flex flex-stack flex-grow-1">
+                            <div class="fw-semibold">
+                                <div class="fs-6 text-gray-900 fw-bold">Importação segura para o seu usuário</div>
+                                <div class="fs-7 text-gray-700 mt-1">O ID do usuário do arquivo não é importado. Os registros serão vinculados automaticamente à sua conta atual.</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="fv-row mb-8">
+                        <label class="required fs-6 fw-semibold mb-3" for="timeEntriesCsvFile">Arquivo CSV</label>
+                        <input id="timeEntriesCsvFile" name="csvFile" type="file" class="form-control form-control-solid" accept=".csv,text/csv" required />
+                        <div class="form-text">São usados apenas os campos compatíveis com Entradas de Tempo: data, horários, Work Package, atividade, comentário, vínculo OpenProject e criação.</div>
+                    </div>
+                    <label class="form-check form-check-custom form-check-solid align-items-start">
+                        <input id="replaceExistingTimeEntries" name="replaceExisting" class="form-check-input mt-1" type="checkbox" value="true" required />
+                        <span class="form-check-label text-gray-700 fw-semibold ms-3">Entendo que todos os meus lançamentos atuais deste ambiente de homologação serão substituídos pelos registros do CSV.</span>
+                    </label>
+                </div>
+                <div class="modal-footer border-0 justify-content-center pt-0 pb-10">
+                    <button type="button" class="btn btn-light me-3" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" id="btnImportTimeEntries" class="btn btn-primary">
+                        <span class="indicator-label"><i class="ki-duotone ki-file-up fs-2"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>Importar registros</span>
+                        <span class="indicator-progress">Importando... <span class="spinner-border spinner-border-sm align-middle ms-2"></span></span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 <div class="modal fade" id="timeEntryModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered mw-850px">
@@ -245,6 +329,10 @@
     <script>
         // Variável global para armazenar os dados em memória
         let currentEntries = [];
+        let filteredEntries = [];
+        let currentEntriesPage = 1;
+        const entriesPageSize = 25;
+        const selectedEntryIds = new Set();
         const preselectedWorkPackageId = @preselectedWorkPackageId;
 
         document.addEventListener("DOMContentLoaded", function () {
@@ -254,9 +342,74 @@
             resetActivities('Selecione uma Work Package primeiro');
 
             document.getElementById('selectAll').addEventListener('change', function () {
-                document.querySelectorAll('.row-select:not(:disabled)').forEach(checkbox => {
-                    checkbox.checked = this.checked;
+                getCurrentPageSelectableEntries().forEach(entry => {
+                    if (this.checked) selectedEntryIds.add(entry.id);
+                    else selectedEntryIds.delete(entry.id);
                 });
+                renderEntriesTable();
+            });
+
+            document.getElementById('entriesViewMode').addEventListener('change', function () {
+                const isPeriod = this.value === 'period';
+                document.getElementById('entriesDateRange').classList.toggle('d-none', !isPeriod);
+                if (isPeriod) {
+                    const today = getTodayDate();
+                    const startDate = document.getElementById('entriesStartDate');
+                    const endDate = document.getElementById('entriesEndDate');
+                    if (!startDate.value) startDate.value = today;
+                    if (!endDate.value) endDate.value = today;
+                }
+                if (!isPeriod) applyEntriesView();
+            });
+            document.getElementById('btnApplyEntriesPeriod').addEventListener('click', function () {
+                applyEntriesView();
+            });
+            document.getElementById('entriesSyncStatus').addEventListener('change', function () {
+                applyEntriesView();
+            });
+
+            const importModalElement = document.getElementById('timeEntriesImportModal');
+            const importModal = bootstrap.Modal.getOrCreateInstance(importModalElement);
+            document.getElementById('btnOpenImportModal').addEventListener('click', function () {
+                document.getElementById('timeEntriesImportForm').reset();
+                importModal.show();
+            });
+
+            document.getElementById('timeEntriesImportForm').addEventListener('submit', async function (event) {
+                event.preventDefault();
+                const form = event.currentTarget;
+                const fileInput = document.getElementById('timeEntriesCsvFile');
+                const submitButton = document.getElementById('btnImportTimeEntries');
+                if (!fileInput.files || fileInput.files.length === 0) {
+                    showPageToast('warning', 'Selecione o CSV', 'Escolha o arquivo com as entradas de tempo antes de importar.');
+                    return;
+                }
+
+                submitButton.setAttribute('data-kt-indicator', 'on');
+                submitButton.disabled = true;
+                try {
+                    const response = await fetch('/TimeEntries/ImportEntries', {
+                        method: 'POST',
+                        body: new FormData(form)
+                    });
+                    const data = await response.json().catch(() => ({}));
+                    if (!response.ok) {
+                        const details = Array.isArray(data.errors) && data.errors.length > 0
+                            ? data.errors.slice(0, 3).map(error => `Linha ${error.line || '-'}: ${error.message}`).join('\n')
+                            : data.message || 'Não foi possível importar o arquivo.';
+                        showPageToast('danger', 'Importação não concluída', details, 9000);
+                        return;
+                    }
+
+                    importModal.hide();
+                    await Promise.all([loadTable(), loadSummary()]);
+                    showPageToast('success', 'Histórico importado', data.message || 'As entradas de tempo foram importadas com sucesso.');
+                } catch (error) {
+                    showPageToast('danger', 'Erro de conexão', 'Não foi possível comunicar com o servidor.', 7000);
+                } finally {
+                    submitButton.removeAttribute('data-kt-indicator');
+                    submitButton.disabled = false;
+                }
             });
 
             // 1. Lógica para abrir modal de NOVO Apontamento
@@ -545,17 +698,24 @@
         }
 
         function getSyncStatus(syncStatus) {
-            const normalizedStatus = String(syncStatus).toLowerCase();
+            const normalizedStatus = getNormalizedSyncStatus(syncStatus);
 
-            if (normalizedStatus === '1' || normalizedStatus === 'synced') {
+            if (normalizedStatus === 'synced') {
                 return { label: 'Sincronizado', badgeClass: 'badge badge-light-success fs-7 fw-bold' };
             }
 
-            if (normalizedStatus === '2' || normalizedStatus === 'error') {
+            if (normalizedStatus === 'error') {
                 return { label: 'Erro', badgeClass: 'badge badge-light-danger fs-7 fw-bold' };
             }
 
             return { label: 'Pendente', badgeClass: 'badge badge-light-warning fs-7 fw-bold' };
+        }
+
+        function getNormalizedSyncStatus(syncStatus) {
+            const normalizedStatus = String(syncStatus).toLowerCase();
+            if (normalizedStatus === '1' || normalizedStatus === 'synced') return 'synced';
+            if (normalizedStatus === '2' || normalizedStatus === 'error') return 'error';
+            return 'pending';
         }
 
         function escapeHtml(value) {
@@ -714,49 +874,160 @@
                 const response = await fetch('/TimeEntries/GetEntries');
                 if (response.ok) {
                     currentEntries = await response.json();
-                    const tbody = document.getElementById('entriesTableBody');
-                    tbody.innerHTML = '';
-                    document.getElementById('selectAll').checked = false;
-
-                    document.getElementById('totalEntriesText').innerText = `${currentEntries.length} lançamentos encontrados`;
-
-                    if (currentEntries.length === 0) {
-                        tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-10">Nenhum apontamento pendente.</td></tr>`;
-                        return;
-                    }
-
-                    currentEntries.forEach(entry => {
-                        const dataFmt = new Date(entry.spentOn).toLocaleDateString('pt-BR');
-                        const status = getSyncStatus(entry.syncStatus);
-                        const statusTitle = entry.syncErrorMessage ? ` title="${escapeAttribute(entry.syncErrorMessage)}"` : '';
-                        const safeComment = escapeHtml(entry.comment || '-');
-                        const isSynced = isSyncedEntry(entry);
-                        const selectTitle = isSynced
-                            ? 'Este apontamento já foi sincronizado.'
-                            : 'Selecionar para sincronizar';
-                        const selectDisabled = isSynced ? 'disabled' : '';
-                        const row = `
-                            <tr>
-                                <td>
-                                    <div class="form-check form-check-sm form-check-custom form-check-solid">
-                                        <input class="form-check-input row-select" type="checkbox" value="${entry.id}" title="${selectTitle}" ${selectDisabled}>
-                                    </div>
-                                </td>
-                                <td><span class="text-gray-900 fw-bold d-block fs-6">${dataFmt}</span></td>
-                                <td>${renderWorkPackageCell(entry)}</td>
-                                <td><span class="text-muted fw-semibold d-block fs-7">${safeComment}</span></td>
-                                <td><span class="badge badge-light-primary fs-7 fw-bold">${entry.hours.toFixed(2)}h</span></td>
-                                <td><span class="${status.badgeClass}"${statusTitle}>${status.label}</span></td>
-                                <td>${renderOpenProjectEntryCell(entry)}</td>
-                                <td class="text-end">${renderActionButtons(entry)}</td>
-                            </tr>`;
-                        tbody.innerHTML += row;
-                    });
+                    applyEntriesView();
                 }
             } catch (error) {
                 console.error("Erro ao carregar tabela:", error);
                 document.getElementById('entriesTableBody').innerHTML = `<tr><td colspan="8" class="text-center text-danger py-10">Erro ao carregar dados.</td></tr>`;
             }
+        }
+
+        function getEntryDate(entry) {
+            return String(entry.spentOn || '').slice(0, 10);
+        }
+
+        function formatEntryDate(entry) {
+            const [year, month, day] = getEntryDate(entry).split('-');
+            return year && month && day ? `${day}/${month}/${year}` : '-';
+        }
+
+        function getTodayDate() {
+            const today = new Date();
+            const year = today.getFullYear();
+            const month = String(today.getMonth() + 1).padStart(2, '0');
+            const day = String(today.getDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function applyEntriesView(resetSelection = true) {
+            const mode = document.getElementById('entriesViewMode').value;
+            const syncStatus = document.getElementById('entriesSyncStatus').value;
+            const startDate = document.getElementById('entriesStartDate').value;
+            const endDate = document.getElementById('entriesEndDate').value;
+
+            if (mode === 'period' && (!startDate || !endDate)) {
+                showPageToast('warning', 'Informe o período', 'Escolha a data inicial e a data final para filtrar os lançamentos.');
+                return;
+            }
+            if (mode === 'period' && startDate > endDate) {
+                showPageToast('warning', 'Período inválido', 'A data inicial não pode ser posterior à data final.');
+                return;
+            }
+
+            filteredEntries = currentEntries.filter(entry => {
+                const entryDate = getEntryDate(entry);
+                if (mode === 'today' && entryDate !== getTodayDate()) return false;
+                if (mode === 'period' && (entryDate < startDate || entryDate > endDate)) return false;
+                if (syncStatus !== 'all' && getNormalizedSyncStatus(entry.syncStatus) !== syncStatus) return false;
+                return true;
+            });
+            currentEntriesPage = 1;
+            if (resetSelection) selectedEntryIds.clear();
+            renderEntriesTable();
+        }
+
+        function getCurrentPageEntries() {
+            const start = (currentEntriesPage - 1) * entriesPageSize;
+            return filteredEntries.slice(start, start + entriesPageSize);
+        }
+
+        function getCurrentPageSelectableEntries() {
+            return getCurrentPageEntries().filter(entry => !isSyncedEntry(entry));
+        }
+
+        function toggleEntrySelection(id, checked) {
+            if (checked) selectedEntryIds.add(id);
+            else selectedEntryIds.delete(id);
+            updateSelectAllState();
+        }
+
+        function goToEntriesPage(page) {
+            const totalPages = Math.max(1, Math.ceil(filteredEntries.length / entriesPageSize));
+            currentEntriesPage = Math.min(Math.max(page, 1), totalPages);
+            renderEntriesTable();
+        }
+
+        function updateSelectAllState() {
+            const selectAll = document.getElementById('selectAll');
+            const container = document.getElementById('selectAllContainer');
+            const selectableEntries = getCurrentPageSelectableEntries();
+            const selectedCount = selectableEntries.filter(entry => selectedEntryIds.has(entry.id)).length;
+
+            container.classList.toggle('d-none', selectableEntries.length === 0);
+            selectAll.checked = selectableEntries.length > 0 && selectedCount === selectableEntries.length;
+            selectAll.indeterminate = selectedCount > 0 && selectedCount < selectableEntries.length;
+        }
+
+        function renderEntriesTable() {
+            const tbody = document.getElementById('entriesTableBody');
+            const totalEntries = filteredEntries.length;
+            const totalPages = Math.max(1, Math.ceil(totalEntries / entriesPageSize));
+            currentEntriesPage = Math.min(currentEntriesPage, totalPages);
+            const pageEntries = getCurrentPageEntries();
+
+            const viewMode = document.getElementById('entriesViewMode').value;
+            const syncStatus = document.getElementById('entriesSyncStatus').value;
+            const viewLabel = viewMode === 'today' ? 'hoje' : viewMode === 'period' ? 'no período selecionado' : 'encontrados';
+            document.getElementById('totalEntriesText').innerText = viewMode === 'all' && syncStatus === 'all'
+                ? `${totalEntries} lançamentos encontrados`
+                : `${totalEntries} de ${currentEntries.length} lançamentos ${viewLabel}`;
+            tbody.innerHTML = '';
+            if (totalEntries === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted py-10">Nenhum apontamento encontrado.</td></tr>`;
+                document.getElementById('entriesPagination').innerHTML = '';
+                updateSelectAllState();
+                return;
+            }
+
+            pageEntries.forEach(entry => {
+                const dataFmt = formatEntryDate(entry);
+                const status = getSyncStatus(entry.syncStatus);
+                const statusTitle = entry.syncErrorMessage ? ` title="${escapeAttribute(entry.syncErrorMessage)}"` : '';
+                const safeComment = escapeHtml(entry.comment || '-');
+                const isSynced = isSyncedEntry(entry);
+                const selectionCell = isSynced
+                    ? '<td></td>'
+                    : `<td><div class="form-check form-check-sm form-check-custom form-check-solid"><input class="form-check-input row-select" type="checkbox" value="${entry.id}" title="Selecionar para sincronizar" ${selectedEntryIds.has(entry.id) ? 'checked' : ''} onchange="toggleEntrySelection('${entry.id}', this.checked)"></div></td>`;
+                const row = `
+                    <tr>
+                        ${selectionCell}
+                        <td><span class="text-gray-900 fw-bold d-block fs-6">${dataFmt}</span></td>
+                        <td>${renderWorkPackageCell(entry)}</td>
+                        <td><span class="text-muted fw-semibold d-block fs-7">${safeComment}</span></td>
+                        <td><span class="badge badge-light-primary fs-7 fw-bold">${entry.hours.toFixed(2)}h</span></td>
+                        <td><span class="${status.badgeClass}"${statusTitle}>${status.label}</span></td>
+                        <td>${renderOpenProjectEntryCell(entry)}</td>
+                        <td class="text-end">${renderActionButtons(entry)}</td>
+                    </tr>`;
+                tbody.innerHTML += row;
+            });
+
+            renderEntriesPagination(totalEntries, totalPages);
+            updateSelectAllState();
+        }
+
+        function renderEntriesPagination(totalEntries, totalPages) {
+            const start = (currentEntriesPage - 1) * entriesPageSize + 1;
+            const end = Math.min(currentEntriesPage * entriesPageSize, totalEntries);
+            const pageNumbers = new Set([1, totalPages]);
+            for (let page = Math.max(1, currentEntriesPage - 2); page <= Math.min(totalPages, currentEntriesPage + 2); page++) pageNumbers.add(page);
+            const pages = [...pageNumbers].sort((first, second) => first - second);
+            let previousPage = 0;
+            const pageLinks = pages.map(page => {
+                const separator = previousPage && page - previousPage > 1
+                    ? '<li class="page-item disabled"><span class="page-link">...</span></li>'
+                    : '';
+                previousPage = page;
+                return `${separator}<li class="page-item ${page === currentEntriesPage ? 'active' : ''}"><button type="button" class="page-link" onclick="goToEntriesPage(${page})">${page}</button></li>`;
+            }).join('');
+
+            document.getElementById('entriesPagination').innerHTML = `
+                <span class="text-muted fw-semibold fs-7">Exibindo ${start}-${end} de ${totalEntries} lançamentos</span>
+                <ul class="pagination pagination-outline mb-0">
+                    <li class="page-item previous ${currentEntriesPage === 1 ? 'disabled' : ''}"><button type="button" class="page-link" onclick="goToEntriesPage(${currentEntriesPage - 1})" ${currentEntriesPage === 1 ? 'disabled' : ''}><i class="previous"></i></button></li>
+                    ${pageLinks}
+                    <li class="page-item next ${currentEntriesPage === totalPages ? 'disabled' : ''}"><button type="button" class="page-link" onclick="goToEntriesPage(${currentEntriesPage + 1})" ${currentEntriesPage === totalPages ? 'disabled' : ''}><i class="next"></i></button></li>
+                </ul>`;
         }
 
         // 6. FUNÇÃO DE EDITAR
@@ -831,7 +1102,7 @@
 
         // 8. FUNÇÃO DE SINCRONIZAR
         async function syncSelected() {
-            const selectedIds = Array.from(document.querySelectorAll('.row-select:checked')).map(cb => cb.value);
+            const selectedIds = Array.from(selectedEntryIds);
             
             if (selectedIds.length === 0) {
                 showPageToast('warning', 'Nada selecionado', 'Selecione pelo menos um apontamento para sincronizar.');

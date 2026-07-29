@@ -1,7 +1,10 @@
 using Axiom.Atlas.Application.DTOs.TimeClock;
+using Axiom.Atlas.Application.Services.TimeClock;
+using Axiom.Atlas.Domain.Entities.TimeEntries;
 using Axiom.Atlas.Domain.Entities.TimeClock;
 using Axiom.Atlas.Domain.Entities.Users;
 using Axiom.Atlas.Domain.Enums;
+using Axiom.Atlas.Infrastructure.Services.TimeEntries;
 using Axiom.Atlas.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
@@ -33,11 +36,22 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
 
         private readonly AppDbContext _context;
         private readonly UserManager<User> _userManager;
+        private readonly TimeClockCsvImportParser _csvImportParser;
+        private readonly TimeClockAbsenceCsvImportParser _absenceCsvImportParser;
+        private readonly OpenProjectService _openProjectService;
 
-        public TimeClockController(AppDbContext context, UserManager<User> userManager)
+        public TimeClockController(
+            AppDbContext context,
+            UserManager<User> userManager,
+            TimeClockCsvImportParser csvImportParser,
+            TimeClockAbsenceCsvImportParser absenceCsvImportParser,
+            OpenProjectService openProjectService)
         {
             _context = context;
             _userManager = userManager;
+            _csvImportParser = csvImportParser;
+            _absenceCsvImportParser = absenceCsvImportParser;
+            _openProjectService = openProjectService;
         }
 
         [HttpGet("settings/user")]
@@ -103,6 +117,23 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
 
             await _context.SaveChangesAsync();
             return Ok(MapSchedule(setting));
+        }
+
+        [HttpPut("settings/calendar-preferences")]
+        public async Task<IActionResult> SaveCalendarPreferences([FromBody] SaveTimeClockCalendarPreferenceRequest request)
+        {
+            var userId = GetCurrentUserId();
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return Unauthorized(new { message = "Usuário não identificado no token." });
+            }
+
+            var setting = await GetOrCreateUserScheduleAsync(userId);
+            setting.ShowWorkPackagesInCalendar = request.ShowWorkPackagesInCalendar;
+            setting.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { setting.ShowWorkPackagesInCalendar });
         }
 
         [HttpGet("settings/global")]
@@ -274,6 +305,92 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
             return Ok();
         }
 
+        [HttpPost("punches/import")]
+        [RequestSizeLimit(25_000_000)]
+        public async Task<IActionResult> ImportPunches([FromForm] IFormFile? file, [FromForm] bool replaceExisting)
+        {
+            var userId = GetCurrentUserId();
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return Unauthorized(new { message = "Usuário não identificado no token." });
+            }
+
+            if (!replaceExisting)
+            {
+                return BadRequest(new { message = "Confirme a substituição dos registros atuais para continuar a importação." });
+            }
+
+            if (file is null || file.Length == 0)
+            {
+                return BadRequest(new { message = "Selecione um arquivo CSV com os registros de ponto." });
+            }
+
+            if (!Path.GetExtension(file.FileName).Equals(".csv", StringComparison.OrdinalIgnoreCase))
+            {
+                return BadRequest(new { message = "O arquivo informado precisa estar no formato CSV." });
+            }
+
+            await using var stream = new MemoryStream();
+            await file.CopyToAsync(stream);
+            var parsed = _csvImportParser.Parse(stream.ToArray(), file.FileName);
+            if (parsed.Errors.Count > 0)
+            {
+                return BadRequest(new
+                {
+                    message = "O arquivo possui inconsistências e nenhum registro foi alterado.",
+                    errors = parsed.Errors.Select(error => new { error.Line, error.Message })
+                });
+            }
+
+            if (parsed.Rows.Count == 0 || parsed.DateStart is null || parsed.DateEnd is null || string.IsNullOrWhiteSpace(parsed.ExternalUserId))
+            {
+                return BadRequest(new { message = "O arquivo não contém registros de ponto válidos para importar." });
+            }
+
+            var importedAt = DateTime.UtcNow;
+            var importBatchId = Guid.NewGuid();
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+
+            var existingPunches = await _context.TimeClockPunches
+                .Where(x => x.UserId == userId)
+                .ToListAsync();
+            _context.TimeClockPunches.RemoveRange(existingPunches);
+            await _context.SaveChangesAsync();
+
+            var importedPunches = parsed.Rows.Select(row => new TimeClockPunch
+            {
+                UserId = userId,
+                PunchDate = DateTime.SpecifyKind(row.PunchDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc),
+                PunchTime = row.PunchTime.ToTimeSpan(),
+                Type = row.Type,
+                Nsr = row.Nsr,
+                Observation = row.Observation,
+                ImportBatchId = importBatchId,
+                ExternalRecordId = row.ExternalRecordId,
+                ExternalUserId = row.ExternalUserId,
+                ImportFileName = parsed.FileName,
+                ImportFileHash = parsed.FileHash,
+                SourceCreatedAt = row.SourceCreatedAt,
+                SourceUpdatedAt = row.SourceUpdatedAt,
+                ImportedAt = importedAt,
+                CreatedAt = importedAt,
+                UpdatedAt = importedAt
+            }).ToList();
+
+            _context.TimeClockPunches.AddRange(importedPunches);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return Ok(new TimeClockImportResultDto
+            {
+                ImportedPunches = importedPunches.Count,
+                ReplacedPunches = existingPunches.Count,
+                DateStart = parsed.DateStart.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                DateEnd = parsed.DateEnd.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                ExternalUserId = parsed.ExternalUserId
+            });
+        }
+
         [HttpPost("unjustified-absence")]
         public async Task<IActionResult> SaveUnjustifiedAbsence([FromBody] SaveTimeClockUnjustifiedAbsenceRequest request)
         {
@@ -367,6 +484,155 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
             await _context.SaveChangesAsync();
 
             return Ok();
+        }
+
+        [HttpGet("absences/management")]
+        public async Task<IActionResult> GetAbsenceManagement()
+        {
+            var userId = GetCurrentUserId();
+            if (string.IsNullOrWhiteSpace(userId)) return Unauthorized(new { message = "Usuário não identificado no token." });
+
+            var absences = await _context.TimeClockAbsences
+                .Include(x => x.Attachments)
+                .Where(x => x.UserId == userId)
+                .ToListAsync();
+            var unjustifiedAbsences = await _context.TimeClockUnjustifiedAbsences
+                .Where(x => x.UserId == userId)
+                .ToListAsync();
+
+            var items = absences.Select(MapManagementAbsence)
+                .Concat(unjustifiedAbsences.Select(MapManagementUnjustifiedAbsence))
+                .OrderByDescending(x => x.StartDate)
+                .ThenByDescending(x => x.StartTime)
+                .ToList();
+            return Ok(items);
+        }
+
+        [HttpGet("absences/{absenceId:guid}/attachments/{attachmentId:guid}")]
+        public async Task<IActionResult> DownloadAbsenceAttachment(Guid absenceId, Guid attachmentId)
+        {
+            var userId = GetCurrentUserId();
+            if (string.IsNullOrWhiteSpace(userId)) return Unauthorized(new { message = "Usuário não identificado no token." });
+
+            var attachment = await _context.TimeClockAbsenceAttachments
+                .Include(x => x.Absence)
+                .FirstOrDefaultAsync(x => x.Id == attachmentId && x.AbsenceId == absenceId && x.Absence!.UserId == userId);
+            if (attachment == null) return NotFound(new { message = "Anexo não encontrado." });
+            return File(attachment.Content, attachment.ContentType, attachment.FileName);
+        }
+
+        [HttpPost("absences/import")]
+        [RequestSizeLimit(50_000_000)]
+        public async Task<IActionResult> ImportAbsences(
+            [FromForm] IFormFile? csvFile,
+            [FromForm] IFormFileCollection attachments,
+            [FromForm] bool replaceExisting)
+        {
+            var userId = GetCurrentUserId();
+            if (string.IsNullOrWhiteSpace(userId)) return Unauthorized(new { message = "Usuário não identificado no token." });
+            if (!replaceExisting) return BadRequest(new { message = "Confirme a substituição das ausências atuais para continuar." });
+            if (csvFile is null || csvFile.Length == 0 || !Path.GetExtension(csvFile.FileName).Equals(".csv", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { message = "Selecione o arquivo CSV de ausências." });
+
+            await using var csvStream = new MemoryStream();
+            await csvFile.CopyToAsync(csvStream);
+            var parsed = _absenceCsvImportParser.Parse(csvStream.ToArray(), csvFile.FileName);
+            if (parsed.Errors.Count > 0)
+            {
+                return BadRequest(new
+                {
+                    message = "O arquivo possui inconsistências e nenhuma ausência foi alterada.",
+                    errors = parsed.Errors.Select(error => new { error.Line, error.Message })
+                });
+            }
+
+            if (parsed.Rows.Count == 0 || string.IsNullOrWhiteSpace(parsed.ExternalUserId))
+                return BadRequest(new { message = "O arquivo não contém ausências válidas para importar." });
+
+            var attachmentFiles = attachments.ToList();
+            foreach (var row in parsed.Rows.Where(x => !string.IsNullOrWhiteSpace(x.AttachmentName)))
+            {
+                var expectedName = $"{row.ExternalRecordId}_{row.AttachmentName}";
+                if (!attachmentFiles.Any(file => MatchesImportedAttachment(file, expectedName, row.AttachmentName!)))
+                    parsed.Errors.Add(new TimeClockCsvIssue(row.SourceLine, $"Anexo não encontrado na pasta selecionada: {row.AttachmentName}."));
+            }
+            if (parsed.Errors.Count > 0)
+            {
+                var receivedFileNames = attachmentFiles.Count == 0
+                    ? "nenhum arquivo"
+                    : string.Join(", ", attachmentFiles.Select(file => file.FileName));
+                return BadRequest(new
+                {
+                    message = $"Os anexos não correspondem ao CSV e nenhuma ausência foi alterada. Arquivos recebidos: {receivedFileNames}.",
+                    errors = parsed.Errors.Select(error => new { error.Line, error.Message })
+                });
+            }
+
+            var importedAt = DateTime.UtcNow;
+            var importBatchId = Guid.NewGuid();
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            var existingAbsences = await _context.TimeClockAbsences.Where(x => x.UserId == userId).ToListAsync();
+            var existingUnjustifiedAbsences = await _context.TimeClockUnjustifiedAbsences.Where(x => x.UserId == userId).ToListAsync();
+            _context.TimeClockAbsences.RemoveRange(existingAbsences);
+            _context.TimeClockUnjustifiedAbsences.RemoveRange(existingUnjustifiedAbsences);
+            await _context.SaveChangesAsync();
+
+            var importedAbsences = new List<TimeClockAbsence>();
+            var importedUnjustifiedAbsences = new List<TimeClockUnjustifiedAbsence>();
+            var importedAttachments = 0;
+            foreach (var row in parsed.Rows)
+            {
+                if (row.IsUnjustified)
+                {
+                    importedUnjustifiedAbsences.Add(new TimeClockUnjustifiedAbsence
+                    {
+                        UserId = userId,
+                        AbsenceDate = DateTime.SpecifyKind(row.StartDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc),
+                        Type = row.PeriodType == TimeClockAbsencePeriodType.FullDay ? TimeClockUnjustifiedAbsenceType.FullDay : TimeClockUnjustifiedAbsenceType.Partial,
+                        StartTime = row.StartTime?.ToTimeSpan(), EndTime = row.EndTime?.ToTimeSpan(), Observation = row.Observation,
+                        ImportBatchId = importBatchId, ExternalRecordId = row.ExternalRecordId, ExternalUserId = row.ExternalUserId,
+                        ImportFileName = parsed.FileName, ImportFileHash = parsed.FileHash, SourceCreatedAt = row.SourceCreatedAt,
+                        SourceUpdatedAt = row.SourceUpdatedAt, ImportedAt = importedAt, CreatedAt = importedAt, UpdatedAt = importedAt
+                    });
+                    continue;
+                }
+
+                var absence = new TimeClockAbsence
+                {
+                    UserId = userId, Type = row.Type!.Value, PeriodType = row.PeriodType,
+                    StartDate = DateTime.SpecifyKind(row.StartDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc),
+                    EndDate = DateTime.SpecifyKind(row.EndDate.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc),
+                    StartTime = row.StartTime?.ToTimeSpan(), EndTime = row.EndTime?.ToTimeSpan(), Observation = row.Observation,
+                    ImportBatchId = importBatchId, ExternalRecordId = row.ExternalRecordId, ExternalUserId = row.ExternalUserId,
+                    ImportFileName = parsed.FileName, ImportFileHash = parsed.FileHash, SourceCreatedAt = row.SourceCreatedAt,
+                    SourceUpdatedAt = row.SourceUpdatedAt, ImportedAt = importedAt, CreatedAt = importedAt
+                };
+                if (!string.IsNullOrWhiteSpace(row.AttachmentName))
+                {
+                    var expectedName = $"{row.ExternalRecordId}_{row.AttachmentName}";
+                    var file = attachmentFiles.Single(x => MatchesImportedAttachment(x, expectedName, row.AttachmentName!));
+                    await using var attachmentStream = new MemoryStream();
+                    await file.CopyToAsync(attachmentStream);
+                    absence.Attachments.Add(new TimeClockAbsenceAttachment
+                    {
+                        FileName = row.AttachmentName, ContentType = row.AttachmentContentType ?? file.ContentType ?? "application/octet-stream",
+                        Size = file.Length, Content = attachmentStream.ToArray()
+                    });
+                    importedAttachments++;
+                }
+                importedAbsences.Add(absence);
+            }
+
+            _context.TimeClockAbsences.AddRange(importedAbsences);
+            _context.TimeClockUnjustifiedAbsences.AddRange(importedUnjustifiedAbsences);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+            return Ok(new TimeClockAbsenceImportResultDto
+            {
+                ImportedAbsences = importedAbsences.Count, ImportedUnjustifiedAbsences = importedUnjustifiedAbsences.Count,
+                ImportedAttachments = importedAttachments, ReplacedAbsences = existingAbsences.Count,
+                ReplacedUnjustifiedAbsences = existingUnjustifiedAbsences.Count
+            });
         }
 
         [HttpPost("absences")]
@@ -545,14 +811,53 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
                 .Where(x => x.UserId == userId && x.StartDate <= monthEnd && x.EndDate >= monthStart)
                 .ToListAsync();
 
+            var timeEntries = await _context.Set<TimeEntry>()
+                .Include(x => x.WorkPackage)
+                .Where(x => x.UserId == userId && x.SpentOn >= monthStart && x.SpentOn < monthStart.AddMonths(1))
+                .ToListAsync();
+            var openProjectBaseUrl = await _openProjectService.GetActiveOpenProjectBaseUrlAsync();
+            var workPackagesByDate = timeEntries
+                .GroupBy(entry => DateOnly.FromDateTime(entry.SpentOn).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))
+                .ToDictionary(
+                    group => group.Key,
+                    group => group
+                        .GroupBy(entry => entry.WorkPackageId)
+                        .Select(entries =>
+                        {
+                            var workPackage = entries.First().WorkPackage;
+                            return new TimeClockWorkPackageDto
+                            {
+                                Id = entries.Key,
+                                Subject = workPackage?.Subject,
+                                Url = OpenProjectService.BuildWorkPackageWebUrl(openProjectBaseUrl, entries.Key, workPackage?.ProjectIdentifier),
+                                SyncStatus = entries.Any(entry => entry.SyncStatus == Axiom.Atlas.Domain.Enums.SyncStatus.Error)
+                                    ? "error"
+                                    : entries.Any(entry => entry.SyncStatus == Axiom.Atlas.Domain.Enums.SyncStatus.Pending)
+                                        ? "pending"
+                                        : "synced"
+                            };
+                        })
+                        .OrderBy(workPackage => workPackage.Id)
+                        .ToList());
+            var workPackageHoursByDate = timeEntries
+                .GroupBy(entry => DateOnly.FromDateTime(entry.SpentOn).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))
+                .ToDictionary(group => group.Key, group => group.Sum(entry => entry.Hours));
+
             var days = Enumerable.Range(1, DateTime.DaysInMonth(year, month))
-                .Select(day => BuildDay(
-                    DateTime.SpecifyKind(new DateTime(year, month, day), DateTimeKind.Utc),
-                    schedule,
-                    globalSettings.ToleranceMinutes,
-                    punches,
-                    absences,
-                    unjustifiedAbsences))
+                .Select(day =>
+                {
+                    var date = DateTime.SpecifyKind(new DateTime(year, month, day), DateTimeKind.Utc);
+                    var calendarDay = BuildDay(
+                        date,
+                        schedule,
+                        globalSettings.ToleranceMinutes,
+                        punches,
+                        absences,
+                        unjustifiedAbsences);
+                    calendarDay.WorkPackages = workPackagesByDate.GetValueOrDefault(FormatDate(date), []);
+                    calendarDay.WorkPackageHours = workPackageHoursByDate.GetValueOrDefault(FormatDate(date));
+                    return calendarDay;
+                })
                 .ToList();
 
             var accountedDays = days.Where(x => !x.IsFuture).ToList();
@@ -691,7 +996,8 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
                 .FirstOrDefault(x => x.AbsenceDate.Date == date.Date);
 
             var isFuture = date.Date > GetBusinessToday();
-            var expectedBaseMinutes = IsWeekend(date)
+            var hasTimeClockEvent = dayPunches.Count > 0 || dayAbsences.Count > 0 || unjustified != null;
+            var expectedBaseMinutes = IsWeekend(date) || !hasTimeClockEvent
                 ? 0
                 : Math.Max(0, CalculateMinutesBetween(schedule.EntryTime, schedule.ExitTime) - schedule.LunchIntervalMinutes);
 
@@ -841,6 +1147,7 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
                 EntryTime = FormatTime(setting.EntryTime),
                 ExitTime = FormatTime(setting.ExitTime),
                 LunchIntervalMinutes = setting.LunchIntervalMinutes,
+                ShowWorkPackagesInCalendar = setting.ShowWorkPackagesInCalendar,
                 ExpectedDailyMinutes = expectedMinutes,
                 ExpectedDailyLabel = FormatMinutes(expectedMinutes)
             };
@@ -858,7 +1165,11 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
                 TypeIcon = GetPunchTypeIcon(punch.Type),
                 Sequence = GetPunchTypeSequence(punch.Type),
                 Nsr = punch.Nsr,
-                Observation = punch.Observation
+                Observation = punch.Observation,
+                ExternalRecordId = punch.ExternalRecordId,
+                ImportFileName = punch.ImportFileName,
+                SourceCreatedAt = punch.SourceCreatedAt?.ToString("O", CultureInfo.InvariantCulture),
+                SourceUpdatedAt = punch.SourceUpdatedAt?.ToString("O", CultureInfo.InvariantCulture)
             };
         }
 
@@ -884,6 +1195,49 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
                     ContentType = attachment.ContentType,
                     Size = attachment.Size
                 }).ToList()
+            };
+        }
+
+        private static bool MatchesImportedAttachment(IFormFile file, string expectedName, string attachmentName)
+        {
+            var fileName = Path.GetFileName(file.FileName);
+            return fileName.Equals(expectedName, StringComparison.OrdinalIgnoreCase) ||
+                   fileName.Equals(attachmentName, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static TimeClockAbsenceManagementItemDto MapManagementAbsence(TimeClockAbsence absence)
+        {
+            return new TimeClockAbsenceManagementItemDto
+            {
+                Id = absence.Id,
+                Type = absence.Type.ToString(),
+                TypeLabel = GetAbsenceTypeLabel(absence.Type),
+                PeriodType = absence.PeriodType.ToString(),
+                PeriodTypeLabel = absence.PeriodType == TimeClockAbsencePeriodType.FullDay ? "Integral" : "Parcial",
+                StartDate = FormatDate(absence.StartDate), EndDate = FormatDate(absence.EndDate),
+                StartTime = absence.StartTime.HasValue ? FormatTime(absence.StartTime.Value) : null,
+                EndTime = absence.EndTime.HasValue ? FormatTime(absence.EndTime.Value) : null,
+                Observation = absence.Observation, ExternalRecordId = absence.ExternalRecordId,
+                SourceCreatedAt = absence.SourceCreatedAt?.ToString("O", CultureInfo.InvariantCulture),
+                Attachments = absence.Attachments.Select(attachment => new TimeClockAbsenceAttachmentDto
+                {
+                    Id = attachment.Id, FileName = attachment.FileName, ContentType = attachment.ContentType, Size = attachment.Size
+                }).ToList()
+            };
+        }
+
+        private static TimeClockAbsenceManagementItemDto MapManagementUnjustifiedAbsence(TimeClockUnjustifiedAbsence absence)
+        {
+            return new TimeClockAbsenceManagementItemDto
+            {
+                Id = absence.Id, IsUnjustified = true, Type = absence.Type.ToString(),
+                TypeLabel = absence.Type == TimeClockUnjustifiedAbsenceType.FullDay ? "Falta sem justificativa integral" : "Falta sem justificativa parcial",
+                PeriodType = absence.Type.ToString(), PeriodTypeLabel = absence.Type == TimeClockUnjustifiedAbsenceType.FullDay ? "Integral" : "Parcial",
+                StartDate = FormatDate(absence.AbsenceDate), EndDate = FormatDate(absence.AbsenceDate),
+                StartTime = absence.StartTime.HasValue ? FormatTime(absence.StartTime.Value) : null,
+                EndTime = absence.EndTime.HasValue ? FormatTime(absence.EndTime.Value) : null,
+                Observation = absence.Observation, ExternalRecordId = absence.ExternalRecordId,
+                SourceCreatedAt = absence.SourceCreatedAt?.ToString("O", CultureInfo.InvariantCulture)
             };
         }
 
@@ -922,6 +1276,12 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
                 byType.TryGetValue(TimeClockPunchType.AfternoonExit, out var afternoonExit))
             {
                 minutes += CalculateMinutesBetween(afternoonEntry, afternoonExit);
+            }
+
+            if (byType.TryGetValue(TimeClockPunchType.AdditionalEntry, out var additionalEntry) &&
+                byType.TryGetValue(TimeClockPunchType.AdditionalExit, out var additionalExit))
+            {
+                minutes += CalculateMinutesBetween(additionalEntry, additionalExit);
             }
 
             return minutes;
@@ -1068,7 +1428,15 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
 
         private static int GetPunchTypeSequence(TimeClockPunchType type)
         {
-            return Array.IndexOf(PunchSequence, type);
+            var sequence = Array.IndexOf(PunchSequence, type);
+            return sequence >= 0
+                ? sequence
+                : type switch
+                {
+                    TimeClockPunchType.AdditionalEntry => 4,
+                    TimeClockPunchType.AdditionalExit => 5,
+                    _ => int.MaxValue
+                };
         }
 
         private static string GetPunchTypeLabel(TimeClockPunchType type)
@@ -1079,6 +1447,8 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
                 TimeClockPunchType.MorningExit => "Saída manhã",
                 TimeClockPunchType.AfternoonEntry => "Entrada tarde",
                 TimeClockPunchType.AfternoonExit => "Saída tarde",
+                TimeClockPunchType.AdditionalEntry => "Entrada adicional",
+                TimeClockPunchType.AdditionalExit => "Saída adicional",
                 _ => type.ToString()
             };
         }
@@ -1091,6 +1461,8 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
                 TimeClockPunchType.MorningExit => "ki-exit-right",
                 TimeClockPunchType.AfternoonEntry => "ki-entrance-left",
                 TimeClockPunchType.AfternoonExit => "ki-exit-left",
+                TimeClockPunchType.AdditionalEntry => "ki-plus-circle",
+                TimeClockPunchType.AdditionalExit => "ki-minus-circle",
                 _ => "ki-time"
             };
         }
