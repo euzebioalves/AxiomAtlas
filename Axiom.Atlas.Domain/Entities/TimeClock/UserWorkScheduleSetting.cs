@@ -7,6 +7,7 @@ namespace Axiom.Atlas.Domain.Entities.TimeClock
         public TimeSpan EntryTime { get; set; }
         public TimeSpan ExitTime { get; set; }
         public int LunchIntervalMinutes { get; set; }
+        public bool ShowWorkPackagesInCalendar { get; set; } = true;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
     }

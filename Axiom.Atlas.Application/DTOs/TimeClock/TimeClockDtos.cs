@@ -5,6 +5,7 @@ namespace Axiom.Atlas.Application.DTOs.TimeClock
         public string EntryTime { get; set; } = "08:00";
         public string ExitTime { get; set; } = "17:00";
         public int LunchIntervalMinutes { get; set; } = 60;
+        public bool ShowWorkPackagesInCalendar { get; set; } = true;
         public int ExpectedDailyMinutes { get; set; } = 480;
         public string ExpectedDailyLabel { get; set; } = "8h00";
     }
@@ -14,6 +15,11 @@ namespace Axiom.Atlas.Application.DTOs.TimeClock
         public string EntryTime { get; set; } = string.Empty;
         public string ExitTime { get; set; } = string.Empty;
         public int LunchIntervalMinutes { get; set; }
+    }
+
+    public class SaveTimeClockCalendarPreferenceRequest
+    {
+        public bool ShowWorkPackagesInCalendar { get; set; }
     }
 
     public class GlobalTimeClockSettingDto
@@ -37,6 +43,10 @@ namespace Axiom.Atlas.Application.DTOs.TimeClock
         public int Sequence { get; set; }
         public string? Nsr { get; set; }
         public string? Observation { get; set; }
+        public string? ExternalRecordId { get; set; }
+        public string? ImportFileName { get; set; }
+        public string? SourceCreatedAt { get; set; }
+        public string? SourceUpdatedAt { get; set; }
     }
 
     public class SaveTimeClockPunchRequest
@@ -52,6 +62,15 @@ namespace Axiom.Atlas.Application.DTOs.TimeClock
     {
         public string Date { get; set; } = string.Empty;
         public List<SaveTimeClockPunchRequest> Punches { get; set; } = new();
+    }
+
+    public class TimeClockImportResultDto
+    {
+        public int ImportedPunches { get; set; }
+        public int ReplacedPunches { get; set; }
+        public string DateStart { get; set; } = string.Empty;
+        public string DateEnd { get; set; } = string.Empty;
+        public string ExternalUserId { get; set; } = string.Empty;
     }
 
     public class TimeClockUnjustifiedAbsenceDto
@@ -84,6 +103,33 @@ namespace Axiom.Atlas.Application.DTOs.TimeClock
         public long Size { get; set; }
     }
 
+    public class TimeClockAbsenceManagementItemDto
+    {
+        public Guid Id { get; set; }
+        public bool IsUnjustified { get; set; }
+        public string Type { get; set; } = string.Empty;
+        public string TypeLabel { get; set; } = string.Empty;
+        public string PeriodType { get; set; } = string.Empty;
+        public string PeriodTypeLabel { get; set; } = string.Empty;
+        public string StartDate { get; set; } = string.Empty;
+        public string EndDate { get; set; } = string.Empty;
+        public string? StartTime { get; set; }
+        public string? EndTime { get; set; }
+        public string? Observation { get; set; }
+        public string? ExternalRecordId { get; set; }
+        public string? SourceCreatedAt { get; set; }
+        public List<TimeClockAbsenceAttachmentDto> Attachments { get; set; } = new();
+    }
+
+    public class TimeClockAbsenceImportResultDto
+    {
+        public int ImportedAbsences { get; set; }
+        public int ImportedUnjustifiedAbsences { get; set; }
+        public int ImportedAttachments { get; set; }
+        public int ReplacedAbsences { get; set; }
+        public int ReplacedUnjustifiedAbsences { get; set; }
+    }
+
     public class TimeClockAbsenceDto
     {
         public Guid Id { get; set; }
@@ -110,6 +156,8 @@ namespace Axiom.Atlas.Application.DTOs.TimeClock
         public bool IsHoliday { get; set; }
         public string? HolidayName { get; set; }
         public List<TimeClockPunchDto> Punches { get; set; } = new();
+        public List<TimeClockWorkPackageDto> WorkPackages { get; set; } = new();
+        public decimal WorkPackageHours { get; set; }
         public List<TimeClockAbsenceDto> Absences { get; set; } = new();
         public TimeClockUnjustifiedAbsenceDto? UnjustifiedAbsence { get; set; }
         public int WorkedMinutes { get; set; }
@@ -122,6 +170,14 @@ namespace Axiom.Atlas.Application.DTOs.TimeClock
         public string LunchLabel { get; set; } = "0h00";
         public string? NextPunchType { get; set; }
         public string? NextPunchTypeLabel { get; set; }
+    }
+
+    public class TimeClockWorkPackageDto
+    {
+        public int Id { get; set; }
+        public string? Subject { get; set; }
+        public string? Url { get; set; }
+        public string SyncStatus { get; set; } = "pending";
     }
 
     public class TimeClockSummaryDto

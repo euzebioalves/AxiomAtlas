@@ -7,7 +7,7 @@ namespace Axiom.Atlas.Application.DTOs.TimeEntries
         public string? WorkPackageSubject { get; set; }
         public string? WorkPackageProjectName { get; set; }
         public string? WorkPackageUrl { get; set; }
-        public DateTime SpentOn { get; set; }
+        public DateOnly SpentOn { get; set; }
         public TimeSpan? StartTime { get; set; }
         public TimeSpan? EndTime { get; set; }
         public decimal Hours { get; set; }

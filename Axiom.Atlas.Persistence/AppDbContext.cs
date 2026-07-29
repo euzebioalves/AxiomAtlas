@@ -77,10 +77,15 @@ namespace Axiom.Atlas.Persistence
                 entity.HasKey(x => x.Id);
                 entity.Property(x => x.UserId).HasMaxLength(100).IsRequired();
                 entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(50);
-                entity.Property(x => x.Nsr).HasMaxLength(9);
-                entity.Property(x => x.Observation).HasColumnType("text");
-                entity.HasIndex(x => new { x.UserId, x.PunchDate, x.Type }).IsUnique();
-            });
+            entity.Property(x => x.Nsr).HasMaxLength(9);
+            entity.Property(x => x.Observation).HasColumnType("text");
+            entity.Property(x => x.ExternalRecordId).HasMaxLength(100);
+            entity.Property(x => x.ExternalUserId).HasMaxLength(100);
+            entity.Property(x => x.ImportFileName).HasMaxLength(255);
+            entity.Property(x => x.ImportFileHash).HasMaxLength(64);
+            entity.HasIndex(x => new { x.UserId, x.PunchDate, x.Type }).IsUnique();
+            entity.HasIndex(x => new { x.UserId, x.ExternalRecordId }).IsUnique();
+        });
 
             builder.Entity<TimeClockUnjustifiedAbsence>(entity =>
             {
@@ -88,7 +93,12 @@ namespace Axiom.Atlas.Persistence
                 entity.Property(x => x.UserId).HasMaxLength(100).IsRequired();
                 entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(50);
                 entity.Property(x => x.Observation).HasColumnType("text");
+                entity.Property(x => x.ExternalRecordId).HasMaxLength(100);
+                entity.Property(x => x.ExternalUserId).HasMaxLength(100);
+                entity.Property(x => x.ImportFileName).HasMaxLength(255);
+                entity.Property(x => x.ImportFileHash).HasMaxLength(64);
                 entity.HasIndex(x => new { x.UserId, x.AbsenceDate }).IsUnique();
+                entity.HasIndex(x => new { x.UserId, x.ExternalRecordId }).IsUnique();
             });
 
             builder.Entity<TimeClockAbsence>(entity =>
@@ -98,6 +108,11 @@ namespace Axiom.Atlas.Persistence
                 entity.Property(x => x.Type).HasConversion<string>().HasMaxLength(80);
                 entity.Property(x => x.PeriodType).HasConversion<string>().HasMaxLength(50);
                 entity.Property(x => x.Observation).HasColumnType("text");
+                entity.Property(x => x.ExternalRecordId).HasMaxLength(100);
+                entity.Property(x => x.ExternalUserId).HasMaxLength(100);
+                entity.Property(x => x.ImportFileName).HasMaxLength(255);
+                entity.Property(x => x.ImportFileHash).HasMaxLength(64);
+                entity.HasIndex(x => new { x.UserId, x.ExternalRecordId }).IsUnique();
                 entity.HasMany(x => x.Attachments)
                     .WithOne(x => x.Absence)
                     .HasForeignKey(x => x.AbsenceId)

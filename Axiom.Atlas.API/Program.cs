@@ -2,6 +2,8 @@ using Audit.Core;
 using Axiom.Atlas.Api.Transformers;
 using Axiom.Atlas.Application.Interfaces;
 using Axiom.Atlas.Application.Services;
+using Axiom.Atlas.Application.Services.TimeClock;
+using Axiom.Atlas.Application.Services.TimeEntries;
 using Axiom.Atlas.Domain.Entities.AuditLogs;
 using Axiom.Atlas.Domain.Entities.Users;
 using Axiom.Atlas.Domain.Interfaces.Auth;
@@ -58,6 +60,9 @@ builder.Services.AddIdentityApiEndpoints<User>()
     .AddEntityFrameworkStores<AppDbContext>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ITimeConverterService, TimeConverterService>();
+builder.Services.AddSingleton<TimeClockCsvImportParser>();
+builder.Services.AddSingleton<TimeClockAbsenceCsvImportParser>();
+builder.Services.AddSingleton<TimeEntryCsvImportParser>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi(options =>
 {

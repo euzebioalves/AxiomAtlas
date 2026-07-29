@@ -65,6 +65,33 @@ namespace Axiom.Atlas.Web.Controllers.TimeEntries
             return BadRequest(new { success = false, message = $"A API recusou: {response.StatusCode} - {erroRealDaApi}" });
         }
 
+        [HttpPost]
+        [RequestSizeLimit(25_000_000)]
+        public async Task<IActionResult> ImportEntries()
+        {
+            var form = await Request.ReadFormAsync();
+            var client = await CreateAuthorizedApiClientAsync();
+            using var multipart = new MultipartFormDataContent();
+            foreach (var key in form.Keys)
+                multipart.Add(new StringContent(form[key].ToString()), key);
+            foreach (var file in form.Files)
+            {
+                var streamContent = new StreamContent(file.OpenReadStream());
+                streamContent.Headers.ContentType = new MediaTypeHeaderValue(
+                    string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType);
+                multipart.Add(streamContent, file.Name, file.FileName);
+            }
+
+            var response = await client.PostAsync("api/TimeEntries/import", multipart);
+            var content = await response.Content.ReadAsStringAsync();
+            return new ContentResult
+            {
+                StatusCode = (int)response.StatusCode,
+                Content = string.IsNullOrWhiteSpace(content) ? "{}" : content,
+                ContentType = "application/json"
+            };
+        }
+
         [HttpPut]
         [Route("TimeEntries/Update/{id}")]
         public async Task<IActionResult> Update(Guid id, [FromBody] CreateTimeEntryRequest request)

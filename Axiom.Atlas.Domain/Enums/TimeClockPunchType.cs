@@ -5,6 +5,8 @@ namespace Axiom.Atlas.Domain.Enums
         MorningEntry = 0,
         MorningExit = 1,
         AfternoonEntry = 2,
-        AfternoonExit = 3
+        AfternoonExit = 3,
+        AdditionalEntry = 4,
+        AdditionalExit = 5
     }
 }

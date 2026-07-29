@@ -3,6 +3,7 @@ using System;
 using Axiom.Atlas.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Axiom.Atlas.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260729001056_AddTimeClockPunchImportMetadata")]
+    partial class AddTimeClockPunchImportMetadata
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -431,28 +434,6 @@ namespace Axiom.Atlas.Persistence.Migrations
                     b.Property<TimeSpan?>("EndTime")
                         .HasColumnType("interval");
 
-                    b.Property<string>("ExternalRecordId")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("ExternalUserId")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid?>("ImportBatchId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ImportFileHash")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("ImportFileName")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<DateTime?>("ImportedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("Observation")
                         .HasColumnType("text");
 
@@ -460,12 +441,6 @@ namespace Axiom.Atlas.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
-
-                    b.Property<DateTime?>("SourceCreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("SourceUpdatedAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("StartDate")
                         .HasColumnType("timestamp with time zone");
@@ -484,9 +459,6 @@ namespace Axiom.Atlas.Persistence.Migrations
                         .HasColumnType("character varying(100)");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("UserId", "ExternalRecordId")
-                        .IsUnique();
 
                     b.ToTable("TimeClockAbsences");
                 });
@@ -616,36 +588,8 @@ namespace Axiom.Atlas.Persistence.Migrations
                     b.Property<TimeSpan?>("EndTime")
                         .HasColumnType("interval");
 
-                    b.Property<string>("ExternalRecordId")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("ExternalUserId")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid?>("ImportBatchId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ImportFileHash")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("ImportFileName")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<DateTime?>("ImportedAt")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<string>("Observation")
                         .HasColumnType("text");
-
-                    b.Property<DateTime?>("SourceCreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("SourceUpdatedAt")
-                        .HasColumnType("timestamp with time zone");
 
                     b.Property<TimeSpan?>("StartTime")
                         .HasColumnType("interval");
@@ -668,9 +612,6 @@ namespace Axiom.Atlas.Persistence.Migrations
                     b.HasIndex("UserId", "AbsenceDate")
                         .IsUnique();
 
-                    b.HasIndex("UserId", "ExternalRecordId")
-                        .IsUnique();
-
                     b.ToTable("TimeClockUnjustifiedAbsences");
                 });
 
@@ -691,9 +632,6 @@ namespace Axiom.Atlas.Persistence.Migrations
 
                     b.Property<int>("LunchIntervalMinutes")
                         .HasColumnType("integer");
-
-                    b.Property<bool>("ShowWorkPackagesInCalendar")
-                        .HasColumnType("boolean");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");

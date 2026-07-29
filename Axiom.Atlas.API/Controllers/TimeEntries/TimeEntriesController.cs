@@ -1,4 +1,5 @@
 ﻿using Axiom.Atlas.Application.DTOs.TimeEntries;
+using Axiom.Atlas.Application.Services.TimeEntries;
 using Axiom.Atlas.Domain.Entities.TimeEntries;
 using Axiom.Atlas.Domain.Enums;
 using Axiom.Atlas.Infrastructure.Services.TimeEntries;
@@ -19,11 +20,94 @@ namespace Axiom.Atlas.API.Controllers.TimeEntries
     {
         private readonly OpenProjectService _openProjectService;
         private readonly AppDbContext _context;
+        private readonly TimeEntryCsvImportParser _timeEntryCsvImportParser;
 
-        public TimeEntriesController(OpenProjectService openProjectService, AppDbContext context)
+        public TimeEntriesController(OpenProjectService openProjectService, AppDbContext context, TimeEntryCsvImportParser timeEntryCsvImportParser)
         {
             _openProjectService = openProjectService;
             _context = context;
+            _timeEntryCsvImportParser = timeEntryCsvImportParser;
+        }
+
+        [HttpPost("import")]
+        [RequestSizeLimit(25_000_000)]
+        public async Task<IActionResult> ImportEntries([FromForm] IFormFile? csvFile, [FromForm] bool replaceExisting)
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                         ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrWhiteSpace(userId))
+                return Unauthorized(new { message = "Usuário não identificado no token." });
+            if (!replaceExisting)
+                return BadRequest(new { message = "Confirme a substituição dos lançamentos atuais para continuar." });
+            if (csvFile is null || csvFile.Length == 0 || !Path.GetExtension(csvFile.FileName).Equals(".csv", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(new { message = "Selecione o arquivo CSV de entradas de tempo." });
+
+            await using var csvStream = new MemoryStream();
+            await csvFile.CopyToAsync(csvStream);
+            var parsed = _timeEntryCsvImportParser.Parse(csvStream.ToArray());
+            if (parsed.Errors.Count > 0)
+            {
+                return BadRequest(new
+                {
+                    message = "O arquivo possui inconsistências e nenhum lançamento foi alterado.",
+                    errors = parsed.Errors.Select(error => new { error.Line, error.Message })
+                });
+            }
+            if (parsed.Rows.Count == 0)
+                return BadRequest(new { message = "O arquivo não contém entradas de tempo válidas para importar." });
+
+            await using var transaction = await _context.Database.BeginTransactionAsync();
+            var existingEntries = await _context.TimeEntries.Where(entry => entry.UserId == userId).ToListAsync();
+            _context.TimeEntries.RemoveRange(existingEntries);
+            await _context.SaveChangesAsync();
+
+            var sourceWorkPackages = parsed.Rows.GroupBy(row => row.WorkPackageId).Select(group => group.First()).ToList();
+            var sourceWorkPackageIds = sourceWorkPackages.Select(row => row.WorkPackageId).ToList();
+            var cachedWorkPackages = await _context.WorkPackageCaches
+                .Where(workPackage => sourceWorkPackageIds.Contains(workPackage.Id))
+                .ToDictionaryAsync(workPackage => workPackage.Id);
+            var importedAt = DateTime.UtcNow;
+            foreach (var row in sourceWorkPackages)
+            {
+                if (!cachedWorkPackages.TryGetValue(row.WorkPackageId, out var workPackage))
+                {
+                    workPackage = new WorkPackageCache { Id = row.WorkPackageId };
+                    _context.WorkPackageCaches.Add(workPackage);
+                }
+                workPackage.Subject = row.WorkPackageSubject ?? $"Work Package #{row.WorkPackageId}";
+                workPackage.ProjectId = row.ProjectId ?? 0;
+                workPackage.ProjectName = row.ProjectName;
+                workPackage.LastUpdated = importedAt;
+            }
+
+            var entries = parsed.Rows.Select(row => new TimeEntry
+            {
+                UserId = userId,
+                WorkPackageId = row.WorkPackageId,
+                SpentOn = DateTime.SpecifyKind(row.SpentOn.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc),
+                StartTime = row.StartTime.ToTimeSpan(),
+                EndTime = row.EndTime.ToTimeSpan(),
+                Hours = decimal.Round((decimal)(row.EndTime.ToTimeSpan() - row.StartTime.ToTimeSpan()).TotalHours, 2),
+                Comment = row.Comment,
+                ActivityId = row.ActivityId,
+                SyncStatus = row.OpenProjectTimeEntryId.HasValue ? SyncStatus.Synced : SyncStatus.Pending,
+                OpenProjectTimeEntryId = row.OpenProjectTimeEntryId,
+                CreatedAt = row.CreatedAt
+            }).ToList();
+
+            _context.TimeEntries.AddRange(entries);
+            await _context.SaveChangesAsync();
+            await transaction.CommitAsync();
+
+            return Ok(new
+            {
+                success = true,
+                message = $"{entries.Count} entrada(s) de tempo importada(s) com sucesso.",
+                importedEntries = entries.Count,
+                syncedEntries = entries.Count(entry => entry.SyncStatus == SyncStatus.Synced),
+                pendingEntries = entries.Count(entry => entry.SyncStatus == SyncStatus.Pending),
+                replacedEntries = existingEntries.Count
+            });
         }
 
         [HttpGet("work-package/{wpId}")]
@@ -146,7 +230,7 @@ namespace Axiom.Atlas.API.Controllers.TimeEntries
                     WorkPackageSubject = workPackage?.Subject,
                     WorkPackageProjectName = workPackage?.ProjectName,
                     WorkPackageUrl = OpenProjectService.BuildWorkPackageWebUrl(openProjectBaseUrl, workPackage),
-                    SpentOn = entry.SpentOn,
+                    SpentOn = DateOnly.FromDateTime(entry.SpentOn),
                     StartTime = entry.StartTime,
                     EndTime = entry.EndTime,
                     Hours = entry.Hours,
