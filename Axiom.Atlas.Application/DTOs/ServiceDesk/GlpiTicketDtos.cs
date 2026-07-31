@@ -71,6 +71,7 @@ namespace Axiom.Atlas.Application.DTOs.ServiceDesk
         public string? WorkPackageUrl { get; set; }
         public string? WorkPackageStatus { get; set; }
         public string? WorkPackageCreator { get; set; }
+        public DateTime? WorkPackageCreatedAt { get; set; }
         public int? WorkPackageDaysOpen { get; set; }
     }
 
@@ -100,6 +101,9 @@ namespace Axiom.Atlas.Application.DTOs.ServiceDesk
         public int MyAnalyses { get; set; }
         public int PendingGlpiLinks { get; set; }
         public int OldestOpenDays { get; set; }
+        public decimal TotalLoggedHours { get; set; }
+        public decimal PendingSyncHours { get; set; }
+        public int WorkPackagesWithLoggedHours { get; set; }
     }
 
     public class UnifiedBacklogItemDto
@@ -117,6 +121,7 @@ namespace Axiom.Atlas.Application.DTOs.ServiceDesk
         public string? WorkPackageUrl { get; set; }
         public string? WorkPackageStatus { get; set; }
         public string? WorkPackageCreator { get; set; }
+        public DateTime? WorkPackageCreatedAt { get; set; }
         public int? WorkPackageDaysOpen { get; set; }
         public string Stage { get; set; } = "triage";
         public string StageLabel { get; set; } = "Triagem GLPI";
@@ -124,5 +129,8 @@ namespace Axiom.Atlas.Application.DTOs.ServiceDesk
         public string PriorityReason { get; set; } = string.Empty;
         public bool IsAtRisk { get; set; }
         public bool IsGlpiLinkPending { get; set; }
+        public decimal LoggedHours { get; set; }
+        public decimal SyncedHours { get; set; }
+        public decimal PendingSyncHours { get; set; }
     }
 }

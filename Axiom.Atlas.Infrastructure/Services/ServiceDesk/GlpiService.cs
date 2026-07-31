@@ -2,6 +2,7 @@ using Axiom.Atlas.Application.DTOs.Integrations;
 using Axiom.Atlas.Application.DTOs.ServiceDesk;
 using Axiom.Atlas.Domain.Entities.Integrations;
 using Axiom.Atlas.Domain.Entities.ServiceDesk;
+using Axiom.Atlas.Domain.Enums;
 using Axiom.Atlas.Persistence;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
@@ -288,6 +289,32 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                 return ToUnifiedBacklogItem(ticket, workspace, currentUserId);
             }).ToList();
 
+            var workPackageIds = items.Where(x => x.WorkPackageId.HasValue)
+                .Select(x => x.WorkPackageId!.Value)
+                .Distinct()
+                .ToArray();
+            var hoursByWorkPackage = workPackageIds.Length == 0
+                ? new Dictionary<int, WorkPackageHoursProjection>()
+                : await _context.TimeEntries.AsNoTracking()
+                    .Where(x => workPackageIds.Contains(x.WorkPackageId))
+                    .GroupBy(x => x.WorkPackageId)
+                    .Select(group => new WorkPackageHoursProjection(
+                        group.Key,
+                        group.Sum(x => x.Hours),
+                        group.Where(x => x.SyncStatus == SyncStatus.Synced).Sum(x => x.Hours),
+                        group.Where(x => x.SyncStatus != SyncStatus.Synced).Sum(x => x.Hours)))
+                    .ToDictionaryAsync(x => x.WorkPackageId);
+
+            foreach (var item in items.Where(x => x.WorkPackageId.HasValue))
+            {
+                if (hoursByWorkPackage.TryGetValue(item.WorkPackageId!.Value, out var hours))
+                {
+                    item.LoggedHours = hours.LoggedHours;
+                    item.SyncedHours = hours.SyncedHours;
+                    item.PendingSyncHours = hours.PendingSyncHours;
+                }
+            }
+
             return new UnifiedBacklogResponse
             {
                 Items = items,
@@ -304,7 +331,10 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                     AtRisk = items.Count(x => x.IsAtRisk),
                     MyAnalyses = items.Count(x => x.IsOwnedByCurrentUser),
                     PendingGlpiLinks = items.Count(x => x.IsGlpiLinkPending),
-                    OldestOpenDays = items.Count == 0 ? 0 : items.Max(x => x.DaysOpen)
+                    OldestOpenDays = items.Count == 0 ? 0 : items.Max(x => x.DaysOpen),
+                    TotalLoggedHours = items.Sum(x => x.LoggedHours),
+                    PendingSyncHours = items.Sum(x => x.PendingSyncHours),
+                    WorkPackagesWithLoggedHours = items.Count(x => x.LoggedHours > 0)
                 }
             };
         }
@@ -643,6 +673,7 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                 WorkPackageUrl = ticket.WorkPackageUrl,
                 WorkPackageStatus = ticket.WorkPackageStatus,
                 WorkPackageCreator = ticket.WorkPackageCreator,
+                WorkPackageCreatedAt = ticket.WorkPackageCreatedAt,
                 WorkPackageDaysOpen = ticket.WorkPackageCreatedAt is { } createdAt
                     ? Math.Max(0, (int)(DateTime.UtcNow.Date - createdAt.Date).TotalDays)
                     : null
@@ -700,6 +731,7 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                 WorkPackageUrl = ticket.WorkPackageUrl,
                 WorkPackageStatus = ticket.WorkPackageStatus,
                 WorkPackageCreator = ticket.WorkPackageCreator,
+                WorkPackageCreatedAt = ticket.WorkPackageCreatedAt,
                 WorkPackageDaysOpen = ticket.WorkPackageCreatedAt is { } createdAt ? Math.Max(0, (int)(DateTime.UtcNow.Date - createdAt.Date).TotalDays) : null,
                 Stage = stage,
                 StageLabel = stage switch
@@ -1475,6 +1507,7 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             string? OpenProjectWorkPackageUrl,
             string? GlpiDevOpsUrl,
             string CreatedByUserId);
+        private sealed record WorkPackageHoursProjection(int WorkPackageId, decimal LoggedHours, decimal SyncedHours, decimal PendingSyncHours);
         private sealed record GlpiTicketSnapshot(long TicketId, string Subject, int? EntityId, DateTime? OpenedAt, int? StatusCode, string? DevOpsUrl);
         private sealed record CachedGlpiSession(string Token, DateTimeOffset ExpiresAt);
         private sealed record GlpiSearchFieldMetadata(

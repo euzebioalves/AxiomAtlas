@@ -14,6 +14,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
 {
@@ -450,6 +451,134 @@ namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
                 ? activities
                 : await GetTimeEntryActivitiesAsync(client);
         }
+
+        /// <summary>
+        /// Searches the configured OpenProject for exact remote counterparts of local entries.
+        /// A match requires the same Work Package, date, duration, activity and normalized comment.
+        /// It never changes local synchronization state; callers must request explicit confirmation.
+        /// </summary>
+        public async Task<Dictionary<Guid, List<OpenProjectTimeEntryMatchDto>>> FindExactTimeEntryMatchesAsync(IReadOnlyCollection<TimeEntry> entries)
+        {
+            var matches = entries.ToDictionary(entry => entry.Id, _ => new List<OpenProjectTimeEntryMatchDto>());
+            if (entries.Count == 0)
+            {
+                return matches;
+            }
+
+            var client = await CreateConfiguredClientAsync();
+            foreach (var entry in entries)
+            {
+                var filters = JsonSerializer.Serialize(new object[]
+                {
+                    new { entity_type = new { @operator = "=", values = new[] { "WorkPackage" } } },
+                    new { entity_id = new { @operator = "=", values = new[] { entry.WorkPackageId.ToString() } } }
+                });
+                using var response = await client.GetAsync($"api/v3/time_entries?pageSize=1000&filters={Uri.EscapeDataString(filters)}");
+                if (!response.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException(
+                        $"Não foi possível consultar os apontamentos no OpenProject (HTTP {(int)response.StatusCode}): {await ReadOpenProjectErrorMessageAsync(response)}");
+                }
+
+                var body = await response.Content.ReadAsStringAsync();
+                if (string.IsNullOrWhiteSpace(body))
+                {
+                    continue;
+                }
+
+                using var document = JsonDocument.Parse(body);
+                if (!document.RootElement.TryGetProperty("_embedded", out var embedded) ||
+                    !embedded.TryGetProperty("elements", out var elements) ||
+                    elements.ValueKind != JsonValueKind.Array)
+                {
+                    continue;
+                }
+
+                foreach (var element in elements.EnumerateArray())
+                {
+                    var remote = ReadRemoteTimeEntry(element);
+                    if (remote is not null && IsExactTimeEntryMatch(entry, remote))
+                    {
+                        matches[entry.Id].Add(remote);
+                    }
+                }
+            }
+
+            return matches;
+        }
+
+        private static OpenProjectTimeEntryMatchDto? ReadRemoteTimeEntry(JsonElement element)
+        {
+            if (!element.TryGetProperty("id", out var idElement) || !idElement.TryGetInt32(out var id) ||
+                !element.TryGetProperty("spentOn", out var spentOnElement) ||
+                !DateOnly.TryParse(spentOnElement.GetString(), out var spentOn) ||
+                !element.TryGetProperty("hours", out var hoursElement) ||
+                !TryParseDuration(hoursElement.GetString(), out var hours) ||
+                !element.TryGetProperty("_links", out var links))
+            {
+                return null;
+            }
+
+            var workPackageId = ReadLinkedId(links, "entity", @"/work_packages/(\d+)$")
+                                ?? ReadLinkedId(links, "workPackage", @"/work_packages/(\d+)$");
+            var activityId = ReadLinkedId(links, "activity", @"/time_entries/activities/(\d+)$");
+            if (!workPackageId.HasValue || !activityId.HasValue)
+            {
+                return null;
+            }
+
+            string? comment = null;
+            if (element.TryGetProperty("comment", out var commentElement))
+            {
+                comment = commentElement.ValueKind == JsonValueKind.Object && commentElement.TryGetProperty("raw", out var raw)
+                    ? raw.GetString()
+                    : commentElement.ValueKind == JsonValueKind.String ? commentElement.GetString() : null;
+            }
+
+            return new OpenProjectTimeEntryMatchDto
+            {
+                Id = id,
+                WorkPackageId = workPackageId.Value,
+                SpentOn = spentOn,
+                Hours = hours,
+                ActivityId = activityId.Value,
+                Comment = comment
+            };
+        }
+
+        private static int? ReadLinkedId(JsonElement links, string name, string pattern)
+        {
+            if (!links.TryGetProperty(name, out var link) || !link.TryGetProperty("href", out var hrefElement))
+            {
+                return null;
+            }
+
+            var match = Regex.Match(hrefElement.GetString() ?? string.Empty, pattern, RegexOptions.IgnoreCase);
+            return match.Success && int.TryParse(match.Groups[1].Value, out var id) ? id : null;
+        }
+
+        private static bool TryParseDuration(string? value, out decimal hours)
+        {
+            hours = 0m;
+            var match = Regex.Match(value ?? string.Empty, @"^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$", RegexOptions.IgnoreCase);
+            if (!match.Success) return false;
+            var result = 0m;
+            if (decimal.TryParse(match.Groups[1].Value, out var hourPart)) result += hourPart;
+            if (decimal.TryParse(match.Groups[2].Value, out var minutePart)) result += minutePart / 60m;
+            if (decimal.TryParse(match.Groups[3].Value, out var secondPart)) result += secondPart / 3600m;
+            hours = decimal.Round(result, 2, MidpointRounding.AwayFromZero);
+            return true;
+        }
+
+        private static bool IsExactTimeEntryMatch(TimeEntry local, OpenProjectTimeEntryMatchDto remote) =>
+            local.WorkPackageId == remote.WorkPackageId &&
+            DateOnly.FromDateTime(local.SpentOn) == remote.SpentOn &&
+            decimal.Round(local.Hours, 2) == decimal.Round(remote.Hours, 2) &&
+            local.ActivityId == remote.ActivityId &&
+            NormalizeTimeEntryComment(local.Comment) == NormalizeTimeEntryComment(remote.Comment);
+
+        private static string NormalizeTimeEntryComment(string? comment) =>
+            Regex.Replace((comment ?? string.Empty).Trim(), @"\s+", " ").ToUpperInvariant();
 
         private static async Task<List<OpenProjectTimeEntryActivityDto>> GetTimeEntryActivitiesAsync(HttpClient client)
         {
