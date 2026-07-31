@@ -123,6 +123,10 @@
                             <i class="ki-duotone ki-file-up fs-2"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>
                             Importar CSV
                         </button>
+                        <button type="button" class="btn btn-sm btn-light-warning" id="btnOpenReconciliationModal">
+                            <i class="ki-duotone ki-shield-tick fs-2"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>
+                            Conciliar importados
+                        </button>
                         <button type="button" class="btn btn-sm btn-light-success" onclick="syncSelected()">
                             <i class="ki-duotone ki-arrows-circle fs-2"><span class="path1"></span><span class="path2"></span></i>
                             Sincronizar Selecionados
@@ -250,6 +254,35 @@
     </div>
 </div>
 
+<div class="modal fade" id="timeEntriesReconciliationModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable mw-850px">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <div>
+                    <h2 class="fw-bold mb-1">Conciliar lançamentos já existentes</h2>
+                    <span class="text-muted fw-semibold fs-7">Confirme somente correspondências exatas encontradas no OpenProject.</span>
+                </div>
+                <button type="button" class="btn btn-sm btn-icon btn-active-color-primary" data-bs-dismiss="modal" aria-label="Fechar"><i class="ki-duotone ki-cross fs-1"><span class="path1"></span><span class="path2"></span></i></button>
+            </div>
+            <div class="modal-body px-10 px-lg-15 py-8">
+                <div class="notice d-flex bg-light-warning rounded border-warning border border-dashed p-5 mb-7">
+                    <span class="fs-2x text-warning me-4">!</span>
+                    <div class="fw-semibold text-gray-700">A conciliação não cria nem reenvia apontamentos. O Axiom Atlas compara Work Package, data, duração, atividade e comentário; você confirma manualmente quais registros já existem no OpenProject.</div>
+                </div>
+                <div id="reconciliationLoading" class="d-flex align-items-center justify-content-center gap-3 py-8"><span class="spinner-border spinner-border-sm text-primary"></span><span class="fw-semibold text-gray-600">Consultando correspondências no OpenProject...</span></div>
+                <div id="reconciliationEmpty" class="d-none text-center text-muted py-8"></div>
+                <div id="reconciliationResults" class="d-none table-responsive">
+                    <table class="table table-row-dashed align-middle gs-0 gy-4 mb-0"><thead><tr class="fw-bold text-muted fs-7 text-uppercase"><th class="w-25px"><div class="form-check form-check-sm form-check-custom form-check-solid"><input id="selectAllReconciliations" class="form-check-input" type="checkbox" checked></div></th><th>Lançamento local</th><th>Correspondência OpenProject</th><th>Critérios confirmados</th></tr></thead><tbody id="reconciliationTableBody"></tbody></table>
+                </div>
+            </div>
+            <div class="modal-footer border-0 justify-content-center pt-0 pb-10">
+                <button type="button" class="btn btn-light me-3" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" id="btnConfirmReconciliation" class="btn btn-warning" disabled><span class="indicator-label">Confirmar conciliação selecionada</span><span class="indicator-progress">Conciliando... <span class="spinner-border spinner-border-sm align-middle ms-2"></span></span></button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="timeEntryModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered mw-850px">
         <div class="modal-content">
@@ -333,6 +366,7 @@
         let currentEntriesPage = 1;
         const entriesPageSize = 25;
         const selectedEntryIds = new Set();
+        let reconciliationCandidates = [];
         const preselectedWorkPackageId = @preselectedWorkPackageId;
 
         document.addEventListener("DOMContentLoaded", function () {
@@ -374,6 +408,14 @@
                 document.getElementById('timeEntriesImportForm').reset();
                 importModal.show();
             });
+
+            document.getElementById('btnOpenReconciliationModal').addEventListener('click', openReconciliationModal);
+            document.getElementById('selectAllReconciliations').addEventListener('change', function () {
+                document.querySelectorAll('.reconciliation-select').forEach(input => input.checked = this.checked);
+                updateReconciliationConfirmButton();
+            });
+            document.getElementById('reconciliationTableBody').addEventListener('change', updateReconciliationConfirmButton);
+            document.getElementById('btnConfirmReconciliation').addEventListener('click', confirmReconciliation);
 
             document.getElementById('timeEntriesImportForm').addEventListener('submit', async function (event) {
                 event.preventDefault();
@@ -726,6 +768,96 @@
 
         function escapeAttribute(value) {
             return escapeHtml(value).replace(/"/g, '&quot;');
+        }
+
+        async function openReconciliationModal() {
+            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('timeEntriesReconciliationModal'));
+            reconciliationCandidates = [];
+            document.getElementById('reconciliationLoading').classList.remove('d-none');
+            document.getElementById('reconciliationResults').classList.add('d-none');
+            document.getElementById('reconciliationEmpty').classList.add('d-none');
+            document.getElementById('btnConfirmReconciliation').disabled = true;
+            modal.show();
+
+            try {
+                const response = await fetch('/TimeEntries/ScanReconciliation', { method: 'POST' });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.message || 'Não foi possível consultar os apontamentos no OpenProject.');
+
+                reconciliationCandidates = data.candidates || [];
+                document.getElementById('reconciliationLoading').classList.add('d-none');
+                if (reconciliationCandidates.length === 0) {
+                    const ambiguous = data.ambiguousEntries ? ` ${data.ambiguousEntries} lançamento(s) tiveram mais de uma correspondência e não foram sugeridos.` : '';
+                    document.getElementById('reconciliationEmpty').textContent = `Nenhuma correspondência exata foi encontrada entre os ${data.pendingEntriesChecked || 0} lançamento(s) pendentes.${ambiguous}`;
+                    document.getElementById('reconciliationEmpty').classList.remove('d-none');
+                    return;
+                }
+
+                renderReconciliationCandidates(data);
+            } catch (error) {
+                document.getElementById('reconciliationLoading').classList.add('d-none');
+                document.getElementById('reconciliationEmpty').textContent = error.message || 'Não foi possível consultar as correspondências.';
+                document.getElementById('reconciliationEmpty').classList.remove('d-none');
+            }
+        }
+
+        function renderReconciliationCandidates(review) {
+            const tbody = document.getElementById('reconciliationTableBody');
+            tbody.innerHTML = reconciliationCandidates.map(candidate => {
+                const [year, month, day] = String(candidate.spentOn || '').split('-');
+                const date = year && month && day ? `${day}/${month}/${year}` : '-';
+                const comment = candidate.comment ? escapeHtml(candidate.comment) : 'Sem comentário';
+                return `<tr>
+                    <td><div class="form-check form-check-sm form-check-custom form-check-solid"><input class="form-check-input reconciliation-select" type="checkbox" value="${candidate.localEntryId}" checked></div></td>
+                    <td><div class="fw-bold">WP #${candidate.workPackageId}</div><div class="text-gray-600 fs-8">${date} · ${Number(candidate.hours || 0).toFixed(2)}h</div><div class="text-gray-500 fs-8 text-truncate" style="max-width:210px">${comment}</div></td>
+                    <td><span class="badge badge-light-success fw-bold">OP #${candidate.openProjectTimeEntryId}</span><div class="text-gray-500 fs-8 mt-1">Atividade #${candidate.activityId}</div></td>
+                    <td><span class="badge badge-light-primary">WP</span> <span class="badge badge-light-primary">data</span> <span class="badge badge-light-primary">horas</span> <span class="badge badge-light-primary">atividade</span> <span class="badge badge-light-primary">comentário</span></td>
+                </tr>`;
+            }).join('');
+            document.getElementById('selectAllReconciliations').checked = true;
+            document.getElementById('reconciliationResults').classList.remove('d-none');
+            updateReconciliationConfirmButton();
+
+            if (review.ambiguousEntries) {
+                showPageToast('warning', 'Correspondências ambíguas ignoradas', `${review.ambiguousEntries} lançamento(s) tiveram mais de uma correspondência e exigem análise fora desta sugestão.`, 7000);
+            }
+        }
+
+        function updateReconciliationConfirmButton() {
+            const selected = document.querySelectorAll('.reconciliation-select:checked').length;
+            document.getElementById('btnConfirmReconciliation').disabled = selected === 0;
+            document.getElementById('selectAllReconciliations').indeterminate = selected > 0 && selected < reconciliationCandidates.length;
+        }
+
+        async function confirmReconciliation() {
+            const selectedIds = new Set(Array.from(document.querySelectorAll('.reconciliation-select:checked')).map(input => input.value));
+            const confirmations = reconciliationCandidates
+                .filter(candidate => selectedIds.has(candidate.localEntryId))
+                .map(candidate => ({ localEntryId: candidate.localEntryId, openProjectTimeEntryId: candidate.openProjectTimeEntryId }));
+            if (confirmations.length === 0) return;
+
+            const button = document.getElementById('btnConfirmReconciliation');
+            button.setAttribute('data-kt-indicator', 'on');
+            button.disabled = true;
+            try {
+                const response = await fetch('/TimeEntries/ConfirmReconciliation', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ confirmations })
+                });
+                const data = await response.json().catch(() => ({}));
+                if (!response.ok) throw new Error(data.message || 'Não foi possível concluir a conciliação.');
+
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('timeEntriesReconciliationModal')).hide();
+                selectedEntryIds.clear();
+                await Promise.all([loadTable(), loadSummary()]);
+                const invalidCount = Array.isArray(data.invalid) ? data.invalid.length : 0;
+                const suffix = invalidCount ? ` ${invalidCount} registro(s) deixaram de corresponder e foram mantidos pendentes.` : '';
+                showPageToast('success', 'Conciliação concluída', `${data.message || 'Os apontamentos foram conciliados.'}${suffix}`, 8000);
+            } catch (error) {
+                showPageToast('danger', 'Conciliação não concluída', error.message || 'Não foi possível confirmar as correspondências.', 8000);
+            } finally {
+                button.removeAttribute('data-kt-indicator');
+                updateReconciliationConfirmButton();
+            }
         }
 
         function getToastConfig(type) {

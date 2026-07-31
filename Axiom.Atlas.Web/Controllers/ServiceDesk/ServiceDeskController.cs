@@ -25,6 +25,26 @@ namespace Axiom.Atlas.Web.Controllers.ServiceDesk
             return View();
         }
 
+        public IActionResult ClientPortfolio()
+        {
+            return View();
+        }
+
+        public IActionResult FlowCapacity()
+        {
+            return View();
+        }
+
+        public IActionResult SlaAging()
+        {
+            return View();
+        }
+
+        public IActionResult DeliveryPredictability()
+        {
+            return View();
+        }
+
         [HttpGet]
         public async Task<IActionResult> KanbanData()
         {

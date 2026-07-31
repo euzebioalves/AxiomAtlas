@@ -374,6 +374,114 @@ namespace Axiom.Atlas.API.Controllers.TimeEntries
             return Ok();
         }
 
+        [HttpPost("reconciliation/scan")]
+        public async Task<IActionResult> ScanImportedEntriesForReconciliation()
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                         ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return Unauthorized(new { message = "Usuário não identificado no token." });
+            }
+
+            var pendingEntries = await _context.TimeEntries
+                .Where(entry => entry.UserId == userId && entry.SyncStatus == SyncStatus.Pending)
+                .OrderBy(entry => entry.SpentOn)
+                .ToListAsync();
+            Dictionary<Guid, List<OpenProjectTimeEntryMatchDto>> matches;
+            try
+            {
+                matches = await _openProjectService.FindExactTimeEntryMatchesAsync(pendingEntries);
+            }
+            catch (InvalidOperationException exception)
+            {
+                return BadRequest(new { message = exception.Message });
+            }
+            var review = new TimeEntryReconciliationReviewDto { PendingEntriesChecked = pendingEntries.Count };
+
+            foreach (var entry in pendingEntries)
+            {
+                var entryMatches = matches.GetValueOrDefault(entry.Id, []);
+                if (entryMatches.Count == 1)
+                {
+                    var remote = entryMatches[0];
+                    review.Candidates.Add(new TimeEntryReconciliationCandidateDto
+                    {
+                        LocalEntryId = entry.Id,
+                        WorkPackageId = entry.WorkPackageId,
+                        SpentOn = DateOnly.FromDateTime(entry.SpentOn),
+                        Hours = entry.Hours,
+                        ActivityId = entry.ActivityId,
+                        Comment = entry.Comment,
+                        OpenProjectTimeEntryId = remote.Id,
+                        OpenProjectComment = remote.Comment
+                    });
+                }
+                else if (entryMatches.Count > 1)
+                {
+                    review.AmbiguousEntries++;
+                }
+            }
+
+            return Ok(review);
+        }
+
+        [HttpPost("reconciliation/confirm")]
+        public async Task<IActionResult> ConfirmImportedEntriesReconciliation([FromBody] ConfirmTimeEntryReconciliationRequest request)
+        {
+            var userId = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                         ?? User.FindFirst("sub")?.Value;
+            if (string.IsNullOrWhiteSpace(userId))
+            {
+                return Unauthorized(new { message = "Usuário não identificado no token." });
+            }
+
+            var confirmations = request.Confirmations
+                .Where(item => item.LocalEntryId != Guid.Empty && item.OpenProjectTimeEntryId > 0)
+                .GroupBy(item => item.LocalEntryId)
+                .Select(group => group.First())
+                .ToList();
+            if (confirmations.Count == 0)
+            {
+                return BadRequest(new { message = "Selecione ao menos uma correspondência para conciliar." });
+            }
+
+            var localIds = confirmations.Select(item => item.LocalEntryId).ToArray();
+            var entries = await _context.TimeEntries
+                .Where(entry => localIds.Contains(entry.Id) && entry.UserId == userId && entry.SyncStatus == SyncStatus.Pending)
+                .ToListAsync();
+            var matches = await _openProjectService.FindExactTimeEntryMatchesAsync(entries);
+            var confirmed = 0;
+            var invalid = new List<Guid>();
+
+            foreach (var confirmation in confirmations)
+            {
+                var entry = entries.FirstOrDefault(item => item.Id == confirmation.LocalEntryId);
+                var entryMatches = entry is null ? [] : matches.GetValueOrDefault(entry.Id, []);
+                if (entry is null || entryMatches.Count != 1 || entryMatches[0].Id != confirmation.OpenProjectTimeEntryId)
+                {
+                    invalid.Add(confirmation.LocalEntryId);
+                    continue;
+                }
+
+                entry.OpenProjectTimeEntryId = confirmation.OpenProjectTimeEntryId;
+                entry.SyncStatus = SyncStatus.Synced;
+                entry.SyncErrorMessage = null;
+                confirmed++;
+            }
+
+            await _context.SaveChangesAsync();
+            return Ok(new
+            {
+                success = true,
+                confirmed,
+                invalid,
+                message = confirmed > 0
+                    ? $"{confirmed} apontamento(s) conciliado(s) manualmente com o OpenProject."
+                    : "Nenhuma correspondência pôde ser confirmada novamente no OpenProject."
+            });
+        }
+
         [HttpPost("sync")]
         public async Task<IActionResult> SyncEntries([FromBody] Guid[] ids)
         {

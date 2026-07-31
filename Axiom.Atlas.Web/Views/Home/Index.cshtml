@@ -3,140 +3,135 @@
     var userName = User?.Identity?.Name ?? "Usuário";
 }
 
-<div class="d-flex flex-column flex-column-fluid">
-    <div id="kt_app_toolbar" class="app-toolbar py-3 py-lg-6">
-        <div id="kt_app_toolbar_container" class="app-container container-xxl d-flex flex-stack">
-            <div class="page-title d-flex flex-column justify-content-center flex-wrap me-3">
-                <h1 class="page-heading d-flex text-gray-900 fw-bold fs-3 flex-column justify-content-center my-0">
-                    Início
-                </h1>
-                <ul class="breadcrumb breadcrumb-separatorless fw-semibold fs-7 my-0 pt-1">
-                    <li class="breadcrumb-item text-muted">Axiom Atlas</li>
-                    <li class="breadcrumb-item">
-                        <i class="ki-duotone ki-double-right fs-2"></i>
-                    </li>
-                    <li class="breadcrumb-item text-muted">Visão geral</li>
-                </ul>
-            </div>
-        </div>
-    </div>
-
-    <div id="kt_app_content" class="app-content flex-column-fluid">
-        <div id="kt_app_content_container" class="app-container container-xxl">
-            <div class="card mb-8">
-                <div class="card-body d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-6 p-10">
+<div class="app-content flex-column-fluid" id="kt_app_content">
+    <div class="app-container container-xxl">
+        <div class="d-flex flex-column gap-7">
+            <div class="card home-dashboard-hero">
+                <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-5 py-7">
                     <div>
-                        <span class="badge badge-light-primary fw-bold mb-4">Axiom Atlas</span>
-                        <h2 class="text-gray-900 fw-bold mb-3">Olá, @userName.</h2>
-                        <p class="text-gray-600 fw-semibold fs-5 mb-0">
-                            Escolha uma área oficial do sistema para continuar sua operação.
-                        </p>
+                        <span class="badge badge-light-primary mb-3">Painel operacional</span>
+                        <h1 class="fs-2x fw-bold mb-2">Olá, @userName.</h1>
+                        <p class="text-gray-600 fw-semibold mb-0">Acompanhe a origem das demandas, a execução técnica e o esforço registrado em um só lugar.</p>
+                        <p id="home-dashboard-synchronization" class="text-gray-500 fs-7 mt-3 mb-0"></p>
                     </div>
-                    <div class="symbol symbol-80px">
-                        <span class="symbol-label bg-light-primary">
-                            <i class="ki-duotone ki-element-11 fs-3x text-primary"><span class="path1"></span><span class="path2"></span><span class="path3"></span><span class="path4"></span></i>
-                        </span>
+                    <div class="d-flex flex-wrap gap-3">
+                        <button type="button" class="btn btn-light-primary management-help-trigger" data-management-help-key="home-overview" data-management-help-title="Como interpretar o painel inicial"><span class="management-help-question me-2">?</span>Como interpretar</button>
+                        <a asp-controller="ServiceDesk" asp-action="Dashboard" class="btn btn-light-primary"><i class="ki-duotone ki-chart-line-up fs-2"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>Visão gerencial</a>
+                        <a asp-controller="TimeEntries" asp-action="Index" class="btn btn-primary"><i class="ki-duotone ki-timer fs-2"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>Entradas de tempo</a>
                     </div>
                 </div>
             </div>
 
-            <div class="row g-5 g-xl-8">
-                <div class="col-xl-4 col-md-6">
-                    <a asp-controller="TimeEntries" asp-action="Index" class="card card-flush h-100 hover-elevate-up">
-                        <div class="card-body d-flex align-items-center p-8">
-                            <div class="symbol symbol-50px me-5">
-                                <span class="symbol-label bg-light-primary">
-                                    <i class="ki-duotone ki-timer fs-2x text-primary"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>
-                                </span>
-                            </div>
-                            <div>
-                                <h3 class="text-gray-900 fw-bold mb-1">Entradas de Tempo</h3>
-                                <span class="text-gray-600 fw-semibold">Lançamentos e sincronização com OpenProject.</span>
-                            </div>
-                        </div>
-                    </a>
+            <div id="home-dashboard-error" class="alert alert-danger d-none mb-0"><span id="home-dashboard-error-message"></span></div>
+            <div id="home-dashboard-loading" class="card"><div class="card-body d-flex align-items-center justify-content-center gap-3 py-12"><span class="spinner-border text-primary" role="status"></span><span class="fw-semibold text-gray-600">Preparando o painel operacional...</span></div></div>
+
+            <div id="home-dashboard-content" class="d-none d-flex flex-column gap-7">
+                <section>
+                    <div class="d-flex align-items-center justify-content-between mb-4">
+                        <div><h2 class="fs-3 fw-bold mb-1">Chamados de melhoria <button type="button" class="btn btn-icon btn-sm btn-active-light-primary management-help-trigger" data-management-help-key="glpi-open" data-management-help-title="Indicadores de chamados GLPI"><span class="management-help-icon text-primary">?</span></button></h2><span class="text-gray-500 fw-semibold fs-7">GLPI como origem da necessidade e OpenProject como acompanhamento técnico.</span></div>
+                        <a asp-controller="ServiceDesk" asp-action="Index" class="btn btn-sm btn-light-primary">Abrir quadro de melhorias</a>
+                    </div>
+                    <div class="row g-5" id="home-glpi-kpis"></div>
+                </section>
+
+                <div class="row g-7">
+                    <div class="col-xl-7"><div class="card h-100"><div class="card-header border-0 pt-6"><div class="card-title flex-column align-items-start"><h2 class="fw-bold fs-3 mb-1">Cobertura técnica das demandas <button type="button" class="btn btn-icon btn-sm btn-active-light-primary management-help-trigger" data-management-help-key="delivery" data-management-help-title="Cobertura técnica das demandas"><span class="management-help-icon text-primary">?</span></button></h2><span class="text-gray-500 fw-semibold fs-7">Distribuição por estágio técnico da Work Package no OpenProject.</span></div></div><div class="card-body pt-0" id="home-work-package-stages"></div></div></div>
+                    <div class="col-xl-5"><div class="card h-100"><div class="card-header border-0 pt-6"><div class="card-title flex-column align-items-start"><h2 class="fw-bold fs-3 mb-1">Minhas entradas de tempo <button type="button" class="btn btn-icon btn-sm btn-active-light-primary management-help-trigger" data-management-help-key="personal-hours" data-management-help-title="Minhas entradas de tempo"><span class="management-help-icon text-primary">?</span></button></h2><span class="text-gray-500 fw-semibold fs-7">Apontamentos da pessoa autenticada no Axiom Atlas.</span></div></div><div class="card-body pt-0" id="home-time-entry-summary"></div></div></div>
                 </div>
 
-                <div class="col-xl-4 col-md-6">
-                    <a asp-controller="TimeClock" asp-action="Index" class="card card-flush h-100 hover-elevate-up">
-                        <div class="card-body d-flex align-items-center p-8">
-                            <div class="symbol symbol-50px me-5">
-                                <span class="symbol-label bg-light-success">
-                                    <i class="ki-duotone ki-calendar-tick fs-2x text-success"><span class="path1"></span><span class="path2"></span><span class="path3"></span><span class="path4"></span><span class="path5"></span><span class="path6"></span></i>
-                                </span>
-                            </div>
-                            <div>
-                                <h3 class="text-gray-900 fw-bold mb-1">Ponto Eletrônico</h3>
-                                <span class="text-gray-600 fw-semibold">Calendário mensal de registros e ausências.</span>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-
-                <div class="col-xl-4 col-md-6">
-                    <a asp-controller="TimeClock" asp-action="Audit" class="card card-flush h-100 hover-elevate-up">
-                        <div class="card-body d-flex align-items-center p-8">
-                            <div class="symbol symbol-50px me-5">
-                                <span class="symbol-label bg-light-info">
-                                    <i class="ki-duotone ki-chart-line-up fs-2x text-info"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>
-                                </span>
-                            </div>
-                            <div>
-                                <h3 class="text-gray-900 fw-bold mb-1">Auditoria do Ponto</h3>
-                                <span class="text-gray-600 fw-semibold">Saldo e histórico do banco de horas.</span>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-
-                <div class="col-xl-4 col-md-6">
-                    <a asp-controller="Users" asp-action="Index" class="card card-flush h-100 hover-elevate-up">
-                        <div class="card-body d-flex align-items-center p-8">
-                            <div class="symbol symbol-50px me-5">
-                                <span class="symbol-label bg-light-warning">
-                                    <i class="ki-duotone ki-profile-user fs-2x text-warning"><span class="path1"></span><span class="path2"></span><span class="path3"></span><span class="path4"></span></i>
-                                </span>
-                            </div>
-                            <div>
-                                <h3 class="text-gray-900 fw-bold mb-1">Usuários</h3>
-                                <span class="text-gray-600 fw-semibold">Cadastro, perfil e status dos usuários.</span>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-
-                <div class="col-xl-4 col-md-6">
-                    <a asp-controller="Roles" asp-action="Index" class="card card-flush h-100 hover-elevate-up">
-                        <div class="card-body d-flex align-items-center p-8">
-                            <div class="symbol symbol-50px me-5">
-                                <span class="symbol-label bg-light-danger">
-                                    <i class="ki-duotone ki-shield-tick fs-2x text-danger"><span class="path1"></span><span class="path2"></span></i>
-                                </span>
-                            </div>
-                            <div>
-                                <h3 class="text-gray-900 fw-bold mb-1">Perfis</h3>
-                                <span class="text-gray-600 fw-semibold">Gestão de perfis e permissões.</span>
-                            </div>
-                        </div>
-                    </a>
-                </div>
-
-                <div class="col-xl-4 col-md-6">
-                    <a asp-controller="Integrations" asp-action="OpenProject" class="card card-flush h-100 hover-elevate-up">
-                        <div class="card-body d-flex align-items-center p-8">
-                            <div class="symbol symbol-50px me-5">
-                                <span class="symbol-label bg-light-success">
-                                    <i class="ki-duotone ki-technology-4 fs-2x text-success"><span class="path1"></span><span class="path2"></span><span class="path3"></span><span class="path4"></span><span class="path5"></span><span class="path6"></span><span class="path7"></span></i>
-                                </span>
-                            </div>
-                            <div>
-                                <h3 class="text-gray-900 fw-bold mb-1">OpenProject</h3>
-                                <span class="text-gray-600 fw-semibold">Configuração e validação da integração.</span>
-                            </div>
-                        </div>
-                    </a>
+                <div class="row g-7">
+                    <div class="col-xl-7"><div class="card h-100"><div class="card-header border-0 pt-6"><div class="card-title flex-column align-items-start"><h2 class="fw-bold fs-3 mb-1">Foco imediato <button type="button" class="btn btn-icon btn-sm btn-active-light-primary management-help-trigger" data-management-help-key="actions" data-management-help-title="Foco imediato"><span class="management-help-icon text-primary">?</span></button></h2><span class="text-gray-500 fw-semibold fs-7">Demandas críticas, em risco ou com vínculo pendente entre GLPI e OpenProject.</span></div><div class="card-toolbar"><a asp-controller="ServiceDesk" asp-action="Dashboard" class="btn btn-sm btn-light-danger">Ver ações necessárias</a></div></div><div class="card-body pt-0"><div class="table-responsive"><table class="table table-row-dashed align-middle gs-0 gy-4 mb-0"><thead><tr class="text-start text-gray-500 fw-bold fs-7 text-uppercase"><th>Demanda</th><th>Recomendação</th><th class="text-end">Ação</th></tr></thead><tbody id="home-priorities"></tbody></table></div></div></div></div>
+                    <div class="col-xl-5"><div class="card h-100"><div class="card-header border-0 pt-6"><div class="card-title flex-column align-items-start"><h2 class="fw-bold fs-3 mb-1">Sinais para acompanhar <button type="button" class="btn btn-icon btn-sm btn-active-light-primary management-help-trigger" data-management-help-key="risk" data-management-help-title="Sinais para acompanhar"><span class="management-help-icon text-primary">?</span></button></h2><span class="text-gray-500 fw-semibold fs-7">Uma leitura rápida dos principais riscos operacionais.</span></div></div><div class="card-body pt-0" id="home-operational-signals"></div></div></div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+<partial name="_ManagementDashboardHelp" />
+
+<style>
+    .home-dashboard-hero { background: linear-gradient(135deg, rgba(var(--bs-primary-rgb), .10), rgba(var(--bs-success-rgb), .04)); }
+    .home-kpi { min-height: 148px; transition: transform .2s ease, box-shadow .2s ease; }
+    .home-kpi:hover { transform: translateY(-2px); box-shadow: var(--bs-box-shadow-sm); }
+    .home-kpi-value { font-size: 2rem; line-height: 1; }
+    .home-stage-item + .home-stage-item, .home-signal + .home-signal { border-top: 1px dashed var(--bs-border-color); }
+    .home-stage-bar { height: 8px; border-radius: 99px; background: var(--bs-gray-200); overflow: hidden; }
+    .home-stage-bar > span { display: block; height: 100%; border-radius: inherit; }
+    [data-bs-theme="dark"] .home-stage-bar { background: #242838; }
+    .management-help-question, .management-help-icon { display: inline-flex; align-items: center; justify-content: center; border: 1px solid currentColor; border-radius: 50%; font-weight: 800; line-height: 1; }
+    .management-help-question { width: 1.5rem; height: 1.5rem; font-size: .875rem; }
+    .management-help-icon { width: 1.35rem; height: 1.35rem; font-size: .75rem; }
+</style>
+
+<script>
+    (() => {
+        const loading = document.getElementById('home-dashboard-loading');
+        const content = document.getElementById('home-dashboard-content');
+        const error = document.getElementById('home-dashboard-error');
+        const errorMessage = document.getElementById('home-dashboard-error-message');
+        const priorityRank = { 'Crítica': 0, 'Alta': 1, 'Normal': 2 };
+        const serviceDeskUrl = '@Url.Action("Dashboard", "ServiceDesk")';
+        const timeEntriesUrl = '@Url.Action("Index", "TimeEntries")';
+        const escapeHtml = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+        const normalize = value => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const formatHours = value => `${Number(value || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}h`;
+        const formatDateTime = value => value ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : 'Ainda não sincronizada';
+        const helpButton = (key, title, color = 'primary') => `<button type="button" class="btn btn-icon btn-sm btn-active-light-${color} management-help-trigger" data-management-help-key="${key}" data-management-help-title="${title}" aria-label="Entenda o indicador ${title}"><span class="management-help-icon text-${color}">?</span></button>`;
+        const isCompletedWp = item => /conclu|finaliz|solucion|fechad|cancel|done|closed|resolved|complete/.test(normalize(item.workPackageStatus));
+        const isNewWp = item => /novo|new|backlog|a iniciar|aguardando inicio/.test(normalize(item.workPackageStatus));
+        const isSpecificationWp = item => /especific|requisit|analise|analysis|refin/.test(normalize(item.workPackageStatus));
+        const isAttendance = item => normalize(item.glpiStatusName).startsWith('em atendimento');
+
+        async function loadDashboard() {
+            loading.classList.remove('d-none'); content.classList.add('d-none'); error.classList.add('d-none');
+            try {
+                const response = await fetch('@Url.Action("DashboardData", "Home")');
+                const body = await response.text();
+                let payload = null;
+                try { payload = body ? JSON.parse(body) : null; } catch { throw new Error(`A consulta retornou uma resposta inválida (HTTP ${response.status}).`); }
+                if (!response.ok || !payload) throw new Error(payload?.message || payload?.detail || `Não foi possível carregar o painel inicial (HTTP ${response.status}).`);
+                renderDashboard(payload); content.classList.remove('d-none');
+            } catch (exception) { errorMessage.textContent = exception.message; error.classList.remove('d-none'); }
+            finally { loading.classList.add('d-none'); }
+        }
+
+        function renderDashboard(payload) {
+            const backlog = payload.backlog || {}, items = backlog.items || [], summary = backlog.summary || {}, timeEntries = payload.timeEntries || {};
+            const openItems = items.filter(item => item.stage !== 'completed');
+            const linkedItems = items.filter(item => item.workPackageId);
+            const noWp = items.filter(item => !item.workPackageId);
+            const wpNew = linkedItems.filter(isNewWp);
+            const wpSpecification = linkedItems.filter(item => !isNewWp(item) && isSpecificationWp(item));
+            const wpDeveloped = linkedItems.filter(isCompletedWp);
+            const wpDevelopment = linkedItems.filter(item => !isNewWp(item) && !isSpecificationWp(item) && !isCompletedWp(item));
+            const attendance = items.filter(isAttendance);
+            const syncText = backlog.synchronizationPending ? 'Uma atualização das fontes está em andamento. Os números serão reconciliados em segundo plano.' : `Projeção conciliada em ${formatDateTime(backlog.lastSynchronizedAt)}.`;
+            document.getElementById('home-dashboard-synchronization').innerHTML = `${escapeHtml(syncText)} ${helpButton('synchronization', 'Atualização dos dados')}`;
+
+            const glpiKpis = [
+                ['Não solucionados', openItems.length, 'Chamados que ainda exigem acompanhamento', 'primary', 'ki-chart-line-star', 'glpi-open'],
+                ['Em atendimento', attendance.length, 'Atribuídos ou planejados no GLPI', 'info', 'ki-abstract-26', 'glpi-attendance'],
+                ['WP novas', wpNew.length, 'Em status inicial no OpenProject', 'primary', 'ki-add-files', 'wp-new'],
+                ['Em especificação', wpSpecification.length, 'Análise, requisitos ou refinamento', 'warning', 'ki-document', 'wp-specification'],
+                ['Em desenvolvimento', wpDevelopment.length, 'Execução técnica em andamento', 'success', 'ki-rocket', 'wp-development'],
+                ['Sem Work Package', noWp.length, 'Aguardando encaminhamento técnico', 'danger', 'ki-information-5', 'wp-without'],
+                ['WP desenvolvidas', wpDeveloped.length, 'Status técnico concluído', 'success', 'ki-check-circle', 'wp-developed']
+            ];
+            document.getElementById('home-glpi-kpis').innerHTML = glpiKpis.map(([title, value, subtitle, color, icon, helpKey]) => `<div class="col-md-6 col-xl-3"><div class="card home-kpi border border-${color} border-opacity-25 h-100"><div class="card-body d-flex align-items-center gap-4"><span class="symbol symbol-50px"><span class="symbol-label bg-light-${color}"><i class="ki-duotone ${icon} fs-2 text-${color}"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i></span></span><div><div class="home-kpi-value fw-bold text-${color}">${value}</div><div class="fw-bold mt-2">${title} ${helpButton(helpKey, title, color)}</div><div class="text-gray-500 fs-7">${subtitle}</div></div></div></div></div>`).join('');
+
+            const stages = [['WP novas', wpNew.length, 'primary', 'wp-new'], ['Em especificação', wpSpecification.length, 'warning', 'wp-specification'], ['Em desenvolvimento', wpDevelopment.length, 'success', 'wp-development'], ['WP desenvolvidas', wpDeveloped.length, 'info', 'wp-developed'], ['Sem Work Package', noWp.length, 'danger', 'wp-without']];
+            const stageTotal = Math.max(items.length, 1);
+            document.getElementById('home-work-package-stages').innerHTML = stages.map(([label, amount, color, helpKey]) => `<div class="home-stage-item py-4"><div class="d-flex align-items-center justify-content-between mb-2"><span class="fw-bold">${label} ${helpButton(helpKey, label, color)}</span><span class="badge badge-light-${color}">${amount}</span></div><div class="home-stage-bar"><span class="bg-${color}" style="width:${Math.min(100, (amount / stageTotal) * 100)}%"></span></div></div>`).join('');
+
+            document.getElementById('home-time-entry-summary').innerHTML = `<div class="d-flex flex-column gap-5"><div class="d-flex align-items-center gap-4"><span class="symbol symbol-50px"><span class="symbol-label bg-light-primary"><i class="ki-duotone ki-timer fs-2 text-primary"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i></span></span><div><div class="fs-2x fw-bold text-primary">${formatHours(timeEntries.totalHours)}</div><div class="fw-bold">Horas apontadas ${helpButton('personal-hours', 'Horas apontadas')}</div><div class="text-gray-500 fs-7">${timeEntries.totalEntries || 0} lançamento(s) no total</div></div></div><div class="separator separator-dashed"></div><div class="row g-4"><div class="col-6"><div class="fw-bold text-success fs-3">${formatHours(timeEntries.syncedHours)}</div><div class="text-gray-500 fs-7">Sincronizadas</div></div><div class="col-6"><div class="fw-bold text-warning fs-3">${formatHours(timeEntries.pendingHours)}</div><div class="text-gray-500 fs-7">Pendentes ${helpButton('time-sync', 'Entradas pendentes de sincronização', 'warning')}</div></div></div><div class="text-gray-500 fs-7">Último apontamento: <strong>${timeEntries.lastEntryDate ? new Intl.DateTimeFormat('pt-BR').format(new Date(timeEntries.lastEntryDate)) : 'não informado'}</strong></div><a class="btn btn-sm btn-light-primary align-self-start" href="${timeEntriesUrl}">Ver minhas entradas</a></div>`;
+
+            const actions = openItems.filter(item => item.priority === 'Crítica' || item.priority === 'Alta' || item.isGlpiLinkPending).sort((a, b) => (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3) || (b.daysOpen || 0) - (a.daysOpen || 0)).slice(0, 5);
+            document.getElementById('home-priorities').innerHTML = actions.length ? actions.map(item => `<tr><td><div class="fw-bold text-gray-900">#${item.glpiTicketId}</div><div class="text-gray-600 text-truncate" style="max-width:330px">${escapeHtml(item.subject)}</div><div class="text-gray-500 fs-7">${item.daysOpen || 0} dias em aberto</div></td><td><span class="badge badge-light-${item.priority === 'Crítica' ? 'danger' : 'warning'}">${escapeHtml(item.priority || 'Acompanhar')}</span></td><td class="text-end"><a class="btn btn-sm btn-light-primary" href="${serviceDeskUrl}">Tratar</a></td></tr>`).join('') : '<tr><td colspan="3" class="text-center text-gray-500 py-8">Não há demandas críticas, em risco ou com vínculo pendente.</td></tr>';
+
+            const signals = [['Demandas em risco', summary.atRisk || 0, 'Alta ou Crítica pela regra de priorização', 'warning', 'risk'], ['Vínculos pendentes', summary.pendingGlpiLinks || 0, 'User Story ainda não confirmada no GLPI', 'danger', 'pending-links'], ['Maior espera', `${summary.oldestOpenDays || 0} dias`, 'Chamado aberto há mais tempo', 'info', 'aging'], ['Horas em melhorias', formatHours(summary.totalLoggedHours), `${summary.workPackagesWithLoggedHours || 0} WP(s) com apontamentos`, 'primary', 'linked-hours']];
+            document.getElementById('home-operational-signals').innerHTML = signals.map(([label, value, subtitle, color, helpKey]) => `<div class="home-signal py-4 d-flex align-items-center justify-content-between gap-4"><div><div class="fw-bold">${label} ${helpButton(helpKey, label, color)}</div><div class="text-gray-500 fs-7">${subtitle}</div></div><div class="fs-3 fw-bold text-${color}">${value}</div></div>`).join('');
+        }
+        loadDashboard();
+    })();
+</script>

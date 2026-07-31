@@ -170,6 +170,34 @@ namespace Axiom.Atlas.Web.Controllers.TimeEntries
             };
         }
 
+        [HttpPost]
+        public async Task<IActionResult> ScanReconciliation()
+        {
+            var client = await CreateAuthorizedApiClientAsync();
+            var response = await client.PostAsync("api/TimeEntries/reconciliation/scan", null);
+            var content = await response.Content.ReadAsStringAsync();
+            return new ContentResult
+            {
+                StatusCode = (int)response.StatusCode,
+                Content = string.IsNullOrWhiteSpace(content) ? "{}" : content,
+                ContentType = "application/json"
+            };
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> ConfirmReconciliation([FromBody] ConfirmTimeEntryReconciliationRequest request)
+        {
+            var client = await CreateAuthorizedApiClientAsync();
+            var response = await client.PostAsJsonAsync("api/TimeEntries/reconciliation/confirm", request);
+            var content = await response.Content.ReadAsStringAsync();
+            return new ContentResult
+            {
+                StatusCode = (int)response.StatusCode,
+                Content = string.IsNullOrWhiteSpace(content) ? "{}" : content,
+                ContentType = "application/json"
+            };
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetActivities(int? workPackageId)
         {

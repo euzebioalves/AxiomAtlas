@@ -1,0 +1,146 @@
+@{
+    ViewData["Title"] = "Clientes e carteira";
+}
+
+<div class="app-content flex-column-fluid" id="kt_app_content">
+    <div class="app-container container-xxl">
+        <div class="d-flex flex-column gap-7">
+            <div class="card portfolio-hero">
+                <div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-5 py-7">
+                    <div>
+                        <span class="badge badge-light-primary mb-3">Visão gerencial</span>
+                        <h1 class="fs-2x fw-bold mb-2">Clientes e carteira</h1>
+                        <p class="text-gray-600 fw-semibold mb-0">Identifique clientes que exigem acompanhamento e concentram as demandas de melhoria e correção.</p>
+                        <p id="portfolio-synchronization" class="text-gray-500 fs-7 mt-3 mb-0"></p>
+                    </div>
+                    <div class="d-flex flex-wrap gap-3">
+                        <button type="button" class="btn btn-light-primary management-help-trigger" data-management-help-key="portfolio" data-management-help-title="Como interpretar a carteira" aria-label="Como interpretar a carteira"><span class="management-help-question me-2">?</span>Como interpretar</button>
+                        <a asp-action="Dashboard" class="btn btn-light-primary"><i class="ki-duotone ki-chart-line-star fs-2"><span class="path1"></span><span class="path2"></span></i>Painel executivo</a>
+                        <button id="portfolio-refresh" type="button" class="btn btn-primary"><i class="ki-duotone ki-arrows-circle fs-2"><span class="path1"></span><span class="path2"></span></i>Atualizar fontes</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="portfolio-error" class="alert alert-danger d-none mb-0"><span id="portfolio-error-message"></span></div>
+            <div id="portfolio-loading" class="card"><div class="card-body d-flex align-items-center justify-content-center gap-3 py-12"><span class="spinner-border text-primary" role="status"></span><span class="fw-semibold text-gray-600">Preparando a carteira de clientes...</span></div></div>
+
+            <div id="portfolio-content" class="d-none d-flex flex-column gap-7">
+                <div class="row g-5" id="portfolio-kpis"></div>
+
+                <div class="row g-7">
+                    <div class="col-xl-5">
+                        <div class="card h-100">
+                            <div class="card-header border-0 pt-6"><div class="card-title flex-column align-items-start"><h2 class="fw-bold fs-3 mb-1">Saúde da carteira <button type="button" class="btn btn-icon btn-sm btn-active-light-primary management-help-trigger" data-management-help-key="client-health" data-management-help-title="Saúde da carteira" aria-label="Entenda a saúde da carteira"><span class="management-help-icon text-primary">?</span></button></h2><span class="text-gray-500 fw-semibold fs-7">Classificação dos clientes que possuem demandas abertas.</span></div></div>
+                            <div class="card-body pt-2" id="portfolio-health"></div>
+                        </div>
+                    </div>
+                    <div class="col-xl-7">
+                        <div class="card h-100">
+                            <div class="card-header border-0 pt-6"><div class="card-title flex-column align-items-start"><h2 class="fw-bold fs-3 mb-1">Concentração do backlog <button type="button" class="btn btn-icon btn-sm btn-active-light-primary management-help-trigger" data-management-help-key="client-concentration" data-management-help-title="Concentração do backlog" aria-label="Entenda a concentração do backlog"><span class="management-help-icon text-primary">?</span></button></h2><span class="text-gray-500 fw-semibold fs-7">Clientes com maior participação nas demandas abertas.</span></div></div>
+                            <div class="card-body pt-2" id="portfolio-concentration"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header border-0 pt-6"><div class="card-title flex-column align-items-start"><h2 class="fw-bold fs-3 mb-1">Prioridade da carteira <button type="button" class="btn btn-icon btn-sm btn-active-light-primary management-help-trigger" data-management-help-key="client-health" data-management-help-title="Prioridade da carteira" aria-label="Entenda a prioridade da carteira"><span class="management-help-icon text-primary">?</span></button></h2><span class="text-gray-500 fw-semibold fs-7">Ordenada pela saúde, criticidade, risco, pendências e tempo de espera.</span></div></div>
+                    <div class="card-body pt-0"><div class="table-responsive"><table class="table table-row-dashed align-middle gs-0 gy-4 mb-0"><thead><tr class="text-start text-gray-500 fw-bold fs-7 text-uppercase"><th>Cliente</th><th>Saúde</th><th class="text-center">Em aberto</th><th class="text-center">Em risco</th><th class="text-center">Críticas</th><th class="text-center">Vínculos pendentes</th><th class="text-end">Maior espera</th><th class="text-end">Ação</th></tr></thead><tbody id="portfolio-clients"></tbody></table></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<partial name="_ManagementDashboardHelp" />
+
+<style>
+    .portfolio-hero { background: linear-gradient(135deg, rgba(var(--bs-primary-rgb), .10), rgba(var(--bs-success-rgb), .05)); }
+    .portfolio-kpi { min-height: 150px; }
+    .portfolio-kpi-value { font-size: 2rem; line-height: 1; }
+    .portfolio-health-item + .portfolio-health-item, .portfolio-concentration-item + .portfolio-concentration-item { border-top: 1px dashed var(--bs-border-color); }
+    .portfolio-bar { height: 8px; border-radius: 99px; background: var(--bs-gray-200); overflow: hidden; }
+    .portfolio-bar > span { display: block; height: 100%; border-radius: inherit; }
+    [data-bs-theme="dark"] .portfolio-bar { background: #242838; }
+</style>
+
+<script>
+    (() => {
+        const loading = document.getElementById('portfolio-loading');
+        const content = document.getElementById('portfolio-content');
+        const error = document.getElementById('portfolio-error');
+        const errorMessage = document.getElementById('portfolio-error-message');
+        const refreshButton = document.getElementById('portfolio-refresh');
+        const dashboardDataUrl = '@Url.Action("DashboardData", "ServiceDesk")';
+        const refreshUrl = '@Url.Action("RefreshKanban", "ServiceDesk")';
+        const detailsUrl = '@Url.Action("DashboardDetails", "ServiceDesk")';
+
+        const escapeHtml = value => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+        const formatDateTime = value => value ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(value)) : 'Ainda não sincronizada';
+        const formatInterval = seconds => seconds >= 60 ? `${Math.round(seconds / 60)} min` : `${seconds} s`;
+        const healthConfig = { critical: ['Crítica', 'danger'], attention: ['Atenção', 'warning'], stable: ['Estável', 'success'] };
+
+        async function loadPortfolio() {
+            loading.classList.remove('d-none'); content.classList.add('d-none'); error.classList.add('d-none');
+            try {
+                const response = await fetch(dashboardDataUrl);
+                const body = await response.text();
+                let payload;
+                try { payload = body ? JSON.parse(body) : null; } catch { throw new Error(`A consulta retornou uma resposta inválida (HTTP ${response.status}).`); }
+                if (!response.ok || !payload) throw new Error(payload?.message || payload?.detail || `Não foi possível carregar a carteira (HTTP ${response.status}).`);
+                renderPortfolio(payload); content.classList.remove('d-none');
+            } catch (exception) {
+                errorMessage.textContent = exception.message; error.classList.remove('d-none');
+            } finally { loading.classList.add('d-none'); }
+        }
+
+        function buildClients(items) {
+            const groups = Object.values(items.filter(item => item.stage !== 'completed').reduce((result, item) => {
+                const name = item.clientEntityName || 'Cliente não informado';
+                const client = result[name] || { name, total: 0, risk: 0, critical: 0, pendingLinks: 0, oldest: 0, development: 0 };
+                client.total += 1;
+                client.risk += item.isAtRisk ? 1 : 0;
+                client.critical += item.priority === 'Crítica' ? 1 : 0;
+                client.pendingLinks += item.isGlpiLinkPending ? 1 : 0;
+                client.development += item.stage === 'delivery' ? 1 : 0;
+                client.oldest = Math.max(client.oldest, item.daysOpen || 0);
+                result[name] = client;
+                return result;
+            }, {}));
+
+            return groups.map(client => {
+                client.score = client.critical * 100 + client.risk * 20 + client.pendingLinks * 12 + Math.min(client.oldest, 365) / 10 + client.total / 10;
+                client.health = client.critical > 0 || client.risk >= 3 || client.oldest >= 180 ? 'critical' : client.risk > 0 || client.pendingLinks > 0 || client.oldest >= 30 ? 'attention' : 'stable';
+                return client;
+            }).sort((a, b) => b.score - a.score || b.total - a.total || b.oldest - a.oldest);
+        }
+
+        function renderPortfolio(payload) {
+            const clients = buildClients(payload.items || []);
+            const openItems = (payload.items || []).filter(item => item.stage !== 'completed');
+            const statusText = payload.synchronizationPending ? 'Uma atualização está em andamento. A carteira será reconciliada em segundo plano.' : `Projeção local atualizada em ${formatDateTime(payload.lastSynchronizedAt)}. Fontes reconciliadas a cada ${formatInterval(payload.synchronizationIntervalSeconds || 300)}.`;
+            document.getElementById('portfolio-synchronization').textContent = statusText;
+
+            const clientAtRisk = clients.filter(client => client.health !== 'stable').length;
+            const criticalClients = clients.filter(client => client.health === 'critical').length;
+            const noWorkPackage = openItems.filter(item => !item.workPackageId).length;
+            const kpis = [
+                ['Clientes ativos', clients.length, 'Com demandas abertas', 'primary', 'ki-people'],
+                ['Clientes em atenção', clientAtRisk, 'Exigem acompanhamento gerencial', 'warning', 'ki-notification-status'],
+                ['Clientes críticos', criticalClients, 'Com risco elevado ou espera extrema', 'danger', 'ki-shield-cross'],
+                ['Demandas sem User Story', noWorkPackage, 'Ainda sem destino técnico definido', 'info', 'ki-route']
+            ];
+            document.getElementById('portfolio-kpis').innerHTML = kpis.map(([title, value, subtitle, color, icon]) => `<div class="col-md-6 col-xl-3"><div class="card portfolio-kpi border border-${color} border-opacity-25"><div class="card-body d-flex align-items-center gap-4"><span class="symbol symbol-50px"><span class="symbol-label bg-light-${color}"><i class="ki-duotone ${icon} fs-2 text-${color}"><span class="path1"></span><span class="path2"></span></i></span></span><div><div class="portfolio-kpi-value fw-bold text-${color}">${value}</div><div class="fw-bold mt-2">${title}</div><div class="text-gray-500 fs-7">${subtitle}</div></div></div></div></div>`).join('');
+
+            const healthCounts = ['critical', 'attention', 'stable'].map(key => ({ key, amount: clients.filter(client => client.health === key).length }));
+            document.getElementById('portfolio-health').innerHTML = healthCounts.map(({ key, amount }) => { const [label, color] = healthConfig[key]; const percentage = clients.length ? (amount / clients.length) * 100 : 0; return `<div class="portfolio-health-item py-4"><div class="d-flex align-items-center justify-content-between mb-2"><span class="fw-bold"><span class="badge badge-light-${color} me-2">${label}</span> carteira</span><span class="fw-bold text-${color}">${amount} cliente(s)</span></div><div class="portfolio-bar"><span class="bg-${color}" style="width:${percentage}%"></span></div></div>`; }).join('') || '<div class="text-center text-gray-500 py-8">Não há clientes com demandas abertas.</div>';
+
+            const maxBacklog = Math.max(...clients.map(client => client.total), 1);
+            document.getElementById('portfolio-concentration').innerHTML = clients.slice(0, 7).map(client => { const [, color] = healthConfig[client.health]; const details = `${detailsUrl}?${new URLSearchParams({ client: client.name }).toString()}`; return `<a href="${details}" class="portfolio-concentration-item d-block py-3 text-decoration-none"><div class="d-flex align-items-center justify-content-between mb-2"><span class="fw-bold text-gray-800">${escapeHtml(client.name)}</span><span class="badge badge-light-${color}">${client.total} aberta(s)</span></div><div class="portfolio-bar"><span class="bg-${color}" style="width:${(client.total / maxBacklog) * 100}%"></span></div></a>`; }).join('') || '<div class="text-center text-gray-500 py-8">Não há demandas abertas na projeção local.</div>';
+
+            document.getElementById('portfolio-clients').innerHTML = clients.length ? clients.map(client => { const [label, color] = healthConfig[client.health]; const details = `${detailsUrl}?${new URLSearchParams({ client: client.name }).toString()}`; return `<tr><td><a href="${details}" class="fw-bold text-gray-900 text-hover-primary">${escapeHtml(client.name)}</a><div class="text-gray-500 fs-8">${client.development} em desenvolvimento</div></td><td><span class="badge badge-light-${color}">${label}</span></td><td class="text-center fw-bold">${client.total}</td><td class="text-center"><span class="badge badge-light-warning">${client.risk}</span></td><td class="text-center"><span class="badge badge-light-danger">${client.critical}</span></td><td class="text-center"><span class="badge badge-light-info">${client.pendingLinks}</span></td><td class="text-end fw-bold">${client.oldest} dias</td><td class="text-end"><a href="${details}" class="btn btn-sm btn-light-primary">Ver demandas</a></td></tr>`; }).join('') : '<tr><td colspan="8" class="text-center text-gray-500 py-8">Não há clientes com demandas abertas na projeção local.</td></tr>';
+        }
+
+        refreshButton.addEventListener('click', async () => { refreshButton.disabled = true; try { await fetch(refreshUrl, { method: 'POST' }); await loadPortfolio(); } finally { refreshButton.disabled = false; } });
+        loadPortfolio();
+    })();
+</script>

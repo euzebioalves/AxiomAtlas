@@ -10,10 +10,16 @@
             <div>
                 <span class="badge badge-light-primary mb-3">Gestão da fila</span>
                 <h1 class="fs-2x fw-bold mb-2">Visão gerencial de melhorias</h1>
-                <p class="text-gray-600 fw-semibold mb-0">Acompanhe riscos de SLA, envelhecimento da fila e as próximas ações recomendadas.</p>
-                <p id="dashboard-synchronization" class="text-gray-500 fs-7 mt-3 mb-0"></p>
+                <p class="text-gray-600 fw-semibold mb-0">Acompanhe riscos, envelhecimento da fila e as próximas ações recomendadas.</p>
+                <p id="dashboard-synchronization" class="text-gray-500 fs-7 mt-3 mb-0 d-flex align-items-center gap-1"></p>
             </div>
             <div class="d-flex flex-wrap gap-3">
+                <button type="button" class="btn btn-light-primary management-help-trigger" data-management-help-key="overview" data-management-help-title="Como interpretar este painel" aria-label="Como interpretar este painel">
+                    <span class="management-help-question me-2">?</span>Como interpretar
+                </button>
+                <a href="#dashboard-actions" id="dashboard-actions-shortcut" class="btn btn-light-danger">
+                    Ver ações necessárias
+                </a>
                 <a href="@Url.Action("DashboardReport", "ServiceDesk")" target="_blank" class="btn btn-light-primary">
                     <i class="ki-duotone ki-printer fs-2"><span class="path1"></span><span class="path2"></span></i>
                     Imprimir / PDF
@@ -49,7 +55,7 @@
                 <div class="card h-100">
                     <div class="card-header border-0 pt-6">
                         <div class="card-title flex-column align-items-start">
-                            <h2 class="fw-bold fs-3 mb-1">Clientes que exigem atenção</h2>
+                            <h2 class="fw-bold fs-3 mb-1">Clientes que exigem atenção <button type="button" class="btn btn-icon btn-sm btn-active-light-primary management-help-trigger" data-management-help-key="clients" data-management-help-title="Clientes que exigem atenção" aria-label="Entenda o indicador Clientes que exigem atenção"><span class="management-help-icon text-primary">?</span></button></h2>
                             <span class="text-gray-500 fw-semibold fs-7">Ordenados por criticidade, risco e tempo de espera.</span>
                         </div>
                     </div>
@@ -75,7 +81,7 @@
                 <div class="card h-100">
                     <div class="card-header border-0 pt-6">
                         <div class="card-title flex-column align-items-start">
-                            <h2 class="fw-bold fs-3 mb-1">Gargalos do fluxo</h2>
+                            <h2 class="fw-bold fs-3 mb-1">Gargalos do fluxo <button type="button" class="btn btn-icon btn-sm btn-active-light-primary management-help-trigger" data-management-help-key="stages" data-management-help-title="Gargalos do fluxo" aria-label="Entenda o indicador Gargalos do fluxo"><span class="management-help-icon text-primary">?</span></button></h2>
                             <span class="text-gray-500 fw-semibold fs-7">Onde a fila está concentrada neste momento.</span>
                         </div>
                     </div>
@@ -84,11 +90,11 @@
             </div>
         </div>
 
-        <div class="card">
+        <div class="card" id="dashboard-actions">
             <div class="card-header border-0 pt-6">
                 <div class="card-title flex-column align-items-start">
-                    <h2 class="fw-bold fs-3 mb-1">Prioridades recomendadas</h2>
-                    <span class="text-gray-500 fw-semibold fs-7">Recomendação calculada pela idade do chamado, estado do fluxo e consistência do vínculo entre GLPI e OpenProject.</span>
+                            <h2 class="fw-bold fs-3 mb-1">Ação necessária hoje <button type="button" class="btn btn-icon btn-sm btn-active-light-primary management-help-trigger" data-management-help-key="actions" data-management-help-title="Ação necessária hoje" aria-label="Entenda a tabela Ação necessária hoje"><span class="management-help-icon text-primary">?</span></button></h2>
+                            <span class="text-gray-500 fw-semibold fs-7">Itens que exigem decisão, acompanhamento ou regularização do vínculo entre GLPI e OpenProject.</span>
                 </div>
             </div>
             <div class="card-body pt-0">
@@ -113,6 +119,8 @@
         </div>
     </div>
 
+<partial name="_ManagementDashboardHelp" />
+
 <style>
     .dashboard-hero { background: linear-gradient(135deg, rgba(var(--bs-primary-rgb), .10), rgba(var(--bs-info-rgb), .04)); }
     .dashboard-kpi { min-height: 154px; }
@@ -126,6 +134,9 @@
     [data-bs-theme="dark"] .dashboard-stage-bar { background: #242838; }
     .dashboard-stage-bar > span { display: block; height: 100%; border-radius: inherit; }
     .dashboard-priority-row.is-highlighted { animation: dashboard-highlight 2.6s ease-in-out 2; }
+    .management-help-trigger { vertical-align: middle; }
+    .management-help-question { display: inline-flex; align-items: center; justify-content: center; width: 1.5rem; height: 1.5rem; border: 1px solid currentColor; border-radius: 50%; font-size: .875rem; font-weight: 800; line-height: 1; }
+    .management-help-icon { display: inline-flex; align-items: center; justify-content: center; width: 1.35rem; height: 1.35rem; border: 1px solid currentColor; border-radius: 50%; font-size: .75rem; font-weight: 800; line-height: 1; }
     @@keyframes dashboard-highlight {
         0%, 100% { background-color: transparent; }
         50% { background-color: rgba(var(--bs-primary-rgb), .16); }
@@ -195,21 +206,26 @@
             const synchronizationText = payload.synchronizationPending
                 ? 'Uma atualização está em andamento. Os indicadores serão reconciliados em segundo plano.'
                 : `Projeção local atualizada em ${formatDateTime(payload.lastSynchronizedAt)}. Fontes reconciliadas a cada ${formatInterval(payload.synchronizationIntervalSeconds || 300)}.`;
-            document.getElementById('dashboard-synchronization').textContent = synchronizationText;
+            document.getElementById('dashboard-synchronization').innerHTML = `${escapeHtml(synchronizationText)} <button type="button" class="btn btn-icon btn-sm btn-active-light-primary management-help-trigger" data-management-help-key="synchronization" data-management-help-title="Atualização dos dados" aria-label="Entenda como os dados são atualizados"><span class="management-help-icon text-primary">?</span></button>`;
 
             const kpis = [
-                ['Em aberto', openItems.length, 'Chamados ainda em acompanhamento', 'primary', 'ki-chart-line-star'],
-                ['Em risco', summary.atRisk || 0, 'Prioridade alta ou crítica', 'warning', 'ki-notification-status'],
-                ['Críticas', summary.critical || 0, 'Demandas com atenção imediata', 'danger', 'ki-shield-cross'],
-                ['Maior espera', `${summary.oldestOpenDays || 0} dias`, 'Chamado aberto há mais tempo', 'info', 'ki-calendar-8']
+                ['Backlog aberto', openItems.length, 'Demandas ainda em acompanhamento', 'primary', 'ki-chart-line-star', 'open'],
+                ['Demandas em risco', summary.atRisk || 0, 'Prioridade alta ou crítica', 'warning', 'ki-notification-status', 'risk'],
+                ['Prioridade crítica', summary.critical || 0, 'Demandas com atenção imediata', 'danger', 'ki-shield-cross', 'critical'],
+                ['Maior tempo na fila', `${summary.oldestOpenDays || 0} dias`, 'Chamado aberto há mais tempo', 'info', 'ki-calendar-8', 'aging'],
+                ['Vínculos pendentes', summary.pendingGlpiLinks || 0, 'GLPI e OpenProject ainda não confirmados', 'danger', 'ki-link', 'pending-links'],
+                ['Em desenvolvimento', summary.delivery || 0, 'User Stories em andamento', 'success', 'ki-rocket', 'delivery']
             ];
-            document.getElementById('dashboard-kpis').innerHTML = kpis.map(([title, value, subtitle, color, icon]) => `
-                <div class="col-md-6 col-xl-3"><div class="card dashboard-kpi border border-${color} border-opacity-25">
+            document.getElementById('dashboard-kpis').innerHTML = kpis.map(([title, value, subtitle, color, icon, helpKey]) => `
+                <div class="col-md-6 col-xl-4"><div class="card dashboard-kpi border border-${color} border-opacity-25">
                     <div class="card-body d-flex align-items-center gap-4">
                         <span class="symbol symbol-50px"><span class="symbol-label bg-light-${color}"><i class="ki-duotone ${icon} fs-2 text-${color}"><span class="path1"></span><span class="path2"></span></i></span></span>
-                        <div><div class="dashboard-kpi-value fw-bold text-${color}">${escapeHtml(value)}</div><div class="fw-bold mt-2">${title}</div><div class="text-gray-500 fs-7">${subtitle}</div></div>
+                        <div><div class="dashboard-kpi-value fw-bold text-${color}">${escapeHtml(value)}</div><div class="fw-bold mt-2">${title} <button type="button" class="btn btn-icon btn-sm btn-active-light-${color} management-help-trigger" data-management-help-key="${helpKey}" data-management-help-title="${title}" aria-label="Entenda o indicador ${title}"><span class="management-help-icon text-${color}">?</span></button></div><div class="text-gray-500 fs-7">${subtitle}</div></div>
                     </div>
                 </div></div>`).join('');
+
+            const actions = openItems.filter(item => item.priority === 'Crítica' || item.priority === 'Alta' || item.isGlpiLinkPending);
+            document.getElementById('dashboard-actions-shortcut').textContent = `Ver ações necessárias (${actions.length})`;
 
             const clients = Object.values(openItems.reduce((result, item) => {
                 const key = item.clientEntityName || 'Cliente não informado';
@@ -242,8 +258,7 @@
                 <a href="${buildDetailsUrl({ stage })}" class="dashboard-stage-item py-4" title="Ver demandas em ${label}"><div class="d-flex justify-content-between align-items-center mb-2"><span class="fw-bold">${label}</span><span class="badge badge-light-${stageColor(stage)}">${amount}</span></div>
                 <div class="dashboard-stage-bar"><span class="bg-${stageColor(stage)}" style="width:${Math.min(100, (amount / total) * 100)}%"></span></div></a>`).join('');
 
-            const recommendations = openItems
-                .filter(item => item.priority === 'Crítica' || item.priority === 'Alta' || item.isGlpiLinkPending)
+            const recommendations = actions
                 .sort((a, b) => (priorityRank[a.priority] ?? 3) - (priorityRank[b.priority] ?? 3) || (b.daysOpen || 0) - (a.daysOpen || 0))
                 .slice(0, 12);
             document.getElementById('dashboard-priorities').innerHTML = recommendations.length ? recommendations.map(item => `

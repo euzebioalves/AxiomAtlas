@@ -1,0 +1,205 @@
+@*
+   Padrão de ajuda para painéis gerenciais.
+   Para reutilizar em novos painéis, inclua este partial e associe aos botões
+   a classe management-help-trigger e um data-management-help-key listado abaixo.
+*@
+<div class="modal fade" id="management-help-modal" tabindex="-1" aria-labelledby="management-help-title" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h2 class="modal-title fs-3 fw-bold" id="management-help-title">Como este indicador é calculado</h2>
+                    <div class="text-gray-500 fs-7 mt-1" id="management-help-subtitle"></div>
+                </div>
+                <button type="button" class="btn btn-icon btn-sm btn-active-light-primary" data-bs-dismiss="modal" aria-label="Fechar">
+                    <i class="ki-duotone ki-cross fs-2"><span class="path1"></span><span class="path2"></span></i>
+                </button>
+            </div>
+            <div class="modal-body pt-2" id="management-help-content"></div>
+        </div>
+    </div>
+</div>
+
+<template id="management-help-open">
+    <p>Representa todas as demandas que ainda exigem acompanhamento. São considerados os chamados cuja etapa não esteja marcada como concluída.</p>
+    <div class="notice d-flex bg-light-primary rounded border-primary border border-dashed p-5">
+        <i class="ki-duotone ki-information-5 fs-2x text-primary me-4"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>
+        <div><strong>Fonte dos dados:</strong> projeção local dos chamados de melhoria do GLPI, conciliada com as Work Packages do OpenProject.</div>
+    </div>
+</template>
+
+<template id="management-help-overview">
+    <p>Este painel transforma a operação de chamados em uma leitura gerencial. Ele cruza a necessidade registrada no GLPI com o andamento técnico documentado no OpenProject.</p>
+    <ol class="ps-5 mb-0"><li><strong>Leia o resumo:</strong> backlog, risco, criticidade, idade e vínculos pendentes.</li><li><strong>Observe os clientes e etapas:</strong> eles evidenciam concentração de impacto e gargalos.</li><li><strong>Trate a lista diária:</strong> ela reúne as demandas que precisam de decisão, acompanhamento ou regularização.</li></ol>
+</template>
+
+<template id="management-help-home-overview">
+    <p>O Painel operacional reúne os chamados de melhoria recebidos no GLPI, as Work Packages correspondentes no OpenProject e as entradas de tempo da pessoa autenticada.</p>
+    <ol class="ps-5 mb-0"><li><strong>Comece pelos chamados:</strong> veja o volume não solucionado e a parcela já em atendimento.</li><li><strong>Leia a cobertura técnica:</strong> acompanhe em que estado estão as Work Packages ou se o chamado ainda não foi encaminhado.</li><li><strong>Confirme o esforço:</strong> compare as horas pessoais apontadas com as horas registradas nas demandas de melhoria.</li></ol>
+</template>
+
+<template id="management-help-glpi-open">
+    <p>Conta os chamados de melhoria cuja situação no GLPI ainda não é <strong>Solucionado</strong> nem <strong>Fechado</strong>. É o backlog que ainda requer acompanhamento.</p>
+    <p>A origem é a projeção local dos chamados classificados como melhoria, atualizada pela integração com o GLPI.</p>
+</template>
+
+<template id="management-help-glpi-attendance">
+    <p>Mostra os chamados cujo status no GLPI é <strong>Em atendimento (atribuído)</strong> ou <strong>Em atendimento (planejado)</strong>. Chamados pendentes, novos, solucionados e fechados não entram neste total.</p>
+</template>
+
+<template id="management-help-wp-new">
+    <p>Representa chamados vinculados a uma Work Package cujo status técnico indica início da jornada, por exemplo <strong>Novo</strong>, <strong>New</strong> ou <strong>Backlog</strong>.</p>
+    <p>O Axiom Atlas identifica a categoria pelo nome do status retornado pelo OpenProject. Ajustes de nomenclatura no OpenProject passam a refletir nesta classificação.</p>
+</template>
+
+<template id="management-help-wp-specification">
+    <p>Representa Work Packages em etapa de especificação, análise, refinamento ou requisitos. A classificação é identificada pelo nome do status técnico recebido do OpenProject.</p>
+</template>
+
+<template id="management-help-wp-development">
+    <p>Representa Work Packages ativas que não estão no estado inicial, de especificação ou concluído. Na prática, reúne o trabalho já encaminhado para desenvolvimento ou execução técnica.</p>
+</template>
+
+<template id="management-help-wp-without">
+    <p>Mostra os chamados de melhoria que ainda não possuem uma Work Package vinculada na projeção conciliada. Eles podem estar aguardando triagem, análise, criação da User Story ou confirmação do vínculo entre os sistemas.</p>
+</template>
+
+<template id="management-help-wp-developed">
+    <p>Conta Work Packages cujo status técnico indica conclusão, como <strong>Concluído</strong>, <strong>Done</strong>, <strong>Resolved</strong> ou equivalente. O status da Work Package é a referência, independentemente de o chamado GLPI já ter sido fechado.</p>
+</template>
+
+<template id="management-help-personal-hours">
+    <p>É a soma de todas as entradas de tempo registradas pela pessoa autenticada no Axiom Atlas, incluindo entradas sincronizadas, pendentes e com erro.</p>
+</template>
+
+<template id="management-help-linked-hours">
+    <p>É a soma das entradas de tempo do Axiom Atlas vinculadas às Work Packages presentes na carteira de melhorias. Esse valor pode envolver apontamentos de mais de uma pessoa e não se limita às horas da pessoa autenticada.</p>
+</template>
+
+<template id="management-help-time-sync">
+    <p>Mostra as entradas pessoais ainda pendentes de envio ou confirmação no OpenProject. Entradas reconciliadas manualmente, quando confirmadas, passam a ser tratadas como sincronizadas e deixam este indicador.</p>
+</template>
+
+<template id="management-help-portfolio">
+    <p>Esta visão organiza a carteira de clientes pela saúde atual das demandas de melhoria e correção. Ela cruza chamados em aberto, risco, criticidade, tempo de espera e pendências de vínculo com o OpenProject.</p>
+    <p>O objetivo não é medir satisfação contratual: é orientar a gestão sobre onde investigar, comunicar, priorizar ou remover impedimentos.</p>
+</template>
+
+<template id="management-help-client-health">
+    <p>A saúde da carteira é uma classificação gerencial calculada para cada cliente:</p>
+    <ul class="ps-5 mb-0"><li><strong>Crítica:</strong> há demanda crítica, risco elevado ou tempo de espera muito alto.</li><li><strong>Atenção:</strong> há risco, vínculo pendente ou demanda envelhecida.</li><li><strong>Estável:</strong> não foram identificados esses sinais na projeção atual.</li></ul>
+</template>
+
+<template id="management-help-client-concentration">
+    <p>Mostra a concentração das demandas abertas nos clientes com maior volume. A barra representa a participação de cada cliente no backlog aberto atual.</p>
+    <p>Use este recorte junto da saúde da carteira: volume alto não é necessariamente um problema, mas merece atenção quando vem acompanhado de risco, criticidade ou espera elevada.</p>
+</template>
+
+<template id="management-help-flow">
+    <p>Esta visão acompanha a passagem da demanda pelo processo: triagem do GLPI, análise de requisitos, execução técnica, atenção necessária e conclusão.</p>
+    <p>Os quantitativos vêm da projeção local conciliada entre GLPI e OpenProject. Uma etapa concentrada ou envelhecida é um sinal para investigar capacidade, decisão pendente ou impedimento.</p>
+</template>
+
+<template id="management-help-capacity">
+    <p>A distribuição técnica usa o <strong>criador registrado na Work Package</strong> como referência disponível para agrupar o trabalho em andamento. Esse dado não equivale necessariamente ao responsável atribuído pela execução.</p>
+    <p>Quando a integração passar a fornecer o responsável da Work Package, este painel poderá evoluir para capacidade atribuída, combinando demanda em andamento, estimativas e horas apontadas.</p>
+</template>
+
+<template id="management-help-blockers">
+    <p>Reúne demandas em atenção necessária ou classificadas como Alta/Crítica. A ordenação prioriza criticidade, risco e maior tempo em aberto.</p>
+    <p>Use esta fila em uma rotina operacional para definir dono, desbloquear decisão ou revisar a prioridade da entrega.</p>
+</template>
+
+<template id="management-help-sla">
+    <p>Esta visão usa faixas de <strong>envelhecimento operacional</strong> para orientar a atenção da gestão: até 7 dias, 8–15 dias, 16–30 dias e mais de 30 dias.</p>
+    <p>Essas faixas não substituem um SLA contratual. Quando houver regras de SLA por cliente, produto ou contrato, elas deverão complementar este painel.</p>
+</template>
+
+<template id="management-help-technical-lead-time">
+    <p>O tempo até a User Story mede os dias entre a abertura do chamado no GLPI e a data de criação da Work Package no OpenProject.</p>
+    <p>Ele é um indicador de encaminhamento técnico, não de resolução. Só entram no cálculo demandas que possuem ambas as datas válidas na projeção conciliada.</p>
+</template>
+
+<template id="management-help-aging-queue">
+    <p>Esta fila prioriza demandas abertas pela faixa de envelhecimento, criticidade e risco. Ela evidencia os chamados antigos que precisam de análise, definição técnica, atualização ao cliente ou revisão de prioridade.</p>
+</template>
+
+<template id="management-help-delivery">
+    <p>Esta visão consolida a cobertura técnica da carteira: demandas com Work Package, demandas em desenvolvimento, concluídas e vínculos pendentes entre GLPI e OpenProject.</p>
+    <p>A taxa de conclusão representa o estado atual da projeção, e não uma entrega concluída dentro de um período específico.</p>
+</template>
+
+<template id="management-help-predictability">
+    <p>As horas são obtidas das entradas de tempo do Axiom Atlas relacionadas às Work Packages vinculadas aos chamados de melhoria.</p>
+    <p>A previsão de prazo ou custo ainda não é calculada porque a projeção atual não possui estimativas nem a data de conclusão da Work Package. Quando esses dados forem integrados, este painel poderá comparar estimado, realizado e desvio.</p>
+</template>
+
+<template id="management-help-risk">
+    <p>Indica demandas abertas classificadas como <strong>Alta</strong> ou <strong>Crítica</strong> pela regra de priorização do Axiom Atlas. É uma sinalização de atenção gerencial, não uma medição contratual de SLA.</p>
+    <p>A classificação considera a etapa atual, o tempo em aberto, a existência de vínculo com Work Package e a necessidade de sincronização do vínculo com o GLPI.</p>
+</template>
+
+<template id="management-help-critical">
+    <p>Mostra as demandas abertas com recomendação <strong>Crítica</strong>. Elas devem ser avaliadas primeiro na rotina de priorização.</p>
+    <p>O número é formado a partir da mesma regra de risco da fila, usando os dados conciliados do chamado GLPI e de sua Work Package, quando existente.</p>
+</template>
+
+<template id="management-help-aging">
+    <p>É a maior quantidade de dias corridos desde a abertura de um chamado que ainda não foi concluído. Ajuda a identificar o item mais antigo do backlog.</p>
+    <p>O cálculo parte da data de abertura recebida do GLPI e é atualizado sempre que a projeção local é conciliada.</p>
+</template>
+
+<template id="management-help-pending-links">
+    <p>Mostra as demandas cuja User Story ou Work Package já existe, mas cujo vínculo ainda não foi confirmado no GLPI. Enquanto esse número for diferente de zero, a comunicação entre a origem da necessidade e o alvo técnico está incompleta.</p>
+    <p>O indicador é formado pela fila de sincronização e pela comparação entre o vínculo local e o campo correspondente no GLPI.</p>
+</template>
+
+<template id="management-help-delivery">
+    <p>Representa as demandas já encaminhadas para execução técnica, com User Story ou Work Package em andamento no OpenProject.</p>
+    <p>Ele indica a carga atualmente em desenvolvimento; não significa, por si só, que a entrega esteja próxima da conclusão. O status da Work Package é a referência para acompanhar sua evolução.</p>
+</template>
+
+<template id="management-help-clients">
+    <p>Ordena os clientes pela combinação de demandas críticas, demandas em risco e maior tempo de espera. O objetivo é revelar onde existe maior possibilidade de impacto no relacionamento.</p>
+    <ul class="mb-0 ps-5"><li><strong>Em aberto:</strong> demandas não concluídas do cliente.</li><li><strong>Em risco:</strong> demandas classificadas como Alta ou Crítica.</li><li><strong>Críticas:</strong> demandas com prioridade Crítica.</li><li><strong>Maior espera:</strong> idade do chamado aberto mais antigo.</li></ul>
+</template>
+
+<template id="management-help-stages">
+    <p>Exibe a concentração da fila pelas etapas do processo: triagem no GLPI, análise de requisitos, User Story em andamento, atenção necessária e concluídas.</p>
+    <p>As barras representam a participação de cada etapa em relação ao total de demandas da projeção. Uma concentração elevada pode indicar um gargalo que precisa de capacidade, decisão ou desbloqueio.</p>
+</template>
+
+<template id="management-help-actions">
+    <p>É a lista de trabalho da gestão para o dia. Ela reúne demandas abertas com prioridade Alta ou Crítica, além de itens cujo vínculo GLPI–OpenProject ainda esteja pendente de sincronização.</p>
+    <p>Os itens são ordenados primeiro pela prioridade e, em seguida, pelo maior tempo em aberto. O motivo exibido é a justificativa registrada pela regra de priorização.</p>
+    <div class="notice d-flex bg-light-warning rounded border-warning border border-dashed p-5 mt-5">
+        <i class="ki-duotone ki-notification-status fs-2x text-warning me-4"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>
+        <div><strong>Uso recomendado:</strong> tratar a lista em uma rotina diária, abrir o chamado quando necessário e registrar a decisão no fluxo operacional.</div>
+    </div>
+</template>
+
+<template id="management-help-synchronization">
+    <p>Todos os indicadores leem a projeção local para manter a tela rápida e estável. GLPI e OpenProject são reconciliados em segundo plano, conforme a cadência exibida no painel.</p>
+    <p>Ao solicitar a atualização das fontes, a nova sincronização é colocada na fila. Os números podem refletir a última conciliação até que o processo seja concluído.</p>
+</template>
+
+<script>
+    (() => {
+        if (window.managementDashboardHelpInitialized) return;
+        window.managementDashboardHelpInitialized = true;
+
+        document.addEventListener('click', event => {
+            const trigger = event.target.closest('.management-help-trigger');
+            if (!trigger) return;
+
+            const key = trigger.dataset.managementHelpKey;
+            const template = document.getElementById(`management-help-${key}`);
+            if (!template) return;
+
+            document.getElementById('management-help-title').textContent = trigger.dataset.managementHelpTitle || 'Como este indicador é calculado';
+            document.getElementById('management-help-subtitle').textContent = trigger.dataset.managementHelpSubtitle || '';
+            document.getElementById('management-help-content').innerHTML = template.innerHTML;
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('management-help-modal')).show();
+        });
+    })();
+</script>
