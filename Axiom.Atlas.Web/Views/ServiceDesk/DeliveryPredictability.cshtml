@@ -2,7 +2,7 @@
     ViewData["Title"] = "Entregas e previsibilidade";
 }
 
-<div class="app-content flex-column-fluid" id="kt_app_content"><div class="app-container container-xxl"><div class="d-flex flex-column gap-7">
+<div class="app-content flex-column-fluid" id="kt_app_content"><div class="app-container container-fluid"><div class="d-flex flex-column gap-7">
     <div class="card delivery-hero"><div class="card-body d-flex flex-wrap align-items-center justify-content-between gap-5 py-7"><div><span class="badge badge-light-primary mb-3">Visão gerencial</span><h1 class="fs-2x fw-bold mb-2">Entregas e previsibilidade</h1><p class="text-gray-600 fw-semibold mb-0">Acompanhe a cobertura técnica, o status das entregas e o esforço registrado nas demandas da carteira.</p><p id="delivery-synchronization" class="text-gray-500 fs-7 mt-3 mb-0"></p></div><div class="d-flex flex-wrap gap-3"><button type="button" class="btn btn-light-primary management-help-trigger" data-management-help-key="delivery" data-management-help-title="Como interpretar as entregas"><span class="management-help-question me-2">?</span>Como interpretar</button><a asp-action="Dashboard" class="btn btn-light-primary">Painel executivo</a><button id="delivery-refresh" type="button" class="btn btn-primary">Atualizar fontes</button></div></div></div>
     <div id="delivery-error" class="alert alert-danger d-none mb-0"><span id="delivery-error-message"></span></div>
     <div id="delivery-loading" class="card"><div class="card-body d-flex align-items-center justify-content-center gap-3 py-12"><span class="spinner-border text-primary"></span><span class="fw-semibold text-gray-600">Consolidando as entregas...</span></div></div>

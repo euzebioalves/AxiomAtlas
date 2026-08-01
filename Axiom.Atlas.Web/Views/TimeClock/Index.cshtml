@@ -18,34 +18,83 @@
         --time-clock-special-surface: rgba(148, 163, 184, .045);
         --time-clock-special-text: #64748b;
         --time-clock-grid-border: rgba(148, 163, 184, .2);
+        --time-clock-day-surface: var(--bs-body-bg);
+        --time-clock-day-shadow: 0 .35rem 1rem rgba(15, 23, 42, .055);
+        --time-clock-day-hover-shadow: 0 .8rem 1.5rem rgba(15, 23, 42, .11);
     }
 
     [data-bs-theme="dark"] #clockCalendar {
         --time-clock-special-surface: rgba(148, 163, 184, .075);
         --time-clock-special-text: #b7c3d5;
         --time-clock-grid-border: rgba(148, 163, 184, .24);
+        --time-clock-day-surface: rgba(30, 33, 48, .78);
+        --time-clock-day-shadow: 0 .35rem 1rem rgba(0, 0, 0, .2);
+        --time-clock-day-hover-shadow: 0 .8rem 1.5rem rgba(0, 0, 0, .3);
+    }
+
+    #clockCalendar .fc-scrollgrid,
+    #clockCalendar .fc-theme-standard .fc-scrollgrid {
+        border: 0;
+        border-collapse: separate;
+        border-spacing: .55rem .65rem;
+    }
+
+    #clockCalendar .fc-scrollgrid-sync-table {
+        border-collapse: separate !important;
+        border-spacing: .55rem .65rem !important;
     }
 
     #clockCalendar .fc-theme-standard td,
-    #clockCalendar .fc-theme-standard th {
-        border-color: var(--time-clock-grid-border);
+    #clockCalendar .fc-theme-standard th,
+    #clockCalendar .fc-scrollgrid-section > td,
+    #clockCalendar .fc-scrollgrid-section > th {
+        border: 0;
+    }
+
+    #clockCalendar .fc-col-header-cell {
+        background: transparent;
+        padding: 0 0 .25rem;
+    }
+
+    #clockCalendar .fc-col-header-cell-cushion {
+        color: var(--bs-gray-600);
+        font-size: .78rem;
+        font-weight: 800;
+        letter-spacing: .04em;
+        text-decoration: none;
+        text-transform: uppercase;
+    }
+
+    #clockCalendar .fc-daygrid-day {
+        overflow: hidden;
+        border: 1px solid var(--time-clock-grid-border) !important;
+        border-radius: .85rem;
+        background: var(--time-clock-day-surface);
+        box-shadow: var(--time-clock-day-shadow);
     }
 
     #clockCalendar .fc-daygrid-day.fc-day-sun,
     #clockCalendar .fc-daygrid-day.fc-day-sat,
-    #clockCalendar .fc-daygrid-day.time-clock-special-day,
-    #clockCalendar .fc-col-header-cell.fc-day-sun,
-    #clockCalendar .fc-col-header-cell.fc-day-sat {
+    #clockCalendar .fc-daygrid-day.time-clock-special-day {
         background: var(--time-clock-special-surface);
     }
 
     #clockCalendar .fc-daygrid-day.fc-day-sun .fc-daygrid-day-number,
     #clockCalendar .fc-daygrid-day.fc-day-sat .fc-daygrid-day-number,
-    #clockCalendar .fc-daygrid-day.time-clock-special-day .fc-daygrid-day-number,
-    #clockCalendar .fc-col-header-cell.fc-day-sun .fc-col-header-cell-cushion,
-    #clockCalendar .fc-col-header-cell.fc-day-sat .fc-col-header-cell-cushion {
+    #clockCalendar .fc-daygrid-day.time-clock-special-day .fc-daygrid-day-number {
         color: var(--time-clock-special-text);
         font-weight: 700;
+    }
+
+    #clockCalendar .fc-day-today {
+        border-color: rgba(var(--bs-primary-rgb), .5) !important;
+        background: linear-gradient(135deg, rgba(var(--bs-primary-rgb), .13), var(--time-clock-day-surface)) !important;
+        box-shadow: 0 .65rem 1.5rem rgba(var(--bs-primary-rgb), .14);
+    }
+
+    #clockCalendar .fc-day-today .fc-daygrid-day-number {
+        color: var(--bs-primary);
+        font-weight: 800;
     }
 
     #clockCalendar .time-clock-has-absence {
@@ -57,20 +106,121 @@
     }
 
     #clockCalendar .time-clock-punch-complete {
-        box-shadow: inset 3px 0 0 var(--bs-success);
+        box-shadow: inset 4px 0 0 var(--bs-success), var(--time-clock-day-shadow);
     }
 
     #clockCalendar .time-clock-punch-incomplete {
-        box-shadow: inset 3px 0 0 var(--bs-danger);
+        box-shadow: inset 4px 0 0 var(--bs-danger), var(--time-clock-day-shadow);
     }
 
     #clockCalendar .fc-daygrid-day-events {
-        min-height: 5.5rem;
+        min-height: 4.75rem;
+        padding: 0 .25rem .3rem;
     }
 
     #clockCalendar .fc-daygrid-day-frame {
         position: relative;
-        min-height: 100%;
+        min-height: 8.75rem;
+        padding: .25rem;
+    }
+
+    #clockCalendar .fc-daygrid-day-top {
+        display: flex;
+        flex-direction: row !important;
+        align-items: flex-start;
+        justify-content: space-between;
+        min-height: 2.7rem;
+        padding: .35rem .45rem 0;
+    }
+
+    #clockCalendar .fc-daygrid-day-number {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-start;
+        min-width: 2.5rem;
+        height: 2.35rem;
+        color: var(--bs-gray-900);
+        font-size: 1.4rem;
+        font-weight: 800;
+        line-height: 1;
+        text-decoration: none;
+    }
+
+    #clockCalendar .time-clock-day-header-indicators {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        margin-left: auto;
+        padding-top: .05rem;
+    }
+
+    #clockCalendar .time-clock-day-punch-count,
+    #clockCalendar .time-clock-day-indicator {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 2rem;
+        height: 2rem;
+        border-radius: .5rem;
+        border: 1px solid transparent;
+        box-shadow: none;
+        transition: color .18s ease, background-color .18s ease, border-color .18s ease, box-shadow .18s ease, transform .18s ease;
+    }
+
+    #clockCalendar .time-clock-day-punch-count {
+        gap: .16rem;
+        padding: 0 .42rem;
+        color: var(--bs-primary);
+        background: var(--bs-primary-light);
+        border-color: var(--bs-primary);
+        font-size: .75rem;
+        font-weight: 800;
+        line-height: 1;
+        cursor: help;
+    }
+
+    #clockCalendar .time-clock-day-punch-count:hover,
+    #clockCalendar .time-clock-day-indicator:hover {
+        box-shadow: 0 .25rem .65rem rgba(15, 23, 42, .24);
+        transform: translateY(-1px);
+    }
+
+    #clockCalendar .time-clock-day-punch-count i {
+        font-size: .9rem !important;
+    }
+
+    #clockCalendar .time-clock-day-punch-count i,
+    #clockCalendar .time-clock-day-punch-count i::before,
+    #clockCalendar .time-clock-day-punch-count i::after {
+        color: var(--bs-primary) !important;
+    }
+
+    #clockCalendar .time-clock-day-indicator i {
+        font-size: 1rem !important;
+    }
+
+    #clockCalendar .fc-daygrid-event-harness {
+        margin-top: .16rem;
+    }
+
+    #clockCalendar .fc-daygrid-event {
+        overflow: hidden;
+        border: 0;
+        border-radius: .45rem;
+        background: var(--bs-primary-light);
+        color: var(--bs-primary);
+        font-size: .71rem;
+        font-weight: 700;
+        line-height: 1.25;
+        padding: .18rem .35rem;
+    }
+
+    #clockCalendar .fc-daygrid-event .fc-event-title {
+        white-space: normal;
+    }
+
+    #clockCalendar .fc-daygrid-more-link {
+        display: none !important;
     }
 
     #clockCalendar .fc-event {
@@ -81,7 +231,7 @@
         display: flex;
         flex-wrap: wrap;
         gap: .25rem;
-        padding: .3rem .15rem .1rem;
+        padding: .25rem .15rem .1rem;
     }
 
     #clockCalendar .time-clock-day-work-package-total {
@@ -111,6 +261,12 @@
         text-decoration: underline;
     }
 
+    #clockCalendar .fc-daygrid-day:hover {
+        border-color: rgba(var(--bs-primary-rgb), .4) !important;
+        box-shadow: var(--time-clock-day-hover-shadow);
+        transform: translateY(-2px);
+    }
+
     #clockCalendar .fc-daygrid-more-link {
         display: inline-flex;
         align-items: center;
@@ -128,82 +284,200 @@
         background: var(--bs-primary);
     }
 
-    #clockCalendar .time-clock-day-indicators {
-        position: absolute;
-        right: .45rem;
-        bottom: .45rem;
-        z-index: 3;
-        display: inline-flex;
-        flex-direction: row-reverse;
-        align-items: center;
-        gap: .35rem;
-    }
-
     #clockCalendar .time-clock-day-indicator {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 1.8rem;
-        height: 1.8rem;
-        border: 1px solid transparent;
-        border-radius: .5rem;
-        box-shadow: 0 .125rem .35rem rgba(0, 0, 0, .12);
         cursor: help;
     }
 
     #clockCalendar .time-clock-indicator-medical {
         color: var(--bs-danger);
-        background-color: rgba(var(--bs-danger-rgb), .18);
-        border-color: rgba(var(--bs-danger-rgb), .45);
+        background-color: var(--bs-danger-light);
+        border-color: var(--bs-danger);
     }
 
     #clockCalendar .time-clock-indicator-warning {
         color: var(--bs-warning);
-        background-color: rgba(var(--bs-warning-rgb), .18);
-        border-color: rgba(var(--bs-warning-rgb), .45);
+        background-color: var(--bs-warning-light);
+        border-color: var(--bs-warning);
     }
 
     #clockCalendar .time-clock-indicator-primary {
         color: var(--bs-primary);
-        background-color: rgba(var(--bs-primary-rgb), .18);
-        border-color: rgba(var(--bs-primary-rgb), .45);
+        background-color: var(--bs-primary-light);
+        border-color: var(--bs-primary);
     }
 
     #clockCalendar .time-clock-indicator-success {
         color: var(--bs-success);
-        background-color: rgba(var(--bs-success-rgb), .18);
-        border-color: rgba(var(--bs-success-rgb), .45);
+        background-color: var(--bs-success-light);
+        border-color: var(--bs-success);
     }
 
     #clockCalendar .time-clock-indicator-danger {
         color: var(--bs-danger);
-        background-color: rgba(var(--bs-danger-rgb), .18);
-        border-color: rgba(var(--bs-danger-rgb), .45);
+        background-color: var(--bs-danger-light);
+        border-color: var(--bs-danger);
     }
 
-    .time-clock-month-controls {
-        display: grid;
-        grid-template-columns: repeat(4, minmax(150px, 1fr));
-        gap: .75rem;
-        width: min(100%, 760px);
+    #clockCalendar .time-clock-indicator-medical i,
+    #clockCalendar .time-clock-indicator-medical i::before,
+    #clockCalendar .time-clock-indicator-medical i::after,
+    #clockCalendar .time-clock-indicator-danger i,
+    #clockCalendar .time-clock-indicator-danger i::before,
+    #clockCalendar .time-clock-indicator-danger i::after {
+        color: var(--bs-danger) !important;
     }
 
-    .time-clock-month-controls .btn,
-    .time-clock-month-controls .form-control {
-        min-height: 52px;
-        white-space: nowrap;
+    #clockCalendar .time-clock-indicator-warning i,
+    #clockCalendar .time-clock-indicator-warning i::before,
+    #clockCalendar .time-clock-indicator-warning i::after {
+        color: var(--bs-warning) !important;
     }
 
-    @@media (max-width: 1199.98px) {
-        .time-clock-month-controls {
-            grid-template-columns: repeat(2, minmax(180px, 1fr));
+    #clockCalendar .time-clock-indicator-primary i,
+    #clockCalendar .time-clock-indicator-primary i::before,
+    #clockCalendar .time-clock-indicator-primary i::after {
+        color: var(--bs-primary) !important;
+    }
+
+    #clockCalendar .time-clock-indicator-success i,
+    #clockCalendar .time-clock-indicator-success i::before,
+    #clockCalendar .time-clock-indicator-success i::after {
+        color: var(--bs-success) !important;
+    }
+
+    #clockCalendar .time-clock-day-punch-count:hover {
+        color: var(--bs-primary-inverse);
+        background-color: var(--bs-primary);
+        border-color: var(--bs-primary);
+    }
+
+    #clockCalendar .time-clock-indicator-medical:hover,
+    #clockCalendar .time-clock-indicator-danger:hover {
+        color: var(--bs-danger-inverse);
+        background-color: var(--bs-danger);
+        border-color: var(--bs-danger);
+    }
+
+    #clockCalendar .time-clock-indicator-warning:hover {
+        color: var(--bs-warning-inverse);
+        background-color: var(--bs-warning);
+        border-color: var(--bs-warning);
+    }
+
+    #clockCalendar .time-clock-indicator-primary:hover {
+        color: var(--bs-primary-inverse);
+        background-color: var(--bs-primary);
+        border-color: var(--bs-primary);
+    }
+
+    #clockCalendar .time-clock-indicator-success:hover {
+        color: var(--bs-success-inverse);
+        background-color: var(--bs-success);
+        border-color: var(--bs-success);
+    }
+
+    #clockCalendar .time-clock-day-punch-count:hover i,
+    #clockCalendar .time-clock-day-punch-count:hover i::before,
+    #clockCalendar .time-clock-day-punch-count:hover i::after,
+    #clockCalendar .time-clock-day-indicator:hover i,
+    #clockCalendar .time-clock-day-indicator:hover i::before,
+    #clockCalendar .time-clock-day-indicator:hover i::after {
+        color: #fff !important;
+    }
+
+    #clockCalendar .time-clock-has-absence {
+        box-shadow: inset 4px 0 0 var(--bs-success), var(--time-clock-day-shadow);
+    }
+
+    #clockCalendar .time-clock-has-unjustified {
+        box-shadow: inset 4px 0 0 var(--bs-danger), var(--time-clock-day-shadow);
+    }
+
+    @@media (max-width: 991.98px) {
+        #clockCalendar .fc-scrollgrid,
+        #clockCalendar .fc-theme-standard .fc-scrollgrid,
+        #clockCalendar .fc-scrollgrid-sync-table {
+            border-spacing: .35rem .45rem !important;
+        }
+
+        #clockCalendar .fc-daygrid-day-frame {
+            min-height: 7.5rem;
         }
     }
 
     @@media (max-width: 575.98px) {
-        .time-clock-month-controls {
-            grid-template-columns: 1fr;
+        #clockCalendar .fc-scrollgrid,
+        #clockCalendar .fc-theme-standard .fc-scrollgrid,
+        #clockCalendar .fc-scrollgrid-sync-table {
+            border-spacing: .16rem .25rem !important;
+        }
+
+        #clockCalendar .fc-daygrid-day-frame {
+            min-height: 6.15rem;
+            padding: .1rem;
+        }
+
+        #clockCalendar .fc-daygrid-day-events {
+            min-height: 3.9rem;
+            padding: 0 .1rem;
+        }
+
+        #clockCalendar .fc-daygrid-day-number {
+            min-width: 1.7rem;
+            height: 1.7rem;
+            font-size: .95rem;
+        }
+
+        #clockCalendar .fc-col-header-cell-cushion {
+            font-size: .62rem;
+        }
+
+        #clockCalendar .time-clock-work-package-badge {
+            min-height: 1.3rem;
+            font-size: .65rem;
+        }
+
+        #clockCalendar .time-clock-day-punch-count,
+        #clockCalendar .time-clock-day-indicator {
+            min-width: 1.4rem;
+            height: 1.4rem;
+            padding: 0 .25rem;
+        }
+    }
+
+    .time-clock-period-controls {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+    }
+
+    .time-clock-period-controls .btn,
+    .time-clock-period-controls .form-control {
+        min-height: 34px;
+        white-space: nowrap;
+    }
+
+    .time-clock-period-controls .form-control {
+        width: 154px;
+    }
+
+    .time-clock-legend-button {
+        width: 34px;
+        height: 34px;
+    }
+
+    @@media (max-width: 767.98px) {
+        .time-clock-period-controls {
             width: 100%;
+        }
+
+        .time-clock-period-controls .form-control {
+            flex: 1 1 auto;
+            width: auto;
+        }
+
+        .time-clock-period-controls .time-clock-period-label {
+            display: none;
         }
     }
 
@@ -231,7 +505,7 @@
 
 <div class="d-flex flex-column flex-column-fluid">
     <div id="kt_app_toolbar" class="app-toolbar py-3 py-lg-6">
-        <div id="kt_app_toolbar_container" class="app-container container-xxl d-flex flex-stack">
+        <div id="kt_app_toolbar_container" class="app-container container-fluid d-flex flex-stack">
             <div class="page-title d-flex flex-column justify-content-center flex-wrap me-3">
                 <h1 class="page-heading d-flex text-gray-900 fw-bold fs-3 flex-column justify-content-center my-0">
                     @ViewData["Title"]
@@ -250,55 +524,26 @@
                     <li class="breadcrumb-item text-muted">Calendário mensal de ponto</li>
                 </ul>
             </div>
-            <div class="d-flex gap-3">
-                <button class="btn btn-sm btn-light-success" id="btnOpenImportModal" type="button">
-                    <i class="ki-duotone ki-file-up fs-3"><span class="path1"></span><span class="path2"></span></i>
-                    Importar CSV
+            <div class="dropdown">
+                <button class="btn btn-sm btn-primary d-inline-flex align-items-center gap-2" type="button" id="timeClockActions" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="ki-duotone ki-category fs-3"><span class="path1"></span><span class="path2"></span><span class="path3"></span><span class="path4"></span></i>
+                    Ações
+                    <i class="ki-duotone ki-down fs-5"></i>
                 </button>
-                <a asp-controller="TimeClock" asp-action="Absences" class="btn btn-sm btn-light-warning">
-                    <i class="ki-duotone ki-calendar-tick fs-3"><span class="path1"></span><span class="path2"></span></i>
-                    Ausências
-                </a>
-                <a asp-controller="TimeClock" asp-action="Settings" class="btn btn-sm btn-light-primary">
-                    <i class="ki-duotone ki-setting-2 fs-3"><span class="path1"></span><span class="path2"></span></i>
-                    Minha jornada
-                </a>
-                <a asp-controller="TimeClock" asp-action="Audit" class="btn btn-sm btn-light">
-                    <i class="ki-duotone ki-chart-simple fs-3"><span class="path1"></span><span class="path2"></span></i>
-                    Auditoria
-                </a>
+                <div class="dropdown-menu dropdown-menu-end menu menu-sub menu-sub-dropdown menu-column menu-rounded menu-gray-800 menu-state-bg-light-primary fw-semibold fs-7 w-225px py-4" aria-labelledby="timeClockActions">
+                    <div class="menu-item px-3"><button class="menu-link w-100 border-0 bg-transparent text-start" id="btnOpenAbsenceModal" type="button"><i class="ki-duotone ki-plus fs-3 me-3 text-success"></i>Cadastrar ausência</button></div>
+                    <div class="menu-item px-3"><a asp-controller="TimeClock" asp-action="Absences" class="menu-link"><i class="ki-duotone ki-calendar-tick fs-3 me-3 text-warning"></i>Gerenciar ausências</a></div>
+                    <div class="separator my-2"></div>
+                    <div class="menu-item px-3"><button class="menu-link w-100 border-0 bg-transparent text-start" id="btnOpenImportModal" type="button"><i class="ki-duotone ki-file-up fs-3 me-3 text-success"></i>Importar CSV</button></div>
+                    <div class="menu-item px-3"><a asp-controller="TimeClock" asp-action="Settings" class="menu-link"><i class="ki-duotone ki-setting-2 fs-3 me-3 text-primary"></i>Minha jornada</a></div>
+                    <div class="menu-item px-3"><a asp-controller="TimeClock" asp-action="Audit" class="menu-link"><i class="ki-duotone ki-chart-simple fs-3 me-3 text-gray-600"></i>Auditoria do ponto</a></div>
+                </div>
             </div>
         </div>
     </div>
 
     <div id="kt_app_content" class="app-content flex-column-fluid">
-        <div id="kt_app_content_container" class="app-container container-xxl">
-            <div class="card mb-5 mb-xl-8">
-                <div class="card-body p-8">
-                    <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-6">
-                        <div>
-                            <span class="badge badge-light-primary fw-bold mb-4">Ponto eletrônico</span>
-                            <h2 class="text-gray-900 fw-bold mb-3">Controle mensal de ponto</h2>
-                            <div class="text-gray-500 fw-semibold fs-6">
-                                Clique em um dia para lançar uma ou várias marcações, registrar falta ou anexar uma ausência.
-                            </div>
-                        </div>
-                        <div class="time-clock-month-controls">
-                            <button class="btn btn-light d-inline-flex align-items-center justify-content-center gap-2" id="btnPreviousMonth" type="button">
-                                <i class="ki-duotone ki-left fs-3"></i><span>Mês anterior</span>
-                            </button>
-                            <input type="month" id="monthPicker" class="form-control form-control-solid">
-                            <button class="btn btn-light d-inline-flex align-items-center justify-content-center gap-2" id="btnNextMonth" type="button">
-                                <span>Próximo mês</span><i class="ki-duotone ki-right fs-3"></i>
-                            </button>
-                            <button class="btn btn-success d-inline-flex align-items-center justify-content-center gap-2" id="btnOpenAbsenceModal" type="button">
-                                <i class="ki-duotone ki-plus fs-2"></i><span>Ausência</span>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
+        <div id="kt_app_content_container" class="app-container container-fluid">
             <div class="row row-cols-1 row-cols-md-2 row-cols-xl-5 g-5 g-xl-8 mb-5 mb-xl-8">
                 <div class="col">
                     <div class="card card-flush h-xl-100">
@@ -373,11 +618,18 @@
                             <input class="form-check-input" type="checkbox" id="showWorkPackagesInCalendar" disabled />
                             <span class="form-check-label fw-semibold text-muted fs-7">Exibir WPs</span>
                         </label>
-                        <span class="badge badge-light-danger">Sábados e domingos destacados</span>
-                        <span class="badge badge-light-success">Ausências não incidem no banco</span>
-                        <span class="badge badge-light-success">WP sincronizada</span>
-                        <span class="badge badge-light-warning">WP pendente</span>
-                        <span class="badge badge-light-danger">WP com erro</span>
+                        <div class="time-clock-period-controls">
+                            <button class="btn btn-sm btn-light d-inline-flex align-items-center justify-content-center gap-1" id="btnPreviousMonth" type="button" title="Mês anterior">
+                                <i class="ki-duotone ki-left fs-4"></i><span class="time-clock-period-label">Mês anterior</span>
+                            </button>
+                            <input type="month" id="monthPicker" class="form-control form-control-sm form-control-solid" aria-label="Selecionar mês">
+                            <button class="btn btn-sm btn-light d-inline-flex align-items-center justify-content-center gap-1" id="btnNextMonth" type="button" title="Próximo mês">
+                                <span class="time-clock-period-label">Próximo mês</span><i class="ki-duotone ki-right fs-4"></i>
+                            </button>
+                        </div>
+                        <button type="button" class="btn btn-icon btn-sm btn-light-primary time-clock-legend-button" data-bs-toggle="modal" data-bs-target="#clockLegendModal" title="Entenda as legendas do calendário" aria-label="Entenda as legendas do calendário">
+                            <i class="ki-duotone ki-information fs-3"><span class="path1"></span><span class="path2"></span></i>
+                        </button>
                     </div>
                 </div>
                 <div class="card-body pt-0">
@@ -387,6 +639,29 @@
                             Carregando calendário...
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="clockLegendModal" tabindex="-1" aria-labelledby="clockLegendModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered mw-650px">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h2 class="fw-bold mb-1" id="clockLegendModalTitle">Legendas do calendário</h2>
+                    <div class="text-muted fw-semibold">Entenda os indicadores usados na visualização mensal.</div>
+                </div>
+                <button type="button" class="btn btn-icon btn-sm btn-active-light-primary" data-bs-dismiss="modal" aria-label="Fechar"><i class="ki-duotone ki-cross fs-1"><span class="path1"></span><span class="path2"></span></i></button>
+            </div>
+            <div class="modal-body pt-3">
+                <div class="d-flex flex-column gap-5">
+                    <div class="d-flex gap-4"><span class="badge badge-light-danger align-self-start">Fim de semana</span><div><div class="fw-bold">Sábados e domingos destacados</div><div class="text-muted fs-7">Dias não úteis recebem uma superfície diferenciada para facilitar a leitura da jornada.</div></div></div>
+                    <div class="d-flex gap-4"><span class="badge badge-light-success align-self-start">Ausência</span><div><div class="fw-bold">Ausências justificadas</div><div class="text-muted fs-7">A barra verde identifica uma ausência registrada. Ela reduz a jornada prevista sem gerar débito no banco de horas.</div></div></div>
+                    <div class="d-flex gap-4"><span class="badge badge-light-success align-self-start">WP sincronizada</span><div><div class="fw-bold">Work Package sincronizada</div><div class="text-muted fs-7">O apontamento correspondente já foi confirmado no OpenProject.</div></div></div>
+                    <div class="d-flex gap-4"><span class="badge badge-light-warning align-self-start">WP pendente</span><div><div class="fw-bold">Work Package pendente</div><div class="text-muted fs-7">Há apontamento aguardando envio ou confirmação no OpenProject.</div></div></div>
+                    <div class="d-flex gap-4"><span class="badge badge-light-danger align-self-start">WP com erro</span><div><div class="fw-bold">Work Package com erro</div><div class="text-muted fs-7">O último envio do apontamento ao OpenProject falhou e precisa de atenção.</div></div></div>
                 </div>
             </div>
         </div>
@@ -601,6 +876,8 @@
         let absenceModal = null;
         let importModal = null;
         let fullCalendar = null;
+        let calendarResizeFrame = null;
+        let calendarResizeObserver = null;
 
         document.addEventListener('DOMContentLoaded', () => {
             punchModal = new bootstrap.Modal(document.getElementById('punchModal'));
@@ -611,6 +888,7 @@
             monthPicker.value = `${initialYear}-${String(initialMonth).padStart(2, '0')}`;
             monthPicker.addEventListener('change', () => loadSelectedMonth());
             document.getElementById('showWorkPackagesInCalendar').addEventListener('change', saveCalendarPreferences);
+            configureCalendarResize();
 
             document.getElementById('btnPreviousMonth').addEventListener('click', () => moveMonth(-1));
             document.getElementById('btnNextMonth').addEventListener('click', () => moveMonth(1));
@@ -632,6 +910,37 @@
             syncAbsenceVisibility();
             loadSelectedMonth();
         });
+
+        function configureCalendarResize() {
+            const appWrapper = document.getElementById('kt_app_wrapper');
+            if (appWrapper && typeof ResizeObserver !== 'undefined') {
+                calendarResizeObserver = new ResizeObserver(() => scheduleCalendarResize());
+                calendarResizeObserver.observe(appWrapper);
+            }
+
+            new MutationObserver(mutations => {
+                if (mutations.some(mutation => mutation.attributeName === 'data-kt-app-sidebar-minimize')) {
+                    scheduleCalendarResize(true);
+                }
+            }).observe(document.body, { attributes: true, attributeFilter: ['data-kt-app-sidebar-minimize'] });
+
+            window.addEventListener('resize', () => scheduleCalendarResize());
+        }
+
+        function scheduleCalendarResize(afterSidebarTransition = false) {
+            if (calendarResizeFrame) {
+                window.cancelAnimationFrame(calendarResizeFrame);
+            }
+
+            calendarResizeFrame = window.requestAnimationFrame(() => {
+                calendarResizeFrame = null;
+                fullCalendar?.updateSize();
+            });
+
+            if (afterSidebarTransition) {
+                window.setTimeout(() => fullCalendar?.updateSize(), 350);
+            }
+        }
 
         function loadSelectedMonth() {
             const [year, month] = document.getElementById('monthPicker').value.split('-').map(Number);
@@ -723,6 +1032,7 @@
             });
             fullCalendar.addEventSource(buildCalendarEvents());
             fullCalendar.render();
+            scheduleCalendarResize();
         }
 
         function buildCalendarEvents() {
@@ -839,18 +1149,19 @@
                 indicators.push({ icon: 'ki-information', theme: 'danger', label: day.unjustifiedAbsence.typeLabel });
             }
 
-            if (!indicators.length) return;
-
-            const frame = info.el.querySelector('.fc-daygrid-day-frame');
-            if (!frame) return;
+            const header = info.el.querySelector('.fc-daygrid-day-top');
+            if (!header) return;
 
             const container = document.createElement('span');
-            container.className = 'time-clock-day-indicators';
-            container.innerHTML = indicators.map(indicator => `
+            container.className = 'time-clock-day-header-indicators';
+            const punchIndicator = day.punches.length
+                ? `<span class="time-clock-day-punch-count" title="${day.punches.length} registro(s) de ponto"><i class="ki-duotone ki-time fs-6"><span class="path1"></span><span class="path2"></span></i>${day.punches.length}</span>`
+                : '';
+            container.innerHTML = `${punchIndicator}${indicators.map(indicator => `
                 <span class="time-clock-day-indicator time-clock-indicator-${indicator.theme}" data-bs-toggle="tooltip" title="${escapeAttribute(indicator.label)}">
                     <i class="ki-duotone ${indicator.icon} fs-4"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i>
-                </span>`).join('');
-            frame.appendChild(container);
+                </span>`).join('')}`;
+            header.appendChild(container);
 
             container.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(element => new bootstrap.Tooltip(element));
         }
