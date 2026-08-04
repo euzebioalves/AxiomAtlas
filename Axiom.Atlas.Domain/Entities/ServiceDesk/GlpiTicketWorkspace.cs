@@ -19,5 +19,6 @@ namespace Axiom.Atlas.Domain.Entities.ServiceDesk
         public string CreatedByUserId { get; set; } = string.Empty;
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
+        public ICollection<GlpiTicketWorkspaceImage> Images { get; set; } = new List<GlpiTicketWorkspaceImage>();
     }
 }

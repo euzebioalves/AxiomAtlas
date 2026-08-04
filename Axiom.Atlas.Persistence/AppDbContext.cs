@@ -35,6 +35,7 @@ namespace Axiom.Atlas.Persistence
         //Integrations
         public DbSet<IntegrationSettings> Integrations { get; set; }
         public DbSet<GlpiTicketWorkspace> GlpiTicketWorkspaces { get; set; }
+        public DbSet<GlpiTicketWorkspaceImage> GlpiTicketWorkspaceImages { get; set; }
         public DbSet<GlpiImprovementTicket> GlpiImprovementTickets { get; set; }
         public DbSet<IntegrationSynchronizationJob> IntegrationSynchronizationJobs { get; set; }
 
@@ -172,6 +173,19 @@ namespace Axiom.Atlas.Persistence
                 entity.Property(x => x.GlpiDevOpsUrl).HasMaxLength(1000);
                 entity.Property(x => x.CreatedByUserId).HasMaxLength(100).IsRequired();
                 entity.HasIndex(x => x.GlpiTicketId).IsUnique();
+            });
+
+            builder.Entity<GlpiTicketWorkspaceImage>(entity =>
+            {
+                entity.HasKey(x => x.Id);
+                entity.Property(x => x.FileName).HasMaxLength(255).IsRequired();
+                entity.Property(x => x.ContentType).HasMaxLength(100).IsRequired();
+                entity.Property(x => x.Content).IsRequired();
+                entity.HasIndex(x => x.WorkspaceId);
+                entity.HasOne(x => x.Workspace)
+                    .WithMany(x => x.Images)
+                    .HasForeignKey(x => x.WorkspaceId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
 
             builder.Entity<GlpiImprovementTicket>(entity =>
