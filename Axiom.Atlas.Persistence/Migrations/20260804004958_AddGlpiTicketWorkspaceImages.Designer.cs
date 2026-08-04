@@ -3,6 +3,7 @@ using System;
 using Axiom.Atlas.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Axiom.Atlas.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260804004958_AddGlpiTicketWorkspaceImages")]
+    partial class AddGlpiTicketWorkspaceImages
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -56,7 +59,7 @@ namespace Axiom.Atlas.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("AuditLogs", (string)null);
+                    b.ToTable("AuditLogs");
                 });
 
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.Integrations.IntegrationSettings", b =>
@@ -144,7 +147,7 @@ namespace Axiom.Atlas.Persistence.Migrations
 
                     b.HasIndex("UserId", "DeliveredAt");
 
-                    b.ToTable("DesktopNotifications", (string)null);
+                    b.ToTable("DesktopNotifications");
                 });
 
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.Notifications.OpenProjectWorkPackageStatusSnapshot", b =>
@@ -165,7 +168,7 @@ namespace Axiom.Atlas.Persistence.Migrations
 
                     b.HasKey("WorkPackageId");
 
-                    b.ToTable("OpenProjectWorkPackageStatusSnapshots", (string)null);
+                    b.ToTable("OpenProjectWorkPackageStatusSnapshots");
                 });
 
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.Notifications.UserDesktopNotificationSetting", b =>
@@ -188,7 +191,7 @@ namespace Axiom.Atlas.Persistence.Migrations
                     b.HasIndex("UserId")
                         .IsUnique();
 
-                    b.ToTable("UserDesktopNotificationSettings", (string)null);
+                    b.ToTable("UserDesktopNotificationSettings");
                 });
 
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.ServiceDesk.GlpiImprovementTicket", b =>
@@ -252,7 +255,7 @@ namespace Axiom.Atlas.Persistence.Migrations
 
                     b.HasIndex("IsInImprovementQueue", "StatusCode", "OpenedAt");
 
-                    b.ToTable("GlpiImprovementTickets", (string)null);
+                    b.ToTable("GlpiImprovementTickets");
                 });
 
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.ServiceDesk.GlpiTicketWorkspace", b =>
@@ -327,7 +330,7 @@ namespace Axiom.Atlas.Persistence.Migrations
                     b.HasIndex("GlpiTicketId")
                         .IsUnique();
 
-                    b.ToTable("GlpiTicketWorkspaces", (string)null);
+                    b.ToTable("GlpiTicketWorkspaces");
                 });
 
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.ServiceDesk.GlpiTicketWorkspaceImage", b =>
@@ -360,7 +363,7 @@ namespace Axiom.Atlas.Persistence.Migrations
 
                     b.HasIndex("WorkspaceId");
 
-                    b.ToTable("GlpiTicketWorkspaceImages", (string)null);
+                    b.ToTable("GlpiTicketWorkspaceImages");
                 });
 
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.ServiceDesk.IntegrationSynchronizationJob", b =>
@@ -426,7 +429,7 @@ namespace Axiom.Atlas.Persistence.Migrations
 
                     b.HasIndex("Type", "CorrelationKey", "CreatedAt");
 
-                    b.ToTable("IntegrationSynchronizationJobs", (string)null);
+                    b.ToTable("IntegrationSynchronizationJobs");
                 });
 
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.TimeClock.GlobalTimeClockSetting", b =>
@@ -446,7 +449,7 @@ namespace Axiom.Atlas.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("GlobalTimeClockSettings", (string)null);
+                    b.ToTable("GlobalTimeClockSettings");
                 });
 
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.TimeClock.TimeClockAbsence", b =>
@@ -521,7 +524,7 @@ namespace Axiom.Atlas.Persistence.Migrations
                     b.HasIndex("UserId", "ExternalRecordId")
                         .IsUnique();
 
-                    b.ToTable("TimeClockAbsences", (string)null);
+                    b.ToTable("TimeClockAbsences");
                 });
 
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.TimeClock.TimeClockAbsenceAttachment", b =>
@@ -557,7 +560,7 @@ namespace Axiom.Atlas.Persistence.Migrations
 
                     b.HasIndex("AbsenceId");
 
-                    b.ToTable("TimeClockAbsenceAttachments", (string)null);
+                    b.ToTable("TimeClockAbsenceAttachments");
                 });
 
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.TimeClock.TimeClockPunch", b =>
@@ -631,7 +634,7 @@ namespace Axiom.Atlas.Persistence.Migrations
                     b.HasIndex("UserId", "PunchDate", "Type")
                         .IsUnique();
 
-                    b.ToTable("TimeClockPunches", (string)null);
+                    b.ToTable("TimeClockPunches");
                 });
 
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.TimeClock.TimeClockUnjustifiedAbsence", b =>
@@ -704,7 +707,7 @@ namespace Axiom.Atlas.Persistence.Migrations
                     b.HasIndex("UserId", "ExternalRecordId")
                         .IsUnique();
 
-                    b.ToTable("TimeClockUnjustifiedAbsences", (string)null);
+                    b.ToTable("TimeClockUnjustifiedAbsences");
                 });
 
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.TimeClock.UserWorkScheduleSetting", b =>
@@ -741,7 +744,7 @@ namespace Axiom.Atlas.Persistence.Migrations
                     b.HasIndex("UserId")
                         .IsUnique();
 
-                    b.ToTable("UserWorkScheduleSettings", (string)null);
+                    b.ToTable("UserWorkScheduleSettings");
                 });
 
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.TimeEntries.TimeEntry", b =>
@@ -791,7 +794,7 @@ namespace Axiom.Atlas.Persistence.Migrations
 
                     b.HasIndex("WorkPackageId");
 
-                    b.ToTable("TimeEntries", (string)null);
+                    b.ToTable("TimeEntries");
                 });
 
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.TimeEntries.WorkPackageCache", b =>
@@ -819,7 +822,7 @@ namespace Axiom.Atlas.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("WorkPackageCaches", (string)null);
+                    b.ToTable("WorkPackageCaches");
                 });
 
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.Users.User", b =>

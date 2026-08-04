@@ -214,8 +214,63 @@
                                 <div class="form-text">A User Story será criada com o tipo <strong>User Story</strong> no projeto selecionado.</div>
                             </div>
                         }
-                        <textarea id="draft" class="form-control form-control-solid font-monospace" rows="20" placeholder="# User Story&#10;&#10;## Contexto&#10;## Critérios de aceite">@Model.RequirementMarkdown</textarea>
-                        <div class="form-text">Use Markdown. Imagens coladas serão incluídas como referência na próxima etapa de anexos.</div>
+                        <div class="user-story-editor" aria-label="Editor da User Story">
+                            <div class="user-story-editor-toolbar" id="storyEditorToolbar" role="toolbar" aria-label="Ferramentas de formatação">
+                                <div class="user-story-editor-toolbar-group editor-block-format">
+                                    <div class="dropdown">
+                                        <button type="button" class="btn btn-sm btn-light d-flex align-items-center gap-2" data-bs-toggle="dropdown" aria-expanded="false" title="Estilo do parágrafo">
+                                            <span id="blockFormatLabel">Parágrafo</span><i class="fa-solid fa-chevron-down fs-8"></i>
+                                        </button>
+                                        <div class="dropdown-menu menu-sub-dropdown w-175px p-2">
+                                            <button type="button" class="dropdown-item active" data-editor-action="paragraph" data-block-format-label="Parágrafo">Parágrafo</button>
+                                            <button type="button" class="dropdown-item" data-editor-action="heading1" data-block-format-label="Título 1"><span class="fw-bold fs-6 me-3">H1</span>Título 1</button>
+                                            <button type="button" class="dropdown-item" data-editor-action="heading2" data-block-format-label="Título 2"><span class="fw-bold fs-7 me-3">H2</span>Título 2</button>
+                                            <button type="button" class="dropdown-item" data-editor-action="heading3" data-block-format-label="Título 3"><span class="fw-bold me-3">H3</span>Título 3</button>
+                                            <button type="button" class="dropdown-item" data-editor-action="heading4" data-block-format-label="Título 4"><span class="fw-bold fs-8 me-3">H4</span>Título 4</button>
+                                            <button type="button" class="dropdown-item" data-editor-action="heading5" data-block-format-label="Título 5"><span class="fw-bold fs-9 me-3">H5</span>Título 5</button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="user-story-editor-toolbar-group">
+                                    <div class="dropdown">
+                                        <button type="button" class="btn btn-icon btn-sm btn-light" data-bs-toggle="dropdown" aria-expanded="false" title="Formatação do texto"><i class="ki-duotone ki-text fs-3"></i></button>
+                                        <div class="dropdown-menu menu-sub-dropdown w-180px p-2">
+                                            <button type="button" class="dropdown-item" data-editor-action="bold"><i class="ki-duotone ki-text-bold fs-4 me-3"></i>Negrito <span class="ms-auto text-muted fs-8">Ctrl+B</span></button>
+                                            <button type="button" class="dropdown-item" data-editor-action="italic"><i class="ki-duotone ki-text-italic fs-4 me-3"></i>Itálico <span class="ms-auto text-muted fs-8">Ctrl+I</span></button>
+                                            <button type="button" class="dropdown-item" data-editor-action="strike"><i class="ki-duotone ki-text-strikethrough fs-4 me-3"></i>Tachado</button>
+                                            <button type="button" class="dropdown-item" data-editor-action="highlight"><i class="ki-duotone ki-text-underline fs-4 me-3"></i>Sublinhado / destaque</button>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn btn-icon btn-sm btn-light" data-editor-action="inlineCode" title="Código em linha"><span class="font-monospace fw-bold fs-5">&lt;&gt;</span></button>
+                                    <button type="button" class="btn btn-icon btn-sm btn-light" data-editor-action="codeBlock" title="Bloco de código"><i class="ki-duotone ki-code fs-3"></i></button>
+                                </div>
+                                <div class="user-story-editor-toolbar-group">
+                                    <button type="button" class="btn btn-icon btn-sm btn-light" data-editor-action="bulletList" title="Lista com marcadores"><i class="ki-duotone ki-menu fs-3"></i></button>
+                                    <button type="button" class="btn btn-icon btn-sm btn-light" data-editor-action="orderedList" title="Lista numerada"><i class="ki-duotone ki-notepad-bookmark fs-3"></i></button>
+                                    <button type="button" class="btn btn-icon btn-sm btn-light" data-editor-action="taskList" title="To-do list"><i class="ki-duotone ki-check-squared fs-3"></i></button>
+                                    <button type="button" class="btn btn-icon btn-sm btn-light" data-editor-action="quote" title="Citação"><i class="ki-duotone ki-message-text-2 fs-3"></i></button>
+                                </div>
+                                <div class="user-story-editor-toolbar-group">
+                                    <button type="button" class="btn btn-icon btn-sm btn-light" data-editor-action="link" title="Inserir link (Ctrl+K)"><i class="fa-solid fa-link fs-5"></i></button>
+                                    <button type="button" class="btn btn-icon btn-sm btn-light" data-editor-action="table" title="Inserir tabela"><i class="fa-solid fa-table fs-5"></i></button>
+                                    <button type="button" class="btn btn-icon btn-sm btn-light" data-editor-action="image" title="Inserir imagem por URL"><i class="ki-duotone ki-picture fs-3"></i></button>
+                                    <button type="button" class="btn btn-icon btn-sm btn-light" data-editor-action="uploadImage" title="Enviar imagem do computador"><i class="ki-duotone ki-file-up fs-3"></i></button>
+                                    <button type="button" class="btn btn-icon btn-sm btn-light" data-editor-action="divider" title="Separador"><i class="ki-duotone ki-minus fs-3"></i></button>
+                                </div>
+                                <div class="ms-auto d-flex align-items-center gap-3">
+                                    <button type="button" id="toggleMarkdownPreview" class="btn btn-sm btn-light-primary"><i class="ki-duotone ki-eye fs-4"></i><span>Visualizar</span></button>
+                                </div>
+                            </div>
+                            <div class="user-story-editor-surface">
+                                <textarea id="draft" class="user-story-editor-input font-monospace" rows="20" spellcheck="true" placeholder="# User Story&#10;&#10;## Contexto&#10;## Critérios de aceite">@Model.RequirementMarkdown</textarea>
+                                <article id="draftPreview" class="user-story-editor-preview d-none" aria-live="polite"></article>
+                            </div>
+                            <input id="storyImageUpload" class="d-none" type="file" accept="image/png,image/jpeg,image/gif,image/webp" />
+                            <div class="user-story-editor-footer">
+                                <span><i class="ki-duotone ki-information-5 fs-6 me-1"></i>Markdown compatível com OpenProject. Cole uma imagem ou envie um arquivo de até 8 MB.</span>
+                                <span id="draftCharacterCount">0 caracteres</span>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -264,11 +319,544 @@
             frame.style.background = palette.background;
         };
 
+        const draft = document.getElementById('draft');
+        const draftPreview = document.getElementById('draftPreview');
+        const draftCharacterCount = document.getElementById('draftCharacterCount');
+        const previewToggle = document.getElementById('toggleMarkdownPreview');
+        const storyImageUpload = document.getElementById('storyImageUpload');
+        const blockFormatLabel = document.getElementById('blockFormatLabel');
+        const maxWorkspaceImageBytes = 8 * 1024 * 1024;
+        let isPreviewMode = false;
+
+        const escapeHtml = value => String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+
+        const safeUrl = (value, imageOnly = false) => {
+            try {
+                const url = new URL(value, window.location.origin);
+                const allowedProtocols = imageOnly ? ['http:', 'https:'] : ['http:', 'https:', 'mailto:'];
+                return allowedProtocols.includes(url.protocol) ? url.href : '';
+            } catch {
+                return '';
+            }
+        };
+
+        const renderInlineMarkdown = value => {
+            const protectedExternalLinks = [];
+            const protectedResizedImages = [];
+            let source = String(value ?? '').replace(
+                /<img\s+src="([^"]+)"\s+alt="([^"]*)"\s+width="(\d{1,4})"\s*\/?>/gi,
+                (_, url, alt, width) => {
+                    const safeImageUrl = safeUrl(url, true);
+                    const normalizedWidth = Math.min(2000, Math.max(80, Number(width)));
+                    if (!safeImageUrl || !Number.isFinite(normalizedWidth)) return alt;
+                    const token = `AXIOMRESIZEDIMAGE${protectedResizedImages.length}TOKEN`;
+                    protectedResizedImages.push(`<img src="${escapeHtml(safeImageUrl)}" alt="${escapeHtml(alt)}" data-editor-image-url="${escapeHtml(safeImageUrl)}" width="${normalizedWidth}" loading="lazy" title="Clique para redimensionar">`);
+                    return token;
+                });
+            source = source.replace(
+                /<a\s+href="([^"]+)"\s+target="_blank"\s+rel="noopener noreferrer">([^<]*)<\/a>/gi,
+                (_, url, label) => {
+                    const safeLinkUrl = safeUrl(url);
+                    if (!safeLinkUrl) return label;
+                    const token = `AXIOMEXTERNALLINK${protectedExternalLinks.length}TOKEN`;
+                    protectedExternalLinks.push(`<a href="${escapeHtml(safeLinkUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`);
+                    return token;
+                });
+            let html = escapeHtml(source);
+            html = html.replace(/!\[([^\]]*)\]\(([^\s)]+)\)/g, (_, alt, url) => {
+                const safeImageUrl = safeUrl(url, true);
+                return safeImageUrl ? `<img src="${escapeHtml(safeImageUrl)}" alt="${alt}" data-editor-image-url="${escapeHtml(safeImageUrl)}" loading="lazy" title="Clique para redimensionar">` : alt;
+            });
+            html = html.replace(/\[([^\]]+)\]\(([^\s)]+)\)/g, (_, label, url) => {
+                const safeLinkUrl = safeUrl(url);
+                return safeLinkUrl ? `<a href="${escapeHtml(safeLinkUrl)}" target="_blank" rel="noopener noreferrer">${label}</a>` : label;
+            });
+            html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+            html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+            html = html.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+            html = html.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+            html = html.replace(/==([^=]+)==/g, '<mark>$1</mark>');
+            html = html.replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
+            html = html.replace(/(^|[^_])_([^_]+)_/g, '$1<em>$2</em>');
+            html = html.replace(/AXIOMEXTERNALLINK(\d+)TOKEN/g, (_, index) => protectedExternalLinks[Number(index)] ?? '');
+            html = html.replace(/AXIOMRESIZEDIMAGE(\d+)TOKEN/g, (_, index) => protectedResizedImages[Number(index)] ?? '');
+            return html;
+        };
+
+        const renderMarkdownPreview = markdown => {
+            const lines = String(markdown ?? '').replace(/\r\n/g, '\n').split('\n');
+            const html = [];
+
+            for (let index = 0; index < lines.length; index += 1) {
+                const line = lines[index];
+                if (line.startsWith('```')) {
+                    const language = line.slice(3).trim();
+                    const code = [];
+                    while (++index < lines.length && !lines[index].startsWith('```')) code.push(lines[index]);
+                    html.push(`<pre><code class="language-${escapeHtml(language)}">${escapeHtml(code.join('\n'))}</code></pre>`);
+                    continue;
+                }
+
+                const isTableRow = value => /^\s*\|?.+\|.+\|?\s*$/.test(value);
+                const isTableSeparator = value => /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(value);
+                const tableCells = value => value.trim().replace(/^\||\|$/g, '').split('|').map(cell => cell.trim());
+                if (isTableRow(line) && index + 1 < lines.length && isTableSeparator(lines[index + 1])) {
+                    const headers = tableCells(line);
+                    const rows = [];
+                    index += 2;
+                    while (index < lines.length && isTableRow(lines[index]) && !isTableSeparator(lines[index])) {
+                        rows.push(tableCells(lines[index]));
+                        index += 1;
+                    }
+                    index -= 1;
+                    const headerHtml = headers.map(header => `<th>${renderInlineMarkdown(header)}</th>`).join('');
+                    const rowsHtml = rows.map(row => `<tr>${headers.map((_, cellIndex) => `<td>${renderInlineMarkdown(row[cellIndex] ?? '')}</td>`).join('')}</tr>`).join('');
+                    html.push(`<div class="table-responsive"><table class="table table-row-bordered table-row-gray-300 align-middle mb-5 markdown-table"><thead><tr>${headerHtml}</tr></thead><tbody>${rowsHtml}</tbody></table></div>`);
+                    continue;
+                }
+
+                const heading = /^(#{1,6})\s+(.+)$/.exec(line);
+                if (heading) {
+                    const level = heading[1].length;
+                    html.push(`<h${level}>${renderInlineMarkdown(heading[2])}</h${level}>`);
+                    continue;
+                }
+
+                if (/^\s*(-{3,}|\*{3,}|_{3,})\s*$/.test(line)) {
+                    html.push('<hr>');
+                    continue;
+                }
+
+                if (/^>\s?/.test(line)) {
+                    const quote = [];
+                    do {
+                        quote.push(lines[index].replace(/^>\s?/, ''));
+                        index += 1;
+                    } while (index < lines.length && /^>\s?/.test(lines[index]));
+                    index -= 1;
+                    html.push(`<blockquote>${renderInlineMarkdown(quote.join(' '))}</blockquote>`);
+                    continue;
+                }
+
+                const unordered = /^\s*[-*+]\s+(.+)$/.exec(line);
+                const ordered = /^\s*\d+\.\s+(.+)$/.exec(line);
+                if (unordered || ordered) {
+                    const isOrdered = Boolean(ordered);
+                    const items = [];
+                    const expression = isOrdered ? /^\s*\d+\.\s+(.+)$/ : /^\s*[-*+]\s+(.+)$/;
+                    do {
+                        const item = expression.exec(lines[index])?.[1] ?? '';
+                        const task = /^\[([ xX])\]\s+(.+)$/.exec(item);
+                        items.push(task
+                            ? `<li class="markdown-task"><input type="checkbox" disabled ${task[1].toLowerCase() === 'x' ? 'checked' : ''}> ${renderInlineMarkdown(task[2])}</li>`
+                            : `<li>${renderInlineMarkdown(item)}</li>`);
+                        index += 1;
+                    } while (index < lines.length && expression.test(lines[index]));
+                    index -= 1;
+                    html.push(`<${isOrdered ? 'ol' : 'ul'}>${items.join('')}</${isOrdered ? 'ol' : 'ul'}>`);
+                    continue;
+                }
+
+                if (line.trim()) html.push(`<p>${renderInlineMarkdown(line)}</p>`);
+            }
+
+            draftPreview.innerHTML = html.length
+                ? html.join('')
+                : '<div class="text-muted text-center py-10">A pré-visualização aparecerá aqui.</div>';
+        };
+
+        const escapeRegularExpression = value => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+        const persistImageWidth = (imageUrl, alt, width) => {
+            const safeImageUrl = safeUrl(imageUrl, true);
+            if (!safeImageUrl) return false;
+
+            const renderedImage = `<img src="${safeImageUrl}" alt="${escapeHtml(alt)}" width="${width}">`;
+            const existingImage = new RegExp(`<img\\s+src="${escapeRegularExpression(safeImageUrl)}"\\s+alt="[^"]*"\\s+width="\\d{1,4}"\\s*\\/?>`, 'i');
+            if (existingImage.test(draft.value)) {
+                draft.value = draft.value.replace(existingImage, renderedImage);
+                draft.dispatchEvent(new Event('input', { bubbles: true }));
+                return true;
+            }
+
+            const markdownImage = /!\[([^\]]*)\]\(([^\s)]+)\)/g;
+            let match;
+            while ((match = markdownImage.exec(draft.value)) !== null) {
+                if (safeUrl(match[2], true) !== safeImageUrl) continue;
+                draft.value = `${draft.value.slice(0, match.index)}${renderedImage}${draft.value.slice(match.index + match[0].length)}`;
+                draft.dispatchEvent(new Event('input', { bubbles: true }));
+                return true;
+            }
+            return false;
+        };
+
+        const promptForImageWidth = async image => {
+            const imageUrl = image.dataset.editorImageUrl || image.currentSrc || image.src;
+            const currentWidth = Math.round(image.getBoundingClientRect().width) || image.naturalWidth || 400;
+            const result = await Swal.fire({
+                title: 'Redimensionar imagem',
+                input: 'number',
+                inputLabel: 'Largura da imagem (pixels)',
+                inputValue: currentWidth,
+                inputAttributes: { min: '80', max: '2000', step: '10' },
+                html: '<div class="text-muted fs-7 mt-2">A largura será gravada no Markdown e enviada ao OpenProject.</div>',
+                showCancelButton: true,
+                confirmButtonText: 'Aplicar',
+                cancelButtonText: 'Cancelar',
+                inputValidator: value => {
+                    const width = Number(value);
+                    return Number.isInteger(width) && width >= 80 && width <= 2000
+                        ? undefined
+                        : 'Informe uma largura entre 80 e 2.000 pixels.';
+                }
+            });
+            if (!result.isConfirmed) return;
+
+            if (!persistImageWidth(imageUrl, image.alt || 'Imagem da User Story', Number(result.value))) {
+                await Swal.fire({ icon: 'error', text: 'Não foi possível localizar esta imagem no Markdown.' });
+            }
+        };
+
+        const updateDraftMetadata = () => {
+            draftCharacterCount.textContent = `${draft.value.length.toLocaleString('pt-BR')} caracteres`;
+            if (isPreviewMode) renderMarkdownPreview(draft.value);
+        };
+
+        const replaceDraftRange = (replacement, start, end, selectionStart, selectionEnd) => {
+            draft.setRangeText(replacement, start, end, 'preserve');
+            draft.setSelectionRange(selectionStart ?? start + replacement.length, selectionEnd ?? start + replacement.length);
+            draft.focus();
+            draft.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+
+        const replaceDraftSelection = (replacement, selectionStart, selectionEnd) =>
+            replaceDraftRange(replacement, draft.selectionStart, draft.selectionEnd, selectionStart, selectionEnd);
+
+        const wrapDraftSelection = (prefix, suffix, placeholder) => {
+            const selected = draft.value.slice(draft.selectionStart, draft.selectionEnd) || placeholder;
+            const start = draft.selectionStart;
+            replaceDraftSelection(`${prefix}${selected}${suffix}`, start + prefix.length, start + prefix.length + selected.length);
+        };
+
+        const prefixDraftLines = (prefixFactory, removePattern) => {
+            const selectionStart = draft.selectionStart;
+            const selectionEnd = draft.selectionEnd;
+            const lineStart = draft.value.lastIndexOf('\n', selectionStart - 1) + 1;
+            const nextLineBreak = draft.value.indexOf('\n', selectionEnd);
+            const lineEnd = nextLineBreak === -1 ? draft.value.length : nextLineBreak;
+            const selectedLines = draft.value.slice(lineStart, lineEnd).split('\n');
+            const replacement = selectedLines.map((line, index) => `${prefixFactory(index)}${line.replace(removePattern, '')}`).join('\n');
+            draft.setRangeText(replacement, lineStart, lineEnd, 'preserve');
+            draft.setSelectionRange(lineStart, lineStart + replacement.length);
+            draft.focus();
+            draft.dispatchEvent(new Event('input', { bubbles: true }));
+        };
+
+        const updateBlockFormatLabel = () => {
+            const lineStart = draft.value.lastIndexOf('\n', draft.selectionStart - 1) + 1;
+            const currentLine = draft.value.slice(lineStart, draft.value.indexOf('\n', lineStart) === -1 ? draft.value.length : draft.value.indexOf('\n', lineStart));
+            const headingLevel = /^(#{1,5})\s+/.exec(currentLine)?.[1].length;
+            const label = headingLevel ? `Título ${headingLevel}` : 'Parágrafo';
+            blockFormatLabel.textContent = label;
+            document.querySelectorAll('[data-block-format-label]').forEach(item => {
+                item.classList.toggle('active', item.dataset.blockFormatLabel === label);
+            });
+        };
+
+        const promptForLink = async () => {
+            const selectionStart = draft.selectionStart;
+            const selectionEnd = draft.selectionEnd;
+            const selected = draft.value.slice(selectionStart, selectionEnd);
+            const result = await Swal.fire({
+                title: 'Inserir link',
+                html: `
+                    <div class="text-start">
+                        <label class="form-label" for="markdownLinkText">Texto do link</label>
+                        <input id="markdownLinkText" class="form-control mb-4" value="${escapeHtml(selected)}" placeholder="Texto exibido no documento">
+                        <label class="form-label" for="markdownLinkUrl">Endereço do link</label>
+                        <input id="markdownLinkUrl" class="form-control" type="url" placeholder="https://exemplo.com">
+                        <label class="form-check form-check-custom form-check-solid mt-4">
+                            <input id="markdownLinkNewTab" class="form-check-input" type="checkbox" checked>
+                            <span class="form-check-label">Abrir em nova guia</span>
+                        </label>
+                    </div>`,
+                focusConfirm: false,
+                showCancelButton: true,
+                confirmButtonText: 'Inserir',
+                cancelButtonText: 'Cancelar',
+                preConfirm: () => {
+                    const text = document.getElementById('markdownLinkText').value.trim();
+                    const url = document.getElementById('markdownLinkUrl').value.trim();
+                    if (!text) {
+                        Swal.showValidationMessage('Informe o texto que será exibido para o link.');
+                        return false;
+                    }
+                    if (!safeUrl(url)) {
+                        Swal.showValidationMessage('Informe uma URL http(s) ou mailto válida.');
+                        return false;
+                    }
+                    return { text, url, openInNewTab: document.getElementById('markdownLinkNewTab').checked };
+                }
+            });
+            if (!result.isConfirmed) return;
+            const { text, url, openInNewTab } = result.value;
+            const safeLinkUrl = safeUrl(url);
+            const markdown = openInNewTab
+                ? `<a href="${safeLinkUrl}" target="_blank" rel="noopener noreferrer">${text}</a>`
+                : `[${text}](${safeLinkUrl})`;
+            replaceDraftRange(markdown, selectionStart, selectionEnd);
+        };
+
+        const promptForInlineCode = async () => {
+            const selectionStart = draft.selectionStart;
+            const selectionEnd = draft.selectionEnd;
+            const selected = draft.value.slice(selectionStart, selectionEnd);
+            const result = await Swal.fire({
+                title: 'Inserir código em linha',
+                input: 'text',
+                inputLabel: 'Código',
+                inputValue: selected,
+                inputPlaceholder: 'Ex.: meuMetodo() ou variavel',
+                showCancelButton: true,
+                confirmButtonText: 'Inserir',
+                cancelButtonText: 'Cancelar',
+                inputValidator: value => value.trim() ? undefined : 'Informe o código que será inserido.'
+            });
+            if (!result.isConfirmed) return;
+            replaceDraftRange(`\`${result.value.trim()}\``, selectionStart, selectionEnd);
+        };
+
+        const promptForCodeBlock = async () => {
+            const selectionStart = draft.selectionStart;
+            const selectionEnd = draft.selectionEnd;
+            const selected = draft.value.slice(selectionStart, selectionEnd);
+            const result = await Swal.fire({
+                title: 'Inserir bloco de código',
+                html: `
+                    <div class="text-start">
+                        <label class="form-label" for="markdownCodeLanguage">Linguagem</label>
+                        <select id="markdownCodeLanguage" class="form-select">
+                            <option value="">Texto simples</option>
+                            <option value="csharp">C#</option>
+                            <option value="javascript">JavaScript</option>
+                            <option value="typescript">TypeScript</option>
+                            <option value="html">HTML</option>
+                            <option value="css">CSS</option>
+                            <option value="json">JSON</option>
+                            <option value="sql">SQL</option>
+                            <option value="bash">Bash</option>
+                            <option value="python">Python</option>
+                            <option value="other">Outra</option>
+                        </select>
+                        <input id="markdownCustomCodeLanguage" class="form-control mt-3 d-none" maxlength="40" placeholder="Ex.: yaml, xml, powershell">
+                        <label class="form-label mt-4" for="markdownCodeValue">Código</label>
+                        <textarea id="markdownCodeValue" class="form-control font-monospace" rows="8" placeholder="Digite ou cole o código aqui">${escapeHtml(selected)}</textarea>
+                    </div>`,
+                focusConfirm: false,
+                showCancelButton: true,
+                confirmButtonText: 'Inserir',
+                cancelButtonText: 'Cancelar',
+                didOpen: () => {
+                    const languageSelect = document.getElementById('markdownCodeLanguage');
+                    const customLanguage = document.getElementById('markdownCustomCodeLanguage');
+                    languageSelect.addEventListener('change', () => customLanguage.classList.toggle('d-none', languageSelect.value !== 'other'));
+                },
+                preConfirm: () => {
+                    const languageSelect = document.getElementById('markdownCodeLanguage');
+                    const customLanguage = document.getElementById('markdownCustomCodeLanguage');
+                    const language = (languageSelect.value === 'other' ? customLanguage.value : languageSelect.value).trim().toLowerCase();
+                    if (language && !/^[a-z0-9+#._-]{1,40}$/i.test(language)) {
+                        Swal.showValidationMessage('Informe um identificador de linguagem válido.');
+                        return false;
+                    }
+                    return { language, code: document.getElementById('markdownCodeValue').value };
+                }
+            });
+            if (!result.isConfirmed) return;
+            replaceDraftRange(`\n\n\`\`\`${result.value.language}\n${result.value.code}\n\`\`\`\n\n`, selectionStart, selectionEnd);
+        };
+
+        const promptForImage = async () => {
+            const result = await Swal.fire({
+                title: 'Inserir imagem',
+                html: '<div class="text-muted fs-7">A imagem será referenciada pela URL e renderizada no OpenProject.</div>',
+                input: 'url',
+                inputLabel: 'URL da imagem',
+                inputPlaceholder: 'https://exemplo.com/imagem.png',
+                showCancelButton: true,
+                confirmButtonText: 'Inserir',
+                cancelButtonText: 'Cancelar',
+                inputValidator: value => safeUrl(value, true) ? undefined : 'Informe uma URL http(s) válida para a imagem.'
+            });
+            if (!result.isConfirmed) return;
+            const alt = draft.value.slice(draft.selectionStart, draft.selectionEnd) || 'Imagem da User Story';
+            replaceDraftSelection(`![${alt}](${result.value.trim()})`);
+        };
+
+        const promptForTable = async () => {
+            const result = await Swal.fire({
+                title: 'Inserir tabela',
+                html: `
+                    <div class="row g-3 text-start">
+                        <div class="col-6"><label class="form-label" for="markdownTableColumns">Colunas</label><input id="markdownTableColumns" class="form-control" type="number" min="1" max="10" value="3"></div>
+                        <div class="col-6"><label class="form-label" for="markdownTableRows">Linhas de dados</label><input id="markdownTableRows" class="form-control" type="number" min="1" max="20" value="2"></div>
+                    </div>`,
+                focusConfirm: false,
+                showCancelButton: true,
+                confirmButtonText: 'Inserir',
+                cancelButtonText: 'Cancelar',
+                preConfirm: () => {
+                    const columns = Number(document.getElementById('markdownTableColumns').value);
+                    const rows = Number(document.getElementById('markdownTableRows').value);
+                    if (!Number.isInteger(columns) || columns < 1 || columns > 10 || !Number.isInteger(rows) || rows < 1 || rows > 20) {
+                        Swal.showValidationMessage('Informe de 1 a 10 colunas e de 1 a 20 linhas.');
+                        return false;
+                    }
+                    return { columns, rows };
+                }
+            });
+            if (!result.isConfirmed) return;
+
+            const headers = Array.from({ length: result.value.columns }, (_, index) => `Coluna ${index + 1}`);
+            const separator = headers.map(() => '---');
+            const rows = Array.from({ length: result.value.rows }, () => headers.map(() => 'Valor'));
+            replaceDraftSelection(`\n\n| ${headers.join(' | ')} |\n| ${separator.join(' | ')} |\n${rows.map(row => `| ${row.join(' | ')} |`).join('\n')}\n\n`);
+        };
+
+        const uploadEditorImage = async file => {
+            if (!(file instanceof Blob)) return;
+            if (file.size === 0) {
+                await Swal.fire({ icon: 'warning', text: 'A imagem selecionada está vazia.' });
+                return;
+            }
+            if (file.size > maxWorkspaceImageBytes) {
+                await Swal.fire({ icon: 'warning', text: 'A imagem deve ter no máximo 8 MB.' });
+                return;
+            }
+            if (file.type && !['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(file.type)) {
+                await Swal.fire({ icon: 'warning', text: 'Envie uma imagem PNG, JPEG, GIF ou WebP.' });
+                return;
+            }
+
+            const fileName = file instanceof File && file.name ? file.name : 'imagem-colada.png';
+            const formData = new FormData();
+            formData.append('image', file, fileName);
+            Swal.fire({
+                title: 'Enviando imagem',
+                text: 'A imagem será armazenada e inserida na User Story.',
+                allowOutsideClick: false,
+                allowEscapeKey: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            try {
+                const response = await fetch('/ServiceDesk/UploadWorkspaceImage/@Model.Id', { method: 'POST', body: formData });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok || !payload.url) throw new Error(payload.message || 'Não foi possível enviar a imagem.');
+
+                Swal.close();
+                const alt = fileName.replace(/\.[^.]+$/, '') || 'Imagem da User Story';
+                const url = new URL(payload.url, window.location.origin).href;
+                replaceDraftSelection(`![${alt}](${url})`);
+                Swal.fire({ icon: 'success', title: 'Imagem inserida', text: 'Salve o rascunho para manter a referência no documento.', timer: 1800, showConfirmButton: false });
+            } catch (error) {
+                Swal.close();
+                await Swal.fire({ icon: 'error', text: error.message || 'Não foi possível enviar a imagem.' });
+            }
+        };
+
+        const runEditorAction = async action => {
+            switch (action) {
+                case 'paragraph': prefixDraftLines(() => '', /^#{1,6}\s+/); break;
+                case 'heading1': prefixDraftLines(() => '# ', /^#{1,6}\s+/); break;
+                case 'heading2': prefixDraftLines(() => '## ', /^#{1,6}\s+/); break;
+                case 'heading3': prefixDraftLines(() => '### ', /^#{1,6}\s+/); break;
+                case 'heading4': prefixDraftLines(() => '#### ', /^#{1,6}\s+/); break;
+                case 'heading5': prefixDraftLines(() => '##### ', /^#{1,6}\s+/); break;
+                case 'bold': wrapDraftSelection('**', '**', 'texto em negrito'); break;
+                case 'italic': wrapDraftSelection('*', '*', 'texto em itálico'); break;
+                case 'strike': wrapDraftSelection('~~', '~~', 'texto tachado'); break;
+                case 'highlight': wrapDraftSelection('==', '==', 'texto destacado'); break;
+                case 'inlineCode': await promptForInlineCode(); break;
+                case 'bulletList': prefixDraftLines(() => '- ', /^\s*[-*+]\s+/); break;
+                case 'orderedList': prefixDraftLines(index => `${index + 1}. `, /^\s*\d+\.\s+/); break;
+                case 'taskList': prefixDraftLines(() => '- [ ] ', /^\s*[-*+]\s+(\[[ xX]\]\s+)?/); break;
+                case 'quote': prefixDraftLines(() => '> ', /^>\s?/); break;
+                case 'codeBlock': await promptForCodeBlock(); break;
+                case 'link': await promptForLink(); break;
+                case 'table': await promptForTable(); break;
+                case 'image': await promptForImage(); break;
+                case 'uploadImage': storyImageUpload.click(); break;
+                case 'divider': replaceDraftSelection('\n\n---\n\n'); break;
+            }
+            if (action === 'paragraph' || action.startsWith('heading')) requestAnimationFrame(updateBlockFormatLabel);
+        };
+
+        document.getElementById('storyEditorToolbar').addEventListener('click', async event => {
+            const button = event.target.closest('[data-editor-action]');
+            if (!button) return;
+            await runEditorAction(button.dataset.editorAction);
+            button.blur();
+            document.querySelectorAll('#storyEditorToolbar [data-bs-toggle="dropdown"]').forEach(toggle => {
+                bootstrap.Dropdown.getOrCreateInstance(toggle).hide();
+            });
+        });
+
+        previewToggle.addEventListener('click', () => {
+            isPreviewMode = !isPreviewMode;
+            draft.classList.toggle('d-none', isPreviewMode);
+            draftPreview.classList.toggle('d-none', !isPreviewMode);
+            previewToggle.classList.toggle('btn-primary', isPreviewMode);
+            previewToggle.classList.toggle('btn-light-primary', !isPreviewMode);
+            previewToggle.querySelector('span').textContent = isPreviewMode ? 'Editar Markdown' : 'Visualizar';
+            previewToggle.querySelector('i').className = `ki-duotone ${isPreviewMode ? 'ki-pencil' : 'ki-eye'} fs-4`;
+            if (isPreviewMode) renderMarkdownPreview(draft.value);
+            else draft.focus();
+        });
+
+        draft.addEventListener('input', updateDraftMetadata);
+        draft.addEventListener('click', updateBlockFormatLabel);
+        draft.addEventListener('keyup', updateBlockFormatLabel);
+        storyImageUpload.addEventListener('change', async () => {
+            const [file] = storyImageUpload.files;
+            storyImageUpload.value = '';
+            if (file) await uploadEditorImage(file);
+        });
+        draft.addEventListener('paste', async event => {
+            const clipboardImage = Array.from(event.clipboardData?.items ?? [])
+                .find(item => item.type.startsWith('image/'));
+            if (!clipboardImage) return;
+
+            const image = clipboardImage.getAsFile();
+            if (!image) return;
+            event.preventDefault();
+            await uploadEditorImage(image);
+        });
+        draft.addEventListener('keydown', event => {
+            if (!event.ctrlKey && !event.metaKey) return;
+            const shortcut = event.key.toLowerCase();
+            if (shortcut === 'b') { event.preventDefault(); wrapDraftSelection('**', '**', 'texto em negrito'); }
+            if (shortcut === 'i') { event.preventDefault(); wrapDraftSelection('*', '*', 'texto em itálico'); }
+            if (shortcut === 'k') { event.preventDefault(); promptForLink(); }
+        });
+        draftPreview.addEventListener('click', event => {
+            const image = event.target.closest('img[data-editor-image-url]');
+            if (image) promptForImageWidth(image);
+        });
+        document.querySelectorAll('#storyEditorToolbar [title]').forEach(element => new bootstrap.Tooltip(element));
+        updateDraftMetadata();
+        updateBlockFormatLabel();
+
         document.getElementById('saveDraft').onclick = async () => {
             const response = await fetch('/ServiceDesk/SaveDraft/@Model.Id', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ requirementMarkdown: document.getElementById('draft').value })
+                body: JSON.stringify({ requirementMarkdown: draft.value })
             });
             Swal.fire({ icon: response.ok ? 'success' : 'error', text: response.ok ? 'Rascunho salvo com sucesso.' : 'Não foi possível salvar o rascunho.' });
         };
@@ -306,7 +894,7 @@
 
         createUserStoryButton?.addEventListener('click', async () => {
             const projectId = Number(projectSelect?.value);
-            const requirementMarkdown = document.getElementById('draft').value;
+            const requirementMarkdown = draft.value;
             if (!hasExistingUserStory && !projectId) {
                 Swal.fire({ icon: 'warning', text: 'Selecione o projeto de destino no OpenProject.' });
                 return;
@@ -392,6 +980,41 @@
     .attachment-item { display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; background: var(--bs-gray-200); border-radius: 6px; color: var(--bs-primary); }
     .attachment-thumb { width: 124px; border: 1px solid var(--bs-gray-700); border-radius: 6px; padding: 5px; background: var(--bs-gray-100); overflow: hidden; }
     .attachment-thumb img { display: block; width: 112px; height: 76px; object-fit: cover; border-radius: 4px; }
+    .user-story-editor { border: 1px solid var(--bs-border-color); border-radius: .65rem; overflow: visible; background: var(--bs-gray-100); transition: border-color .2s ease, box-shadow .2s ease; }
+    .user-story-editor:focus-within { border-color: var(--bs-primary); box-shadow: 0 0 0 .2rem rgba(var(--bs-primary-rgb), .12); }
+    .user-story-editor-toolbar { display: flex; flex-wrap: nowrap; align-items: center; gap: .45rem; padding: .65rem .75rem; border-bottom: 1px solid var(--bs-border-color); background: var(--bs-gray-200); position: relative; z-index: 3; }
+    .user-story-editor-toolbar-group { display: inline-flex; flex: 0 0 auto; align-items: center; gap: .25rem; padding-right: .45rem; border-right: 1px solid var(--bs-border-color); }
+    .user-story-editor-toolbar-group:last-of-type { border-right: 0; }
+    .user-story-editor-toolbar .btn-light { background: transparent; color: var(--bs-gray-700); }
+    .user-story-editor-toolbar .btn-light:hover { color: var(--bs-primary); background: var(--bs-primary-light); }
+    .user-story-editor .editor-block-format .dropdown-item { display: flex; align-items: center; min-height: 2.35rem; padding-left: 2rem; position: relative; }
+    .user-story-editor .editor-block-format .dropdown-item.active::before { content: "✓"; position: absolute; left: .7rem; color: var(--bs-primary); font-weight: 700; }
+    .user-story-editor .editor-block-format .dropdown-menu { z-index: 1060; }
+    .user-story-editor-surface { position: relative; min-height: 33rem; background: var(--bs-body-bg); }
+    .user-story-editor-input { display: block; width: 100%; min-height: 33rem; resize: vertical; border: 0; outline: 0; padding: 1.4rem 1.5rem; color: var(--bs-body-color); background: transparent; font-size: .95rem; line-height: 1.75; }
+    .user-story-editor-input::placeholder { color: var(--bs-gray-500); }
+    .user-story-editor-preview { min-height: 33rem; padding: 1.4rem 1.5rem; color: var(--bs-body-color); line-height: 1.75; overflow-wrap: anywhere; }
+    .user-story-editor-preview h1, .user-story-editor-preview h2, .user-story-editor-preview h3, .user-story-editor-preview h4 { margin: 1.2rem 0 .6rem; color: var(--bs-heading-color); }
+    .user-story-editor-preview h1:first-child, .user-story-editor-preview h2:first-child { margin-top: 0; }
+    .user-story-editor-preview p { margin: 0 0 .85rem; }
+    .user-story-editor-preview ul, .user-story-editor-preview ol { margin: 0 0 .85rem; padding-left: 1.55rem; }
+    .user-story-editor-preview blockquote { margin: 1rem 0; padding: .65rem 1rem; border-left: 3px solid var(--bs-primary); background: var(--bs-primary-light); color: var(--bs-gray-700); }
+    .user-story-editor-preview code { padding: .14rem .35rem; border-radius: .25rem; background: var(--bs-gray-200); color: var(--bs-primary); font-family: var(--bs-font-monospace); }
+    .user-story-editor-preview pre { margin: 1rem 0; padding: 1rem; border-radius: .5rem; background: #151521; overflow-x: auto; }
+    .user-story-editor-preview pre code { padding: 0; background: transparent; color: #d8dbe8; }
+    .user-story-editor-preview mark { padding: .05rem .2rem; border-radius: .2rem; background: rgba(var(--bs-warning-rgb), .28); color: inherit; }
+    .user-story-editor-preview img { display: block; max-width: 100%; max-height: 26rem; margin: 1rem 0; border-radius: .5rem; border: 1px solid var(--bs-border-color); object-fit: contain; }
+    .user-story-editor-preview img[data-editor-image-url] { cursor: ew-resize; }
+    .user-story-editor-preview img[data-editor-image-url]:hover { border-color: var(--bs-primary); box-shadow: 0 0 0 .2rem rgba(var(--bs-primary-rgb), .12); }
+    .user-story-editor-preview a { color: var(--bs-primary); text-decoration: underline; }
+    .user-story-editor-preview hr { margin: 1.4rem 0; border-color: var(--bs-border-color); opacity: 1; }
+    .user-story-editor-preview .markdown-table { min-width: 32rem; margin-top: .75rem; background: var(--bs-body-bg); }
+    .user-story-editor-preview .markdown-table th { font-weight: 700; color: var(--bs-heading-color); background: var(--bs-gray-100); }
+    .user-story-editor-preview .markdown-table th, .user-story-editor-preview .markdown-table td { padding: .65rem .8rem; vertical-align: top; }
+    .markdown-task { list-style: none; margin-left: -1.25rem; }
+    .markdown-task input { margin-right: .35rem; accent-color: var(--bs-primary); }
+    .user-story-editor-footer { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem 1rem; padding: .65rem 1rem; border-top: 1px solid var(--bs-border-color); color: var(--bs-gray-600); font-size: .78rem; background: var(--bs-gray-100); }
     @@media (max-width: 1199.98px) { .service-desk-card .card-header { flex-basis: auto; height: auto; min-height: 72px; } }
-    @@media (max-width: 991.98px) { .ticket-content-header { align-items: flex-start; flex-direction: column; } .ticket-metadata { flex-wrap: wrap; } }
+    @@media (max-width: 991.98px) { .ticket-content-header { align-items: flex-start; flex-direction: column; } .ticket-metadata { flex-wrap: wrap; } .user-story-editor-toolbar-group { border-right: 0; padding-right: 0; } }
+    @@media (max-width: 575.98px) { .user-story-editor-toolbar { gap: .35rem; padding: .5rem; } .user-story-editor-toolbar .ms-auto { margin-left: 0 !important; } .user-story-editor-input, .user-story-editor-preview { min-height: 27rem; padding: 1rem; } }
 </style>

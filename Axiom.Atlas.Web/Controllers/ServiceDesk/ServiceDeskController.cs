@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Axiom.Atlas.Application.DTOs.ServiceDesk;
 using ClosedXML.Excel;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Axiom.Atlas.Web.Controllers.ServiceDesk
@@ -313,6 +314,55 @@ namespace Axiom.Atlas.Web.Controllers.ServiceDesk
         {
             var response = await CreateClient().PutAsJsonAsync($"api/glpi/tickets/{id}/draft", request);
             return new ContentResult { Content = await response.Content.ReadAsStringAsync(), ContentType = "application/json", StatusCode = (int)response.StatusCode };
+        }
+
+        [HttpPost]
+        [RequestSizeLimit(8 * 1024 * 1024)]
+        public async Task<IActionResult> UploadWorkspaceImage(Guid id, IFormFile? image)
+        {
+            if (image == null || image.Length == 0)
+                return BadRequest(new { message = "Selecione uma imagem para enviar." });
+            if (image.Length > 8 * 1024 * 1024)
+                return BadRequest(new { message = "A imagem deve ter no máximo 8 MB." });
+
+            using var form = new MultipartFormDataContent();
+            await using var stream = image.OpenReadStream();
+            using var fileContent = new StreamContent(stream);
+            var contentType = string.IsNullOrWhiteSpace(image.ContentType) ? "application/octet-stream" : image.ContentType;
+            fileContent.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+            form.Add(fileContent, "image", image.FileName);
+
+            var response = await CreateClient().PostAsync($"api/glpi/tickets/{id}/images", form);
+            if (!response.IsSuccessStatusCode)
+            {
+                return new ContentResult
+                {
+                    Content = await response.Content.ReadAsStringAsync(),
+                    ContentType = "application/json",
+                    StatusCode = (int)response.StatusCode
+                };
+            }
+
+            var uploaded = await response.Content.ReadFromJsonAsync<WorkspaceImageUploadResultDto>();
+            if (uploaded == null) return StatusCode(502, new { message = "A imagem foi enviada, mas a integração não retornou sua identificação." });
+
+            var imagePath = Url.Action(nameof(WorkspaceImage), new { imageId = uploaded.Id })
+                ?? $"/ServiceDesk/WorkspaceImage/{uploaded.Id}";
+            uploaded.Url = $"{Request.Scheme}://{Request.Host}{imagePath}";
+            return Json(uploaded);
+        }
+
+        [AllowAnonymous]
+        [HttpGet("ServiceDesk/WorkspaceImage/{imageId:guid}")]
+        public async Task<IActionResult> WorkspaceImage(Guid imageId)
+        {
+            var response = await _httpClientFactory.CreateClient("Api")
+                .GetAsync($"api/glpi/tickets/workspace-images/{imageId}");
+            if (!response.IsSuccessStatusCode) return NotFound();
+
+            return File(
+                await response.Content.ReadAsByteArrayAsync(),
+                response.Content.Headers.ContentType?.ToString() ?? "application/octet-stream");
         }
 
         [HttpGet]

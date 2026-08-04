@@ -32,6 +32,12 @@ namespace Axiom.Atlas.Application.DTOs.ServiceDesk
     }
     public class SaveRequirementDraftRequest { public string? RequirementMarkdown { get; set; } }
 
+    public class WorkspaceImageUploadResultDto
+    {
+        public Guid Id { get; set; }
+        public string Url { get; set; } = string.Empty;
+    }
+
     public class CreateOpenProjectUserStoryRequest
     {
         public int ProjectId { get; set; }

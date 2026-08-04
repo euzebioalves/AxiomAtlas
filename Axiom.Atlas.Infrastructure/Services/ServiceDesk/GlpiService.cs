@@ -30,6 +30,7 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
         private static readonly ConcurrentDictionary<string, GlpiSearchFieldMetadata> SearchFieldMetadata = new();
         private static readonly ConcurrentDictionary<string, SemaphoreSlim> SessionLocks = new();
         private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> WorkspaceLocks = new();
+        private const int MaxWorkspaceImageBytes = 8 * 1024 * 1024;
 
         public GlpiService(
             IHttpClientFactory httpClientFactory,
@@ -131,6 +132,47 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             workspace.UpdatedAt = DateTime.UtcNow;
             await _context.SaveChangesAsync();
             return ToDto(workspace);
+        }
+
+        public async Task<WorkspaceImageUploadResultDto> UploadWorkspaceImageAsync(
+            Guid workspaceId,
+            string? fileName,
+            byte[] content)
+        {
+            if (content.Length == 0) throw new InvalidOperationException("Selecione uma imagem para enviar.");
+            if (content.Length > MaxWorkspaceImageBytes) throw new InvalidOperationException("A imagem deve ter no máximo 8 MB.");
+
+            var contentType = DetectImageContentType(content);
+            if (contentType == null)
+                throw new InvalidOperationException("Envie uma imagem PNG, JPEG, GIF ou WebP válida.");
+
+            var workspaceExists = await _context.GlpiTicketWorkspaces.AnyAsync(x => x.Id == workspaceId);
+            if (!workspaceExists) throw new KeyNotFoundException("Chamado importado não encontrado.");
+
+            var safeFileName = Path.GetFileName(fileName ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(safeFileName)) safeFileName = "imagem-user-story";
+            if (safeFileName.Length > 255) safeFileName = safeFileName[..255];
+
+            var image = new GlpiTicketWorkspaceImage
+            {
+                WorkspaceId = workspaceId,
+                FileName = safeFileName,
+                ContentType = contentType,
+                Content = content,
+                CreatedAt = DateTime.UtcNow
+            };
+            _context.GlpiTicketWorkspaceImages.Add(image);
+            await _context.SaveChangesAsync();
+            return new WorkspaceImageUploadResultDto { Id = image.Id };
+        }
+
+        public async Task<(byte[] Content, string ContentType)?> GetWorkspaceImageAsync(Guid imageId)
+        {
+            var image = await _context.GlpiTicketWorkspaceImages.AsNoTracking()
+                .Where(x => x.Id == imageId)
+                .Select(x => new { x.Content, x.ContentType })
+                .FirstOrDefaultAsync();
+            return image == null ? null : (image.Content, image.ContentType);
         }
 
         public Task<List<OpenProjectProjectOptionDto>> GetOpenProjectProjectsAsync() => _openProjectService.GetProjectsAsync();
@@ -751,6 +793,19 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
 
         private static bool ContainsAny(string? value, params string[] terms) =>
             !string.IsNullOrWhiteSpace(value) && terms.Any(term => value.Contains(term, StringComparison.OrdinalIgnoreCase));
+
+        private static string? DetectImageContentType(byte[] content)
+        {
+            if (content.Length >= 8 && content.AsSpan(0, 8).SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }))
+                return "image/png";
+            if (content.Length >= 3 && content[0] == 255 && content[1] == 216 && content[2] == 255)
+                return "image/jpeg";
+            if (content.Length >= 6 && (content.AsSpan(0, 6).SequenceEqual("GIF87a"u8) || content.AsSpan(0, 6).SequenceEqual("GIF89a"u8)))
+                return "image/gif";
+            if (content.Length >= 12 && content.AsSpan(0, 4).SequenceEqual("RIFF"u8) && content.AsSpan(8, 4).SequenceEqual("WEBP"u8))
+                return "image/webp";
+            return null;
+        }
 
         public async Task<GlpiTicketWorkspaceDto?> GetWorkspaceAsync(Guid id)
         {

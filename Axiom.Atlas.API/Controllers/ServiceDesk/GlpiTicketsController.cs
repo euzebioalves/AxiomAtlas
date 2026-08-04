@@ -123,6 +123,42 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
             catch (KeyNotFoundException) { return NotFound(); }
         }
 
+        [HttpPost("{id:guid}/images")]
+        [RequestSizeLimit(8 * 1024 * 1024)]
+        public async Task<IActionResult> UploadWorkspaceImage(Guid id, IFormFile? image)
+        {
+            if (image == null || image.Length == 0)
+                return BadRequest(new { message = "Selecione uma imagem para enviar." });
+            if (image.Length > 8 * 1024 * 1024)
+                return BadRequest(new { message = "A imagem deve ter no máximo 8 MB." });
+
+            try
+            {
+                await using var stream = image.OpenReadStream();
+                using var buffer = new MemoryStream();
+                await stream.CopyToAsync(buffer);
+                return Ok(await _glpiService.UploadWorkspaceImageAsync(id, image.FileName, buffer.ToArray()));
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound();
+            }
+            catch (Exception exception)
+            {
+                return BadRequest(new { message = exception.Message });
+            }
+        }
+
+        // OpenProject renders Markdown images directly. The opaque GUID keeps the public URL unguessable,
+        // while the upload endpoint itself remains authenticated.
+        [AllowAnonymous]
+        [HttpGet("workspace-images/{imageId:guid}")]
+        public async Task<IActionResult> GetWorkspaceImage(Guid imageId)
+        {
+            var image = await _glpiService.GetWorkspaceImageAsync(imageId);
+            return image == null ? NotFound() : File(image.Value.Content, image.Value.ContentType);
+        }
+
         [HttpGet("openproject-projects")]
         public async Task<IActionResult> GetOpenProjectProjects()
         {
