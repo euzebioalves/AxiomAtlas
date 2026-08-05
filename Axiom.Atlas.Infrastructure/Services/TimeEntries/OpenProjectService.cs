@@ -1296,6 +1296,130 @@ namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
             return results;
         }
 
+        /// <summary>
+        /// Performs a Service Desk-oriented lookup. The OpenProject list endpoint is inspected for
+        /// identifiers, titles, descriptions and custom fields; activities are then inspected for
+        /// Work Packages not matched by those fields so private historical comments are included too.
+        /// </summary>
+        public async Task<OpenProjectWorkPackageLookupResponseDto> SearchServiceDeskWorkPackagesAsync(
+            string query,
+            CancellationToken cancellationToken = default)
+        {
+            var normalizedQuery = query?.Trim();
+            if (string.IsNullOrWhiteSpace(normalizedQuery))
+                return new OpenProjectWorkPackageLookupResponseDto();
+            if (normalizedQuery.Length > 200)
+                throw new InvalidOperationException("A pesquisa pode ter no máximo 200 caracteres.");
+
+            const int pageSize = 100;
+            const int maxWorkPackagesToScan = 5000;
+            const int maxResults = 100;
+            var client = await CreateConfiguredClientAsync();
+            var baseUrl = await GetActiveOpenProjectBaseUrlAsync();
+            var response = new OpenProjectWorkPackageLookupResponseDto { Query = normalizedQuery };
+            var foundIds = new HashSet<int>();
+
+            for (var offset = 1; response.ScannedWorkPackages < maxWorkPackagesToScan; offset += pageSize)
+            {
+                using var pageResponse = await client.GetAsync(
+                    $"api/v3/work_packages?pageSize={pageSize}&offset={offset}&monitorTimestamp={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}",
+                    cancellationToken);
+                if (!pageResponse.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException(
+                        $"OpenProject retornou {(int)pageResponse.StatusCode} ao pesquisar Work Packages: {await ReadOpenProjectErrorMessageAsync(pageResponse)}");
+                }
+
+                using var document = JsonDocument.Parse(await pageResponse.Content.ReadAsStringAsync(cancellationToken));
+                if (!document.RootElement.TryGetProperty("_embedded", out var embedded) ||
+                    !embedded.TryGetProperty("elements", out var elements) ||
+                    elements.ValueKind != JsonValueKind.Array)
+                {
+                    break;
+                }
+
+                var unmatchedCandidates = new List<OpenProjectWorkPackageLookupItemDto>();
+                foreach (var workPackage in elements.EnumerateArray())
+                {
+                    if (!workPackage.TryGetProperty("id", out var idElement) || !idElement.TryGetInt32(out var id) || id <= 0)
+                        continue;
+
+                    response.ScannedWorkPackages++;
+                    var matchedIn = GetDirectServiceDeskMatches(workPackage, normalizedQuery);
+                    var item = ReadServiceDeskLookupItem(workPackage, baseUrl, matchedIn);
+                    if (item == null) continue;
+
+                    if (matchedIn.Count > 0)
+                    {
+                        if (foundIds.Add(item.Id) && response.Items.Count < maxResults)
+                            response.Items.Add(item);
+                    }
+                    else
+                    {
+                        unmatchedCandidates.Add(item);
+                    }
+                }
+
+                // A comment cannot be filtered by the OpenProject collection endpoint. Keep the
+                // requests bounded and concurrent so the lookup remains usable in larger instances.
+                using var concurrency = new SemaphoreSlim(6, 6);
+                var commentMatches = await Task.WhenAll(unmatchedCandidates.Select(async candidate =>
+                {
+                    await concurrency.WaitAsync(cancellationToken);
+                    try
+                    {
+                        return await WorkPackageCommentsContainAsync(client, candidate.Id, normalizedQuery, cancellationToken)
+                            ? candidate
+                            : null;
+                    }
+                    finally
+                    {
+                        concurrency.Release();
+                    }
+                }));
+
+                foreach (var item in commentMatches.Where(item => item != null).Cast<OpenProjectWorkPackageLookupItemDto>())
+                {
+                    item.MatchedIn.Add("Comentário");
+                    if (foundIds.Add(item.Id) && response.Items.Count < maxResults)
+                        response.Items.Add(item);
+                }
+
+                if (response.Items.Count >= maxResults)
+                {
+                    response.IsTruncated = true;
+                    break;
+                }
+
+                if (elements.GetArrayLength() < pageSize)
+                    break;
+            }
+
+            if (response.ScannedWorkPackages >= maxWorkPackagesToScan)
+                response.IsTruncated = true;
+
+            response.Items = response.Items
+                .OrderByDescending(item => item.MatchedIn.Any(match => match is "ID da WP" or "Campo customizado"))
+                .ThenByDescending(item => item.UpdatedAt)
+                .ThenBy(item => item.Id)
+                .ToList();
+            return response;
+        }
+
+        public async Task<OpenProjectWorkPackageLookupItemDto?> GetServiceDeskWorkPackageAsync(
+            int workPackageId,
+            CancellationToken cancellationToken = default)
+        {
+            if (workPackageId <= 0) return null;
+            var client = await CreateConfiguredClientAsync();
+            using var response = await client.GetAsync($"api/v3/work_packages/{workPackageId}", cancellationToken);
+            if (!response.IsSuccessStatusCode) return null;
+
+            using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+            var baseUrl = await GetActiveOpenProjectBaseUrlAsync();
+            return ReadServiceDeskLookupItem(document.RootElement, baseUrl, new List<string>());
+        }
+
         public async Task<List<OpenProjectWorkPackageMonitoringItemDto>> GetWorkPackagesForStatusMonitoringAsync(
             CancellationToken cancellationToken = default)
         {
@@ -1478,6 +1602,117 @@ namespace Axiom.Atlas.Infrastructure.Services.TimeEntries
             }
 
             return results;
+        }
+
+        private static List<string> GetDirectServiceDeskMatches(JsonElement workPackage, string query)
+        {
+            var matches = new List<string>();
+            if (workPackage.TryGetProperty("id", out var id) &&
+                string.Equals(id.ToString(), query, StringComparison.OrdinalIgnoreCase))
+            {
+                matches.Add("ID da WP");
+            }
+
+            if (workPackage.TryGetProperty("subject", out var subject) && ContainsText(subject, query))
+                matches.Add("Título");
+
+            if (workPackage.TryGetProperty("description", out var description) && ContainsText(description, query))
+                matches.Add("Descrição");
+
+            foreach (var property in workPackage.EnumerateObject().Where(property =>
+                         property.Name.StartsWith("customField", StringComparison.OrdinalIgnoreCase) ||
+                         property.Name.Contains("cliente", StringComparison.OrdinalIgnoreCase) ||
+                         property.Name.Contains("client", StringComparison.OrdinalIgnoreCase)))
+            {
+                if (!ContainsText(property.Value, query)) continue;
+                matches.Add(property.Name.StartsWith("customField", StringComparison.OrdinalIgnoreCase)
+                    ? "Campo customizado"
+                    : "Cliente");
+            }
+
+            return matches.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        }
+
+        private static bool ContainsText(JsonElement value, string query)
+        {
+            return value.ValueKind switch
+            {
+                JsonValueKind.String => value.GetString()?.Contains(query, StringComparison.OrdinalIgnoreCase) == true,
+                JsonValueKind.Number => value.ToString().Contains(query, StringComparison.OrdinalIgnoreCase),
+                JsonValueKind.Array => value.EnumerateArray().Any(item => ContainsText(item, query)),
+                JsonValueKind.Object => value.EnumerateObject().Any(property => ContainsText(property.Value, query)),
+                _ => false
+            };
+        }
+
+        private static async Task<bool> WorkPackageCommentsContainAsync(
+            HttpClient client,
+            int workPackageId,
+            string query,
+            CancellationToken cancellationToken)
+        {
+            const int pageSize = 100;
+            for (var offset = 1; ; offset += pageSize)
+            {
+                using var response = await client.GetAsync(
+                    $"api/v3/work_packages/{workPackageId}/activities?pageSize={pageSize}&offset={offset}",
+                    cancellationToken);
+                if (!response.IsSuccessStatusCode) return false;
+
+                using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+                if (!document.RootElement.TryGetProperty("_embedded", out var embedded) ||
+                    !embedded.TryGetProperty("elements", out var activities) ||
+                    activities.ValueKind != JsonValueKind.Array)
+                {
+                    return false;
+                }
+
+                foreach (var activity in activities.EnumerateArray())
+                {
+                    if (activity.TryGetProperty("comment", out var comment) && ContainsText(comment, query))
+                        return true;
+                }
+
+                if (activities.GetArrayLength() < pageSize) return false;
+            }
+        }
+
+        private static OpenProjectWorkPackageLookupItemDto? ReadServiceDeskLookupItem(
+            JsonElement element,
+            string? baseUrl,
+            List<string> matchedIn)
+        {
+            if (!element.TryGetProperty("id", out var idElement) || !idElement.TryGetInt32(out var id) || id <= 0)
+                return null;
+
+            var subject = element.TryGetProperty("subject", out var subjectElement)
+                ? subjectElement.GetString() ?? $"Work Package #{id}"
+                : $"Work Package #{id}";
+            var links = element.TryGetProperty("_links", out var linksElement) && linksElement.ValueKind == JsonValueKind.Object
+                ? linksElement
+                : default;
+            string? LinkTitle(string name) => links.ValueKind == JsonValueKind.Object &&
+                                               links.TryGetProperty(name, out var link) &&
+                                               link.TryGetProperty("title", out var title)
+                ? title.GetString()
+                : null;
+            DateTime? updatedAt = element.TryGetProperty("updatedAt", out var updatedAtElement) &&
+                                  DateTime.TryParse(updatedAtElement.GetString(), out var parsedUpdatedAt)
+                ? parsedUpdatedAt.ToUniversalTime()
+                : null;
+
+            return new OpenProjectWorkPackageLookupItemDto
+            {
+                Id = id,
+                Subject = subject,
+                Url = BuildWorkPackageWebUrl(baseUrl, id, null),
+                Type = LinkTitle("type"),
+                Status = LinkTitle("status"),
+                Project = LinkTitle("project"),
+                Responsible = LinkTitle("responsible") ?? LinkTitle("assignee") ?? LinkTitle("author"),
+                UpdatedAt = updatedAt,
+                MatchedIn = matchedIn
+            };
         }
 
         public async Task<SyncTimeEntryResult> SyncTimeEntryAsync(TimeEntry entry)

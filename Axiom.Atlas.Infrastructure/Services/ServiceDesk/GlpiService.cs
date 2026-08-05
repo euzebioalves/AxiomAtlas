@@ -134,6 +134,178 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             return ToDto(workspace);
         }
 
+        public async Task<OpenProjectWorkPackageLookupResponseDto> SearchExistingWorkPackagesAsync(
+            Guid workspaceId,
+            string query,
+            CancellationToken cancellationToken = default)
+        {
+            var normalizedQuery = query?.Trim();
+            if (string.IsNullOrWhiteSpace(normalizedQuery))
+            {
+                return new OpenProjectWorkPackageLookupResponseDto();
+            }
+
+            // The OpenProject collection endpoint intentionally returns a compact representation and
+            // can omit custom fields and the complete description.  Before doing a broad textual
+            // lookup, use the already reconciled GLPI/OpenProject projection when the user searched
+            // for this workspace's GLPI number.  The Work Package itself is then read directly from
+            // OpenProject, which also validates that the referenced record is still accessible.
+            var workspace = await _context.GlpiTicketWorkspaces
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Id == workspaceId, cancellationToken)
+                ?? throw new KeyNotFoundException("Chamado importado não encontrado.");
+
+            var ticketNumber = normalizedQuery.TrimStart('#');
+            if (!long.TryParse(ticketNumber, out var glpiTicketId) || glpiTicketId != workspace.GlpiTicketId)
+            {
+                return await _openProjectService.SearchServiceDeskWorkPackagesAsync(normalizedQuery, cancellationToken);
+            }
+
+            var workPackageIds = new HashSet<int>();
+            if (workspace.OpenProjectWorkPackageId is > 0)
+            {
+                workPackageIds.Add(workspace.OpenProjectWorkPackageId.Value);
+            }
+
+            var workspaceUrlId = ExtractWorkPackageId(workspace.OpenProjectWorkPackageUrl)
+                ?? ExtractWorkPackageId(workspace.GlpiDevOpsUrl);
+            if (workspaceUrlId is > 0)
+            {
+                workPackageIds.Add(workspaceUrlId.Value);
+            }
+
+            var projectedWorkPackageIds = await _context.GlpiImprovementTickets
+                .AsNoTracking()
+                .Where(x => x.GlpiTicketId == glpiTicketId && x.WorkPackageId != null)
+                .Select(x => x.WorkPackageId!.Value)
+                .ToListAsync(cancellationToken);
+            foreach (var workPackageId in projectedWorkPackageIds.Where(id => id > 0))
+            {
+                workPackageIds.Add(workPackageId);
+            }
+
+            if (workPackageIds.Count == 0)
+            {
+                return await _openProjectService.SearchServiceDeskWorkPackagesAsync(normalizedQuery, cancellationToken);
+            }
+
+            var response = new OpenProjectWorkPackageLookupResponseDto
+            {
+                Query = normalizedQuery,
+                ScannedWorkPackages = workPackageIds.Count
+            };
+            foreach (var workPackageId in workPackageIds.OrderBy(id => id))
+            {
+                var workPackage = await _openProjectService.GetServiceDeskWorkPackageAsync(workPackageId, cancellationToken);
+                if (workPackage == null)
+                {
+                    continue;
+                }
+
+                workPackage.MatchedIn.Add("Vínculo GLPI–OpenProject");
+                response.Items.Add(workPackage);
+            }
+
+            return response;
+        }
+
+        public async Task<GlpiTicketWorkspaceDto> LinkExistingWorkPackageAsync(
+            Guid workspaceId,
+            int workPackageId,
+            CancellationToken cancellationToken = default)
+        {
+            var workspaceLock = WorkspaceLocks.GetOrAdd(workspaceId, _ => new SemaphoreSlim(1, 1));
+            await workspaceLock.WaitAsync(cancellationToken);
+            try
+            {
+                var workspace = await _context.GlpiTicketWorkspaces.FindAsync([workspaceId], cancellationToken)
+                    ?? throw new KeyNotFoundException("Chamado importado não encontrado.");
+                var workPackage = await GetExistingWorkPackageRequiredAsync(workPackageId, cancellationToken);
+
+                workspace.OpenProjectWorkPackageId = workPackage.Id;
+                workspace.OpenProjectWorkPackageUrl = workPackage.Url;
+                await UpdateGlpiDevOpsUrlAsync(workspace, workPackage.Url!);
+                workspace.GlpiDevOpsUrl = workPackage.Url;
+                workspace.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync(cancellationToken);
+
+                try
+                {
+                    await RefreshImprovementTicketWorkPackageProjectionAsync(workspace);
+                }
+                catch
+                {
+                    // The scheduled synchronization will reconcile the management projection.
+                }
+
+                return ToDto(workspace);
+            }
+            finally
+            {
+                workspaceLock.Release();
+            }
+        }
+
+        public async Task<GlpiTicketWorkspaceDto> AddExistingWorkPackagePrivateCommentAsync(
+            Guid workspaceId,
+            int workPackageId,
+            CancellationToken cancellationToken = default)
+        {
+            var workspaceLock = WorkspaceLocks.GetOrAdd(workspaceId, _ => new SemaphoreSlim(1, 1));
+            await workspaceLock.WaitAsync(cancellationToken);
+            try
+            {
+                var workspace = await _context.GlpiTicketWorkspaces.FindAsync([workspaceId], cancellationToken)
+                    ?? throw new KeyNotFoundException("Chamado importado não encontrado.");
+                var workPackage = await GetExistingWorkPackageRequiredAsync(workPackageId, cancellationToken);
+                var setting = await _context.Integrations.FirstOrDefaultAsync(x => x.Provider == "GLPI" && x.IsActive)
+                    ?? throw new InvalidOperationException("GLPI não configurado.");
+                using var client = CreateClient(setting.BaseUrl!, UnprotectRequired(setting.SecondaryToken, "APP_TOKEN"));
+                var session = await GetCachedSessionAsync(client, setting.BaseUrl!, UnprotectRequired(setting.PrimaryToken, "USER_TOKEN"), cancellationToken);
+                var content = $"Work Package #{workPackage.Id}: {workPackage.Url}";
+                using var request = new HttpRequestMessage(HttpMethod.Post, "ITILFollowup")
+                {
+                    Content = JsonContent.Create(new
+                    {
+                        input = new
+                        {
+                            itemtype = "Ticket",
+                            items_id = workspace.GlpiTicketId,
+                            content,
+                            is_private = 1
+                        }
+                    })
+                };
+                request.Headers.TryAddWithoutValidation("Session-Token", session);
+                using var postResponse = await client.SendAsync(request, cancellationToken);
+                if (!postResponse.IsSuccessStatusCode)
+                {
+                    throw new InvalidOperationException(
+                        $"GLPI retornou {(int)postResponse.StatusCode} ao registrar o comentário privado: {SanitizeGlpiResponse(await postResponse.Content.ReadAsStringAsync(cancellationToken))}");
+                }
+
+                using var followUps = await GetJsonAsync(client, session, $"Ticket/{workspace.GlpiTicketId}/ITILFollowup", cancellationToken);
+                workspace.FollowUpsJson = await EnrichFollowUpsAsync(client, session, followUps.RootElement);
+                workspace.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync(cancellationToken);
+                return ToDto(workspace);
+            }
+            finally
+            {
+                workspaceLock.Release();
+            }
+        }
+
+        private async Task<OpenProjectWorkPackageLookupItemDto> GetExistingWorkPackageRequiredAsync(
+            int workPackageId,
+            CancellationToken cancellationToken)
+        {
+            var workPackage = await _openProjectService.GetServiceDeskWorkPackageAsync(workPackageId, cancellationToken);
+            if (workPackage == null || string.IsNullOrWhiteSpace(workPackage.Url))
+                throw new InvalidOperationException("A Work Package selecionada não foi encontrada no OpenProject ativo.");
+            return workPackage;
+        }
+
         public async Task<WorkspaceImageUploadResultDto> UploadWorkspaceImageAsync(
             Guid workspaceId,
             string? fileName,
@@ -268,42 +440,174 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             }
         }
 
-        public async Task<GlpiImprovementTicketsResponse> GetImprovementTicketsAsync(int page, int pageSize, string? statusFilter)
+        public async Task<GlpiImprovementTicketsResponse> GetImprovementTicketsAsync(
+            ServiceDeskQueueQueryDto request,
+            string? currentUserId)
         {
-            page = Math.Max(1, page);
-            pageSize = pageSize is 10 or 25 or 50 or 100 ? pageSize : 25;
-            var normalizedStatusFilter = NormalizeStatusFilter(statusFilter);
-            var query = _context.GlpiImprovementTickets.AsNoTracking()
-                .Where(x => x.IsInImprovementQueue);
-            query = normalizedStatusFilter switch
-            {
-                "new" => query.Where(x => x.StatusCode == 1),
-                "processing_assigned" => query.Where(x => x.StatusCode == 2),
-                "processing_planned" => query.Where(x => x.StatusCode == 3),
-                "pending" => query.Where(x => x.StatusCode == 4),
-                "solved" => query.Where(x => x.StatusCode == 5),
-                "closed" => query.Where(x => x.StatusCode == 6),
-                "not_solved" => query.Where(x => x.StatusCode != 5 && x.StatusCode != 6),
-                _ => query
-            };
-
-            var totalCount = await query.CountAsync();
-            var lastSynchronizedAt = await query.Select(x => (DateTime?)x.LastSynchronizedAt).MaxAsync();
-            var tickets = await query.OrderBy(x => x.OpenedAt)
-                .ThenBy(x => x.GlpiTicketId)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
+            request ??= new ServiceDeskQueueQueryDto();
+            var page = Math.Max(1, request.Page);
+            var pageSize = request.PageSize is 10 or 25 or 50 or 100 ? request.PageSize : 25;
+            var normalizedStatusFilter = NormalizeStatusFilter(request.Status);
+            var backlog = await GetUnifiedBacklogAsync(currentUserId);
+            var management = await _context.GlpiTicketManagement.AsNoTracking()
+                .ToDictionaryAsync(x => x.GlpiTicketId);
+            var users = await _context.Users.AsNoTracking()
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.FullName)
+                .Select(x => new ServiceDeskUserOptionDto { Id = x.Id, Name = x.FullName })
                 .ToListAsync();
+            var usersById = users.ToDictionary(x => x.Id, x => x.Name);
+            var currentUserGuid = Guid.TryParse(currentUserId, out var parsedCurrentUser) ? parsedCurrentUser : (Guid?)null;
+
+            foreach (var item in backlog.Items)
+            {
+                if (!management.TryGetValue(item.GlpiTicketId, out var metadata))
+                    continue;
+
+                if (item.Stage != "completed" && IsQueueStage(metadata.Stage))
+                {
+                    item.Stage = metadata.Stage!;
+                    item.StageLabel = GetQueueStageLabel(metadata.Stage);
+                }
+                if (IsQueuePriority(metadata.Priority))
+                {
+                    item.Priority = metadata.Priority!;
+                    item.PriorityReason = "Prioridade definida pela gestão da fila no Axiom Atlas.";
+                }
+
+                item.AssignedUserId = metadata.AssignedUserId;
+                item.AssignedUserName = metadata.AssignedUserId is { } assignedUserId && usersById.TryGetValue(assignedUserId, out var assignedUserName)
+                    ? assignedUserName
+                    : null;
+                item.Classification = metadata.Classification;
+                item.IsOwnedByCurrentUser = item.IsOwnedByCurrentUser ||
+                    (currentUserGuid.HasValue && metadata.AssignedUserId == currentUserGuid);
+                item.IsAtRisk = item.Priority is "Crítica" or "Alta" || item.Stage == "attention";
+            }
+
+            var statusItems = backlog.Items.Where(item => MatchesStatus(item.GlpiStatusCode, normalizedStatusFilter));
+            var clients = statusItems.Select(item => item.ClientEntityName)
+                .Where(client => !string.IsNullOrWhiteSpace(client))
+                .Select(client => client!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(client => client)
+                .ToList();
+
+            var filtered = statusItems
+                .Where(item => MatchesQueueSearch(item, request.Search))
+                .Where(item => string.IsNullOrWhiteSpace(request.Client) || string.Equals(item.ClientEntityName, request.Client, StringComparison.OrdinalIgnoreCase))
+                .Where(item => string.IsNullOrWhiteSpace(request.Stage) || string.Equals(item.Stage, request.Stage, StringComparison.OrdinalIgnoreCase))
+                .Where(item => string.IsNullOrWhiteSpace(request.Priority) || string.Equals(item.Priority, request.Priority, StringComparison.OrdinalIgnoreCase))
+                .Where(item => MatchesWorkPackageFilter(item, request.WorkPackage))
+                .Where(item => !request.OnlyRisk || item.IsAtRisk)
+                .Where(item => !request.OnlyMine || item.IsOwnedByCurrentUser)
+                .ToList();
+
+            var ordered = OrderQueueItems(filtered, request.Sort).ToList();
+            var totalCount = ordered.Count;
+            var pageItems = ordered.Skip((page - 1) * pageSize).Take(pageSize).Select(ToImprovementDto).ToList();
 
             return new GlpiImprovementTicketsResponse
             {
-                Items = tickets.Select(ToImprovementDto).ToList(),
+                Items = pageItems,
+                Query = new ServiceDeskQueueQueryDto
+                {
+                    Page = page,
+                    PageSize = pageSize,
+                    Status = normalizedStatusFilter,
+                    Search = request.Search?.Trim(),
+                    Client = request.Client,
+                    Stage = request.Stage,
+                    Priority = request.Priority,
+                    WorkPackage = request.WorkPackage,
+                    OnlyRisk = request.OnlyRisk,
+                    OnlyMine = request.OnlyMine,
+                    Sort = request.Sort
+                },
                 TotalCount = totalCount,
                 Page = page,
                 PageSize = pageSize,
                 StatusFilter = normalizedStatusFilter,
-                LastSynchronizedAt = lastSynchronizedAt
+                LastSynchronizedAt = backlog.LastSynchronizedAt,
+                Clients = clients,
+                Assignees = users,
+                Summary = new ServiceDeskQueueSummaryDto
+                {
+                    Total = totalCount,
+                    WithoutWorkPackage = filtered.Count(item => !item.WorkPackageId.HasValue),
+                    AtRisk = filtered.Count(item => item.IsAtRisk),
+                    PendingLinks = filtered.Count(item => item.IsGlpiLinkPending),
+                    InProgress = filtered.Count(item => item.Stage == "delivery"),
+                    MyAssignments = filtered.Count(item => item.IsOwnedByCurrentUser)
+                }
             };
+        }
+
+        public async Task<int> BulkUpdateImprovementTicketsAsync(
+            ServiceDeskBulkUpdateRequest request,
+            string? currentUserId,
+            CancellationToken cancellationToken = default)
+        {
+            var ticketIds = request.TicketIds.Where(id => id > 0).Distinct().Take(100).ToArray();
+            if (ticketIds.Length == 0)
+                throw new InvalidOperationException("Selecione ao menos um chamado para atualizar.");
+            if (!IsQueuePriority(request.Priority) && !IsQueueStage(request.Stage) &&
+                string.IsNullOrWhiteSpace(request.Classification) && !request.AssignedUserId.HasValue && !request.ClearAssignment)
+                throw new InvalidOperationException("Escolha ao menos uma alteração para aplicar aos chamados selecionados.");
+            if (request.AssignedUserId.HasValue && !await _context.Users.AnyAsync(x => x.Id == request.AssignedUserId && x.IsActive, cancellationToken))
+                throw new InvalidOperationException("O responsável selecionado não está ativo.");
+
+            var availableIds = await _context.GlpiImprovementTickets.AsNoTracking()
+                .Where(x => x.IsInImprovementQueue && ticketIds.Contains(x.GlpiTicketId))
+                .Select(x => x.GlpiTicketId)
+                .ToListAsync(cancellationToken);
+            var existing = await _context.GlpiTicketManagement
+                .Where(x => availableIds.Contains(x.GlpiTicketId))
+                .ToDictionaryAsync(x => x.GlpiTicketId, cancellationToken);
+
+            foreach (var ticketId in availableIds)
+            {
+                if (!existing.TryGetValue(ticketId, out var metadata))
+                {
+                    metadata = new GlpiTicketManagement { GlpiTicketId = ticketId };
+                    _context.GlpiTicketManagement.Add(metadata);
+                }
+
+                if (request.AssignedUserId.HasValue) metadata.AssignedUserId = request.AssignedUserId;
+                if (request.ClearAssignment) metadata.AssignedUserId = null;
+                if (IsQueuePriority(request.Priority)) metadata.Priority = request.Priority;
+                if (IsQueueStage(request.Stage)) metadata.Stage = request.Stage;
+                if (!string.IsNullOrWhiteSpace(request.Classification)) metadata.Classification = request.Classification.Trim()[..Math.Min(200, request.Classification.Trim().Length)];
+                metadata.UpdatedByUserId = currentUserId ?? "Sistema";
+                metadata.UpdatedAt = DateTime.UtcNow;
+            }
+
+            await _context.SaveChangesAsync(cancellationToken);
+            return availableIds.Count;
+        }
+
+        public async Task<List<GlpiTicketWorkspaceDto>> PrepareImprovementTicketWorkspacesAsync(
+            ServiceDeskBulkPrepareRequest request,
+            string userId,
+            CancellationToken cancellationToken = default)
+        {
+            var ticketIds = request.TicketIds.Where(id => id > 0).Distinct().Take(20).ToArray();
+            if (ticketIds.Length == 0)
+                throw new InvalidOperationException("Selecione ao menos um chamado para preparar.");
+            if (request.TicketIds.Distinct().Count() > 20)
+                throw new InvalidOperationException("Prepare no máximo 20 chamados por vez.");
+
+            var validTicketIds = await _context.GlpiImprovementTickets.AsNoTracking()
+                .Where(x => x.IsInImprovementQueue && ticketIds.Contains(x.GlpiTicketId))
+                .Select(x => x.GlpiTicketId)
+                .ToListAsync(cancellationToken);
+            var workspaces = new List<GlpiTicketWorkspaceDto>();
+            foreach (var ticketId in validTicketIds)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                workspaces.Add(await ImportTicketAsync(ticketId.ToString(), userId));
+            }
+            return workspaces;
         }
 
         public async Task<UnifiedBacklogResponse> GetUnifiedBacklogAsync(string? currentUserId)
@@ -722,6 +1026,36 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             };
         }
 
+        private static GlpiImprovementTicketDto ToImprovementDto(UnifiedBacklogItemDto ticket)
+        {
+            return new GlpiImprovementTicketDto
+            {
+                GlpiTicketId = ticket.GlpiTicketId,
+                Subject = ticket.Subject,
+                GlpiTicketUrl = ticket.GlpiTicketUrl,
+                OpenedAt = ticket.OpenedAt,
+                DaysOpen = ticket.DaysOpen,
+                ClientEntityName = ticket.ClientEntityName,
+                GlpiStatusName = ticket.GlpiStatusName,
+                WorkPackageId = ticket.WorkPackageId,
+                WorkPackageUrl = ticket.WorkPackageUrl,
+                WorkPackageStatus = ticket.WorkPackageStatus,
+                WorkPackageCreator = ticket.WorkPackageCreator,
+                WorkPackageCreatedAt = ticket.WorkPackageCreatedAt,
+                WorkPackageDaysOpen = ticket.WorkPackageDaysOpen,
+                WorkspaceId = ticket.WorkspaceId,
+                Stage = ticket.Stage,
+                StageLabel = ticket.StageLabel,
+                Priority = ticket.Priority,
+                PriorityReason = ticket.PriorityReason,
+                IsAtRisk = ticket.IsAtRisk,
+                IsGlpiLinkPending = ticket.IsGlpiLinkPending,
+                AssignedUserId = ticket.AssignedUserId,
+                AssignedUserName = ticket.AssignedUserName,
+                Classification = ticket.Classification
+            };
+        }
+
         private static UnifiedBacklogItemDto ToUnifiedBacklogItem(
             GlpiImprovementTicket ticket,
             WorkspaceBacklogProjection? workspace,
@@ -761,6 +1095,7 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
             return new UnifiedBacklogItemDto
             {
                 GlpiTicketId = ticket.GlpiTicketId,
+                GlpiStatusCode = ticket.StatusCode,
                 Subject = ticket.Subject,
                 GlpiTicketUrl = ticket.GlpiTicketUrl,
                 OpenedAt = ticket.OpenedAt,
@@ -1402,6 +1737,65 @@ namespace Axiom.Atlas.Infrastructure.Services.ServiceDesk
                 _ => "not_solved"
             };
         }
+
+        private static bool MatchesStatus(int? statusCode, string status) => status switch
+        {
+            "all" => true,
+            "new" => statusCode == 1,
+            "processing_assigned" => statusCode == 2,
+            "processing_planned" => statusCode == 3,
+            "pending" => statusCode == 4,
+            "solved" => statusCode == 5,
+            "closed" => statusCode == 6,
+            _ => statusCode is not 5 and not 6
+        };
+
+        private static bool MatchesQueueSearch(UnifiedBacklogItemDto item, string? search)
+        {
+            var term = search?.Trim();
+            if (string.IsNullOrWhiteSpace(term)) return true;
+            return item.GlpiTicketId.ToString().Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                (item.WorkPackageId?.ToString().Contains(term, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                ContainsAny(item.Subject, term) ||
+                ContainsAny(item.ClientEntityName, term) ||
+                ContainsAny(item.WorkPackageStatus, term) ||
+                ContainsAny(item.Classification, term);
+        }
+
+        private static bool MatchesWorkPackageFilter(UnifiedBacklogItemDto item, string? filter) => filter?.Trim().ToLowerInvariant() switch
+        {
+            "with" => item.WorkPackageId.HasValue,
+            "without" => !item.WorkPackageId.HasValue,
+            "pending-link" => item.IsGlpiLinkPending,
+            _ => true
+        };
+
+        private static IEnumerable<UnifiedBacklogItemDto> OrderQueueItems(IEnumerable<UnifiedBacklogItemDto> items, string? sort) => sort?.Trim().ToLowerInvariant() switch
+        {
+            "oldest" => items.OrderByDescending(item => item.DaysOpen).ThenBy(item => item.GlpiTicketId),
+            "newest" => items.OrderByDescending(item => item.OpenedAt).ThenByDescending(item => item.GlpiTicketId),
+            "client" => items.OrderBy(item => item.ClientEntityName).ThenBy(item => GetQueuePriorityOrder(item.Priority)).ThenByDescending(item => item.DaysOpen),
+            _ => items.OrderBy(item => GetQueuePriorityOrder(item.Priority)).ThenByDescending(item => item.IsGlpiLinkPending).ThenByDescending(item => item.DaysOpen).ThenBy(item => item.GlpiTicketId)
+        };
+
+        private static int GetQueuePriorityOrder(string? priority) => priority switch
+        {
+            "Crítica" => 0,
+            "Alta" => 1,
+            _ => 2
+        };
+
+        private static bool IsQueuePriority(string? value) => value is "Normal" or "Alta" or "Crítica";
+
+        private static bool IsQueueStage(string? value) => value is "triage" or "analysis" or "delivery" or "attention";
+
+        private static string GetQueueStageLabel(string? stage) => stage switch
+        {
+            "analysis" => "Análise de requisitos",
+            "delivery" => "User Story em andamento",
+            "attention" => "Atenção necessária",
+            _ => "Triagem GLPI"
+        };
 
         private static string BuildStatusCriteria(string statusFilter)
         {

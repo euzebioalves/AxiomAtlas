@@ -1,9 +1,13 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using Axiom.Atlas.Application.DTOs.ServiceDesk;
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
 
 namespace Axiom.Atlas.Web.Controllers.ServiceDesk
 {
@@ -248,12 +252,37 @@ namespace Axiom.Atlas.Web.Controllers.ServiceDesk
         }
 
         [HttpGet]
-        public async Task<IActionResult> List(int page = 1, int pageSize = 25, string? status = null, bool refresh = false)
+        public async Task<IActionResult> List(
+            int page = 1,
+            int pageSize = 25,
+            string? status = null,
+            string? search = null,
+            string? client = null,
+            string? stage = null,
+            string? priority = null,
+            string? workPackage = null,
+            bool onlyRisk = false,
+            bool onlyMine = false,
+            string? sort = null,
+            bool refresh = false)
         {
             try
             {
-                var response = await CreateClient().GetAsync(
-                    $"api/glpi/tickets/improvements?page={page}&pageSize={pageSize}&status={Uri.EscapeDataString(status ?? "not_solved")}&refresh={refresh.ToString().ToLowerInvariant()}");
+                var request = new ServiceDeskQueueQueryDto
+                {
+                    Page = page,
+                    PageSize = pageSize,
+                    Status = status,
+                    Search = search,
+                    Client = client,
+                    Stage = stage,
+                    Priority = priority,
+                    WorkPackage = workPackage,
+                    OnlyRisk = onlyRisk,
+                    OnlyMine = onlyMine,
+                    Sort = sort
+                };
+                var response = await CreateClient().GetAsync($"api/glpi/tickets/improvements?{BuildQueueQuery(request)}&refresh={refresh.ToString().ToLowerInvariant()}");
                 if (response.IsSuccessStatusCode)
                 {
                     return PartialView("_ImprovementTicketsTable", await response.Content.ReadFromJsonAsync<GlpiImprovementTicketsResponse>() ?? new GlpiImprovementTicketsResponse());
@@ -274,6 +303,156 @@ namespace Axiom.Atlas.Web.Controllers.ServiceDesk
                     detail = exception.Message
                 });
             }
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> BulkUpdate([FromBody] ServiceDeskBulkUpdateRequest request)
+        {
+            var response = await CreateClient().PostAsJsonAsync("api/glpi/tickets/improvements/bulk-update", request);
+            return new ContentResult
+            {
+                Content = await response.Content.ReadAsStringAsync(),
+                ContentType = "application/json",
+                StatusCode = (int)response.StatusCode
+            };
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> PrepareWorkspaces([FromBody] ServiceDeskBulkPrepareRequest request)
+        {
+            var response = await CreateClient().PostAsJsonAsync("api/glpi/tickets/improvements/prepare-workspaces", request);
+            return new ContentResult
+            {
+                Content = await response.Content.ReadAsStringAsync(),
+                ContentType = "application/json",
+                StatusCode = (int)response.StatusCode
+            };
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ExportCsv([FromQuery] ServiceDeskQueueQueryDto request)
+        {
+            var report = await GetAllQueueItemsAsync(request);
+            var builder = new StringBuilder();
+            builder.AppendLine("Chamado GLPI;Assunto;Cliente;Data de abertura;Dias em aberto;Status GLPI;Etapa;Prioridade;Responsável;Classificação;Work Package;Status WP;Criador WP;Em risco;Vínculo pendente");
+            foreach (var item in report.Items)
+            {
+                builder.AppendLine(string.Join(';', new[]
+                {
+                    Csv(item.GlpiTicketId), Csv(item.Subject), Csv(item.ClientEntityName), Csv(item.OpenedAt?.ToLocalTime().ToString("dd/MM/yyyy")), Csv(item.DaysOpen),
+                    Csv(item.GlpiStatusName), Csv(item.StageLabel), Csv(item.Priority), Csv(item.AssignedUserName), Csv(item.Classification), Csv(item.WorkPackageId),
+                    Csv(item.WorkPackageStatus), Csv(item.WorkPackageCreator), Csv(item.IsAtRisk ? "Sim" : "Não"), Csv(item.IsGlpiLinkPending ? "Sim" : "Não")
+                }));
+            }
+            return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(builder.ToString())).ToArray(), "text/csv; charset=utf-8", $"fila-servicedesk-{DateTime.Now:yyyyMMdd-HHmm}.csv");
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ExportExcel([FromQuery] ServiceDeskQueueQueryDto request)
+        {
+            var report = await GetAllQueueItemsAsync(request);
+            using var workbook = new XLWorkbook();
+            var summary = workbook.Worksheets.Add("Resumo");
+            summary.Cell("A1").Value = "Axiom Atlas - Fila operacional do Service Desk";
+            summary.Range("A1:B1").Merge();
+            summary.Range("A1:B1").Style.Font.Bold = true;
+            summary.Range("A1:B1").Style.Font.FontSize = 16;
+            summary.Range("A1:B1").Style.Fill.BackgroundColor = XLColor.FromHtml("#1E3A5F");
+            summary.Range("A1:B1").Style.Font.FontColor = XLColor.White;
+            var summaryRows = new[]
+            {
+                ("Gerado em", DateTime.Now.ToString("dd/MM/yyyy HH:mm")),
+                ("Demandas filtradas", report.TotalCount.ToString()),
+                ("Sem Work Package", report.Summary.WithoutWorkPackage.ToString()),
+                ("Em risco", report.Summary.AtRisk.ToString()),
+                ("Vínculos GLPI pendentes", report.Summary.PendingLinks.ToString()),
+                ("Em desenvolvimento", report.Summary.InProgress.ToString()),
+                ("Minhas atribuições", report.Summary.MyAssignments.ToString())
+            };
+            for (var index = 0; index < summaryRows.Length; index++)
+            {
+                summary.Cell(index + 3, 1).Value = summaryRows[index].Item1;
+                summary.Cell(index + 3, 2).Value = summaryRows[index].Item2;
+            }
+            summary.Range(3, 1, summaryRows.Length + 2, 1).Style.Font.Bold = true;
+            summary.Columns().AdjustToContents();
+
+            var details = workbook.Worksheets.Add("Demandas");
+            var headers = new[] { "Chamado GLPI", "Assunto", "Cliente", "Data de abertura", "Dias em aberto", "Status GLPI", "Etapa", "Prioridade", "Responsável", "Classificação", "Work Package", "Status WP", "Criador WP", "Em risco", "Vínculo pendente" };
+            for (var column = 1; column <= headers.Length; column++) details.Cell(1, column).Value = headers[column - 1];
+            var headerRange = details.Range(1, 1, 1, headers.Length);
+            headerRange.Style.Font.Bold = true;
+            headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#1E3A5F");
+            headerRange.Style.Font.FontColor = XLColor.White;
+            var row = 2;
+            foreach (var item in report.Items)
+            {
+                var values = new object?[] { item.GlpiTicketId, item.Subject, item.ClientEntityName, item.OpenedAt?.ToLocalTime(), item.DaysOpen, item.GlpiStatusName, item.StageLabel, item.Priority, item.AssignedUserName, item.Classification, item.WorkPackageId, item.WorkPackageStatus, item.WorkPackageCreator, item.IsAtRisk ? "Sim" : "Não", item.IsGlpiLinkPending ? "Sim" : "Não" };
+                for (var column = 1; column <= values.Length; column++) details.Cell(row, column).Value = XLCellValue.FromObject(values[column - 1]);
+                details.Cell(row, 4).Style.DateFormat.Format = "dd/MM/yyyy";
+                row++;
+            }
+            details.SheetView.FreezeRows(1);
+            details.Range(1, 1, Math.Max(row - 1, 1), headers.Length).SetAutoFilter();
+            details.Columns().AdjustToContents();
+            details.Column(2).Width = 52;
+            details.Column(10).Width = 26;
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return File(stream.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", $"fila-servicedesk-{DateTime.Now:yyyyMMdd-HHmm}.xlsx");
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ExportPdf([FromQuery] ServiceDeskQueueQueryDto request)
+        {
+            var report = await GetAllQueueItemsAsync(request);
+            QuestPDF.Settings.License = LicenseType.Community;
+            var bytes = Document.Create(document =>
+            {
+                document.Page(page =>
+                {
+                    page.Size(PageSizes.A4.Landscape());
+                    page.Margin(18);
+                    page.DefaultTextStyle(style => style.FontSize(8));
+                    page.Header().Column(column =>
+                    {
+                        column.Item().Text("Axiom Atlas - Fila operacional do Service Desk").FontSize(16).Bold().FontColor(Colors.Blue.Darken2);
+                        column.Item().Text($"Gerado em {DateTime.Now:dd/MM/yyyy HH:mm} | {report.TotalCount} demanda(s) filtrada(s)").FontColor(Colors.Grey.Darken1);
+                    });
+                    page.Content().PaddingVertical(12).Table(table =>
+                    {
+                        table.ColumnsDefinition(columns =>
+                        {
+                            columns.ConstantColumn(62);
+                            columns.RelativeColumn(3);
+                            columns.RelativeColumn(1.4f);
+                            columns.RelativeColumn(1.1f);
+                            columns.RelativeColumn(1.15f);
+                            columns.RelativeColumn(1.15f);
+                            columns.RelativeColumn(1.1f);
+                            columns.RelativeColumn(1.1f);
+                        });
+                        table.Header(header =>
+                        {
+                            foreach (var title in new[] { "GLPI", "Assunto", "Cliente", "Etapa", "Prioridade", "Responsável", "WP", "Idade" })
+                                header.Cell().Background(Colors.Blue.Darken2).Padding(4).Text(title).FontColor(Colors.White).Bold();
+                        });
+                        foreach (var item in report.Items)
+                        {
+                            table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).Padding(3).Text($"#{item.GlpiTicketId}");
+                            table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).Padding(3).Text(item.Subject);
+                            table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).Padding(3).Text(item.ClientEntityName ?? "-");
+                            table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).Padding(3).Text(item.StageLabel);
+                            table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).Padding(3).Text(item.Priority);
+                            table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).Padding(3).Text(item.AssignedUserName ?? "Não atribuído");
+                            table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).Padding(3).Text(item.WorkPackageId.HasValue ? $"#{item.WorkPackageId}" : "Sem WP");
+                            table.Cell().BorderBottom(1).BorderColor(Colors.Grey.Lighten2).Padding(3).Text($"{item.DaysOpen} dia(s)");
+                        }
+                    });
+                    page.Footer().AlignCenter().Text(text => { text.Span("Axiom Atlas | Página "); text.CurrentPageNumber(); text.Span(" de "); text.TotalPages(); });
+                });
+            }).GeneratePdf();
+            return File(bytes, "application/pdf", $"fila-servicedesk-{DateTime.Now:yyyyMMdd-HHmm}.pdf");
         }
 
         [HttpPost]
@@ -314,6 +493,45 @@ namespace Axiom.Atlas.Web.Controllers.ServiceDesk
         {
             var response = await CreateClient().PutAsJsonAsync($"api/glpi/tickets/{id}/draft", request);
             return new ContentResult { Content = await response.Content.ReadAsStringAsync(), ContentType = "application/json", StatusCode = (int)response.StatusCode };
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> SearchWorkspaceWorkPackages(Guid id, string query)
+        {
+            var response = await CreateClient().GetAsync(
+                $"api/glpi/tickets/{id}/openproject-work-packages?query={Uri.EscapeDataString(query ?? string.Empty)}");
+            return new ContentResult
+            {
+                Content = await response.Content.ReadAsStringAsync(),
+                ContentType = "application/json",
+                StatusCode = (int)response.StatusCode
+            };
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> LinkWorkspaceWorkPackage(Guid id, int workPackageId)
+        {
+            var response = await CreateClient().PostAsync(
+                $"api/glpi/tickets/{id}/openproject-work-packages/{workPackageId}/glpi-link", null);
+            return new ContentResult
+            {
+                Content = await response.Content.ReadAsStringAsync(),
+                ContentType = "application/json",
+                StatusCode = (int)response.StatusCode
+            };
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> AddWorkspaceWorkPackagePrivateComment(Guid id, int workPackageId)
+        {
+            var response = await CreateClient().PostAsync(
+                $"api/glpi/tickets/{id}/openproject-work-packages/{workPackageId}/private-comment", null);
+            return new ContentResult
+            {
+                Content = await response.Content.ReadAsStringAsync(),
+                ContentType = "application/json",
+                StatusCode = (int)response.StatusCode
+            };
         }
 
         [HttpPost]
@@ -392,6 +610,71 @@ namespace Axiom.Atlas.Web.Controllers.ServiceDesk
             var response = await CreateClient().GetAsync($"api/glpi/tickets/{id}/attachments/{documentId}");
             if (!response.IsSuccessStatusCode) return NotFound();
             return File(await response.Content.ReadAsByteArrayAsync(), response.Content.Headers.ContentType?.ToString() ?? "application/octet-stream");
+        }
+
+        private async Task<GlpiImprovementTicketsResponse> GetAllQueueItemsAsync(ServiceDeskQueueQueryDto request)
+        {
+            request ??= new ServiceDeskQueueQueryDto();
+            var all = new List<GlpiImprovementTicketDto>();
+            var page = 1;
+            GlpiImprovementTicketsResponse? first = null;
+            do
+            {
+                var pageRequest = new ServiceDeskQueueQueryDto
+                {
+                    Page = page,
+                    PageSize = 100,
+                    Status = request.Status,
+                    Search = request.Search,
+                    Client = request.Client,
+                    Stage = request.Stage,
+                    Priority = request.Priority,
+                    WorkPackage = request.WorkPackage,
+                    OnlyRisk = request.OnlyRisk,
+                    OnlyMine = request.OnlyMine,
+                    Sort = request.Sort
+                };
+                var response = await CreateClient().GetAsync($"api/glpi/tickets/improvements?{BuildQueueQuery(pageRequest)}");
+                if (!response.IsSuccessStatusCode) throw new InvalidOperationException(await ReadErrorDetailAsync(response));
+                var data = await response.Content.ReadFromJsonAsync<GlpiImprovementTicketsResponse>() ?? new GlpiImprovementTicketsResponse();
+                first ??= data;
+                all.AddRange(data.Items);
+                if (page >= data.TotalPages) break;
+                page++;
+            } while (true);
+
+            first ??= new GlpiImprovementTicketsResponse();
+            first.Items = all;
+            first.TotalCount = all.Count;
+            first.Page = 1;
+            first.PageSize = Math.Max(1, all.Count);
+            return first;
+        }
+
+        private static string BuildQueueQuery(ServiceDeskQueueQueryDto request)
+        {
+            var values = new Dictionary<string, string?>
+            {
+                ["page"] = Math.Max(1, request.Page).ToString(),
+                ["pageSize"] = request.PageSize.ToString(),
+                ["status"] = request.Status,
+                ["search"] = request.Search,
+                ["client"] = request.Client,
+                ["stage"] = request.Stage,
+                ["priority"] = request.Priority,
+                ["workPackage"] = request.WorkPackage,
+                ["onlyRisk"] = request.OnlyRisk.ToString().ToLowerInvariant(),
+                ["onlyMine"] = request.OnlyMine.ToString().ToLowerInvariant(),
+                ["sort"] = request.Sort
+            };
+            return string.Join('&', values.Where(pair => !string.IsNullOrWhiteSpace(pair.Value))
+                .Select(pair => $"{pair.Key}={Uri.EscapeDataString(pair.Value!)}"));
+        }
+
+        private static string Csv(object? value)
+        {
+            var text = Convert.ToString(value) ?? string.Empty;
+            return $"\"{text.Replace("\"", "\"\"")}\"";
         }
 
         private async Task<UnifiedBacklogResponse> GetDashboardBacklogAsync()
