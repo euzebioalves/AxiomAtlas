@@ -275,6 +275,23 @@
                 </div>
             </div>
         </div>
+
+        <div class="card card-flush mt-7 work-package-lookup-card">
+            <div class="card-header">
+                <div>
+                    <h3 class="card-title mb-1"><i class="ki-duotone ki-magnifier fs-2 me-2 text-primary"></i>Localizar Work Packages existentes</h3>
+                    <div class="text-muted fs-7">Consulte o OpenProject por ID da WP, número GLPI, cliente, título, descrição ou comentários.</div>
+                </div>
+            </div>
+            <div class="card-body pt-2">
+                <form id="workPackageLookupForm" class="d-flex flex-column flex-md-row gap-3" novalidate>
+                    <input id="workPackageLookupQuery" class="form-control form-control-solid" value="@Model.GlpiTicketId" maxlength="200" autocomplete="off" placeholder="ID da WP, ID GLPI, cliente ou termo da demanda">
+                    <button id="workPackageLookupButton" class="btn btn-primary flex-shrink-0" type="submit"><i class="ki-duotone ki-magnifier fs-3"></i>Pesquisar no OpenProject</button>
+                </form>
+                <div class="form-text mt-3">A pesquisa também verifica os campos personalizados e os comentários das Work Packages acessíveis pela integração.</div>
+                <div id="workPackageLookupResults" class="mt-6" aria-live="polite"></div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -344,6 +361,104 @@
                 return '';
             }
         };
+
+        const workPackageLookupForm = document.getElementById('workPackageLookupForm');
+        const workPackageLookupQuery = document.getElementById('workPackageLookupQuery');
+        const workPackageLookupButton = document.getElementById('workPackageLookupButton');
+        const workPackageLookupResults = document.getElementById('workPackageLookupResults');
+        const formatLookupDate = value => value
+            ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short' }).format(new Date(value))
+            : 'Não informada';
+
+        const renderWorkPackageLookupResults = result => {
+            const items = result.items || [];
+            if (!items.length) {
+                workPackageLookupResults.innerHTML = `<div class="notice d-flex bg-light-warning rounded border-warning border border-dashed p-5"><i class="ki-duotone ki-information-5 fs-2x text-warning me-4"></i><div><div class="fw-bold">Nenhuma Work Package encontrada</div><div class="text-muted fs-7">Tente outro termo, o título da demanda ou confirme o número do chamado GLPI.</div></div></div>`;
+                return;
+            }
+
+            const rows = items.map(item => {
+                const url = safeUrl(item.url);
+                const matches = (item.matchedIn || []).map(match => `<span class="badge badge-light-primary me-1 mb-1">${escapeHtml(match)}</span>`).join('');
+                return `<tr>
+                    <td><span class="fw-bold text-primary">#${Number(item.id)}</span></td>
+                    <td><div class="fw-bold text-gray-800">${escapeHtml(item.subject)}</div><div class="text-muted fs-8">${escapeHtml(item.project || 'Projeto não informado')}</div></td>
+                    <td><span class="badge badge-light-info">${escapeHtml(item.type || 'Não informado')}</span></td>
+                    <td><span class="badge badge-light-warning">${escapeHtml(item.status || 'Não informado')}</span></td>
+                    <td><div>${escapeHtml(item.responsible || 'Não informado')}</div><div class="text-muted fs-8">Atualizada em ${formatLookupDate(item.updatedAt)}</div></td>
+                    <td>${matches || '<span class="text-muted">—</span>'}</td>
+                    <td class="text-end text-nowrap">
+                        ${url ? `<a class="btn btn-icon btn-sm btn-light-primary me-1" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" title="Abrir Work Package"><i class="ki-duotone ki-exit-up fs-3"></i></a>` : ''}
+                        <button class="btn btn-icon btn-sm btn-light-success me-1" type="button" data-work-package-action="link" data-work-package-id="${Number(item.id)}" title="Vincular no campo Chamado DevOps"><i class="fa-solid fa-link fs-6"></i></button>
+                        <button class="btn btn-icon btn-sm btn-light-info" type="button" data-work-package-action="comment" data-work-package-id="${Number(item.id)}" title="Enviar como comentário privado ao GLPI"><i class="ki-duotone ki-message-add fs-3"></i></button>
+                    </td>
+                </tr>`;
+            }).join('');
+            const truncationNotice = result.isTruncated
+                ? '<div class="alert alert-warning py-3 mt-4 mb-0">A pesquisa atingiu o limite de segurança. Refine o termo para obter uma lista completa.</div>'
+                : '';
+            workPackageLookupResults.innerHTML = `<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4"><div class="fw-bold">Resultados (${items.length})</div><div class="text-muted fs-8">${Number(result.scannedWorkPackages || 0).toLocaleString('pt-BR')} Work Packages analisadas</div></div><div class="table-responsive"><table class="table table-row-bordered table-row-gray-300 align-middle gy-4 gs-5"><thead><tr class="fw-bold text-muted"><th>ID</th><th>Work Package</th><th>Tipo</th><th>Status</th><th>Responsável</th><th>Encontrado em</th><th class="text-end">Ações</th></tr></thead><tbody>${rows}</tbody></table></div>${truncationNotice}`;
+        };
+
+        workPackageLookupForm?.addEventListener('submit', async event => {
+            event.preventDefault();
+            const query = workPackageLookupQuery.value.trim();
+            if (!query) {
+                await Swal.fire({ icon: 'warning', text: 'Informe um termo para pesquisar no OpenProject.' });
+                return;
+            }
+
+            workPackageLookupButton.setAttribute('disabled', 'disabled');
+            workPackageLookupButton.setAttribute('data-kt-indicator', 'on');
+            workPackageLookupResults.innerHTML = '<div class="d-flex align-items-center text-muted py-5"><span class="spinner-border spinner-border-sm me-3"></span>Consultando títulos, descrições, campos personalizados e comentários no OpenProject…</div>';
+            try {
+                const response = await fetch(`/ServiceDesk/SearchWorkspaceWorkPackages/@Model.Id?query=${encodeURIComponent(query)}`);
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || 'Não foi possível consultar o OpenProject.');
+                renderWorkPackageLookupResults(result);
+            } catch (error) {
+                workPackageLookupResults.innerHTML = '';
+                await Swal.fire({ icon: 'error', text: error.message || 'Não foi possível consultar o OpenProject.' });
+            } finally {
+                workPackageLookupButton.removeAttribute('disabled');
+                workPackageLookupButton.removeAttribute('data-kt-indicator');
+            }
+        });
+
+        workPackageLookupResults?.addEventListener('click', async event => {
+            const button = event.target.closest('[data-work-package-action]');
+            if (!button) return;
+            const workPackageId = Number(button.dataset.workPackageId);
+            const action = button.dataset.workPackageAction;
+            if (!Number.isInteger(workPackageId) || workPackageId <= 0) return;
+
+            const isLink = action === 'link';
+            const confirmation = await Swal.fire({
+                icon: isLink ? 'warning' : 'question',
+                title: isLink ? 'Vincular Work Package ao GLPI?' : 'Registrar comentário privado?',
+                text: isLink
+                    ? `A Work Package #${workPackageId} será gravada no campo Chamado DevOps deste chamado.`
+                    : `O link da Work Package #${workPackageId} será enviado como acompanhamento privado para o GLPI.`,
+                showCancelButton: true,
+                confirmButtonText: isLink ? 'Vincular' : 'Enviar comentário',
+                cancelButtonText: 'Cancelar'
+            });
+            if (!confirmation.isConfirmed) return;
+
+            button.setAttribute('disabled', 'disabled');
+            try {
+                const endpoint = isLink ? 'LinkWorkspaceWorkPackage' : 'AddWorkspaceWorkPackagePrivateComment';
+                const response = await fetch(`/ServiceDesk/${endpoint}/@Model.Id?workPackageId=${workPackageId}`, { method: 'POST' });
+                const result = await response.json();
+                if (!response.ok) throw new Error(result.message || 'Não foi possível concluir a ação no GLPI.');
+                await Swal.fire({ icon: 'success', text: isLink ? 'Work Package vinculada ao campo Chamado DevOps.' : 'Comentário privado enviado ao GLPI.' });
+                window.location.reload();
+            } catch (error) {
+                await Swal.fire({ icon: 'error', text: error.message || 'Não foi possível concluir a ação no GLPI.' });
+            } finally {
+                button.removeAttribute('disabled');
+            }
+        });
 
         const renderInlineMarkdown = value => {
             const protectedExternalLinks = [];
@@ -966,6 +1081,9 @@
     .service-desk-card { display: flex; flex-direction: column; min-height: calc(100vh - 260px); }
     .service-desk-card .card-header { flex: 0 0 76px; height: 76px; min-height: 76px; padding: 16px 28px; }
     .workspace-panel-body { flex: 1 1 auto; padding: 18px 28px 28px; }
+    .work-package-lookup-card .card-header { min-height: 92px; padding: 18px 28px; }
+    .work-package-lookup-card .card-body { padding: 20px 28px 28px; }
+    .work-package-lookup-card .form-control { min-width: 0; }
     .ticket-card-toolbar { margin-left: 0 !important; }
     .ticket-metadata { display: flex; gap: 20px; color: var(--bs-body-color); font-size: .8rem; }
     .ticket-metadata strong { color: var(--bs-heading-color); margin-left: 4px; }

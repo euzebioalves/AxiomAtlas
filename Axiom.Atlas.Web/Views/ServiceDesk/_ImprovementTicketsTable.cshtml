@@ -1,140 +1,108 @@
 @model Axiom.Atlas.Application.DTOs.ServiceDesk.GlpiImprovementTicketsResponse
 @{
+    var query = Model.Query;
     var firstRecord = Model.TotalCount == 0 ? 0 : ((Model.Page - 1) * Model.PageSize) + 1;
     var lastRecord = Math.Min(Model.Page * Model.PageSize, Model.TotalCount);
     var firstPage = Math.Max(1, Model.Page - 2);
     var lastPage = Math.Min(Model.TotalPages, firstPage + 4);
     firstPage = Math.Max(1, lastPage - 4);
-    var synchronizationIntervalSeconds = Math.Clamp(Model.SynchronizationIntervalSeconds, 60, 3600);
-    var synchronizationCadence = synchronizationIntervalSeconds % 60 == 0
-        ? $"{synchronizationIntervalSeconds / 60} min"
-        : $"{synchronizationIntervalSeconds} s";
-    var synchronizationVersion = $"{Model.LastSynchronizedAt?.Ticks ?? 0}-{Model.TotalCount}-{Model.StatusFilter}-{Model.Page}-{Model.PageSize}-{Model.SynchronizationPending}";
+    var synchronizationVersion = $"{Model.LastSynchronizedAt?.Ticks ?? 0}-{Model.TotalCount}-{Model.Page}-{Model.PageSize}-{query.Search}-{query.Client}-{query.Stage}-{query.Priority}-{query.WorkPackage}-{query.OnlyRisk}-{query.OnlyMine}-{query.Sort}";
 }
 
-<div class="card-header pt-7" data-synchronization-pending="@Model.SynchronizationPending.ToString().ToLowerInvariant()" data-projection-version="@synchronizationVersion">
-    <div class="card-title flex-column align-items-start">
-        <h3 class="mb-1">Fila de melhorias</h3>
-        <div class="d-flex flex-wrap align-items-center gap-2 text-muted fs-7 fw-semibold">
-            <span>@Model.TotalCount chamado(s) na fila local</span>
-            <span>· GLPI e OpenProject são conciliados automaticamente a cada @synchronizationCadence</span>
-            @if (Model.LastSynchronizedAt.HasValue)
-            {
-                <span>· Última sincronização concluída em @Model.LastSynchronizedAt.Value.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</span>
-            }
-            @if (Model.SynchronizationPending)
-            {
-                <span class="badge badge-light-warning">Atualização em segundo plano</span>
-            }
+<div class="card-header pt-7 pb-0 flex-column align-items-stretch" data-synchronization-pending="@Model.SynchronizationPending.ToString().ToLowerInvariant()" data-projection-version="@synchronizationVersion">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-4 mb-6">
+        <div class="card-title flex-column align-items-start m-0">
+            <h3 class="mb-1">Fila operacional de melhorias</h3>
+            <div class="text-muted fs-7 fw-semibold">Prioridade recomendada combina risco, vínculo GLPI–OpenProject e tempo de espera.</div>
+        </div>
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <div class="dropdown">
+                <button class="btn btn-sm btn-light-primary" type="button" data-bs-toggle="dropdown"><i class="ki-duotone ki-file-down fs-3"><span class="path1"></span><span class="path2"></span></i>Exportar</button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="#" data-queue-export="pdf"><i class="ki-duotone ki-file fs-4 me-2 text-danger"></i>PDF</a></li>
+                    <li><a class="dropdown-item" href="#" data-queue-export="excel"><i class="ki-duotone ki-file-added fs-4 me-2 text-success"></i>Excel</a></li>
+                    <li><a class="dropdown-item" href="#" data-queue-export="csv"><i class="ki-duotone ki-document fs-4 me-2 text-primary"></i>CSV</a></li>
+                </ul>
+            </div>
+            <div class="dropdown">
+                <button class="btn btn-sm btn-light" type="button" data-bs-toggle="dropdown" title="Configurar colunas"><i class="ki-duotone ki-setting-3 fs-3"><span class="path1"></span><span class="path2"></span></i>Colunas</button>
+                <div class="dropdown-menu dropdown-menu-end p-4 min-w-225px">
+                    <div class="fw-bold mb-3">Exibir na tabela</div>
+                    @foreach (var column in new[] { ("client", "Cliente"), ("status", "Status GLPI"), ("stage", "Etapa"), ("assignee", "Responsável"), ("wp", "Work Package"), ("age", "Tempo em aberto"), ("signals", "Sinais") })
+                    {
+                        <label class="form-check form-check-custom form-check-solid mb-3"><input class="form-check-input" type="checkbox" checked data-queue-column-toggle="@column.Item1" /><span class="form-check-label">@column.Item2</span></label>
+                    }
+                </div>
+            </div>
+            <button id="saveQueueView" type="button" class="btn btn-sm btn-light" title="Salvar filtros neste navegador"><i class="ki-duotone ki-bookmark fs-3"><span class="path1"></span><span class="path2"></span></i>Salvar visão</button>
+            <button id="clearQueueView" type="button" class="btn btn-sm btn-light" title="Limpar filtros salvos"><i class="ki-duotone ki-cross-circle fs-3"><span class="path1"></span><span class="path2"></span></i>Limpar</button>
+            <button id="refreshImprovements" type="button" class="btn btn-icon btn-sm btn-light-primary" title="Atualizar fontes" aria-label="Atualizar fontes"><i class="ki-duotone ki-arrows-circle fs-2"></i></button>
         </div>
     </div>
-    <div class="card-toolbar d-flex flex-nowrap align-items-center gap-3">
-        <select class="form-select form-select-solid w-225px" data-control="select2" data-hide-search="true" data-improvements-status-filter aria-label="Filtrar por status do GLPI">
-            <option value="not_solved" selected="@(Model.StatusFilter == "not_solved" ? "selected" : null)">Não solucionados</option>
-            <option value="all" selected="@(Model.StatusFilter == "all" ? "selected" : null)">Todos os status</option>
-            <option value="new" selected="@(Model.StatusFilter == "new" ? "selected" : null)">Novo</option>
-            <option value="processing_assigned" selected="@(Model.StatusFilter == "processing_assigned" ? "selected" : null)">Em atendimento (atribuído)</option>
-            <option value="processing_planned" selected="@(Model.StatusFilter == "processing_planned" ? "selected" : null)">Em atendimento (planejado)</option>
-            <option value="pending" selected="@(Model.StatusFilter == "pending" ? "selected" : null)">Pendente</option>
-            <option value="solved" selected="@(Model.StatusFilter == "solved" ? "selected" : null)">Solucionado</option>
-            <option value="closed" selected="@(Model.StatusFilter == "closed" ? "selected" : null)">Fechado</option>
-        </select>
-        <button id="refreshImprovements" type="button" class="btn btn-icon btn-light-primary" data-bs-toggle="tooltip" data-bs-placement="top" title="Atualizar listagem" aria-label="Atualizar listagem">
-            <i class="ki-duotone ki-arrows-circle fs-2"></i>
-        </button>
+
+    <div class="row g-3 mb-6 queue-kpi-row">
+        <div class="col-md-6 col-xl"><button type="button" class="queue-kpi w-100" data-queue-quick-filter="all"><span class="text-primary"><i class="ki-duotone ki-element-11 fs-2x"></i></span><span><b>@Model.Summary.Total</b><small>Na fila</small></span></button></div>
+        <div class="col-md-6 col-xl"><button type="button" class="queue-kpi w-100" data-queue-quick-filter="without"><span class="text-warning"><i class="ki-duotone ki-link fs-2x"></i></span><span><b>@Model.Summary.WithoutWorkPackage</b><small>Sem WP</small></span></button></div>
+        <div class="col-md-6 col-xl"><button type="button" class="queue-kpi w-100" data-queue-quick-filter="risk"><span class="text-danger"><i class="ki-duotone ki-shield-cross fs-2x"></i></span><span><b>@Model.Summary.AtRisk</b><small>Em risco</small></span></button></div>
+        <div class="col-md-6 col-xl"><button type="button" class="queue-kpi w-100" data-queue-quick-filter="pending-link"><span class="text-warning"><i class="ki-duotone ki-information-5 fs-2x"></i></span><span><b>@Model.Summary.PendingLinks</b><small>Vínculos pendentes</small></span></button></div>
+        <div class="col-md-6 col-xl"><button type="button" class="queue-kpi w-100" data-queue-quick-filter="mine"><span class="text-success"><i class="ki-duotone ki-profile-user fs-2x"></i></span><span><b>@Model.Summary.MyAssignments</b><small>Minhas atribuições</small></span></button></div>
+    </div>
+
+    <div class="queue-filters rounded border border-dashed border-gray-300 p-4 mb-5">
+        <div class="row g-3">
+            <div class="col-12 col-lg-4"><label class="form-label fs-8 fw-bold">Buscar</label><div class="input-group"><span class="input-group-text bg-transparent border-end-0"><i class="ki-duotone ki-magnifier fs-4"></i></span><input id="improvementsSearch" class="form-control form-control-solid border-start-0" placeholder="GLPI, WP, cliente ou texto" value="@query.Search" /></div></div>
+            <div class="col-6 col-lg-2"><label class="form-label fs-8 fw-bold">Status GLPI</label><select class="form-select form-select-solid" data-queue-filter="status"><option value="not_solved" selected="@(query.Status == "not_solved")">Não solucionados</option><option value="all" selected="@(query.Status == "all")">Todos</option><option value="new" selected="@(query.Status == "new")">Novo</option><option value="processing_assigned" selected="@(query.Status == "processing_assigned")">Atribuído</option><option value="processing_planned" selected="@(query.Status == "processing_planned")">Planejado</option><option value="pending" selected="@(query.Status == "pending")">Pendente</option><option value="solved" selected="@(query.Status == "solved")">Solucionado</option><option value="closed" selected="@(query.Status == "closed")">Fechado</option></select></div>
+            <div class="col-6 col-lg-2"><label class="form-label fs-8 fw-bold">Cliente</label><select class="form-select form-select-solid" data-queue-filter="client"><option value="">Todos</option>@foreach (var client in Model.Clients) { <option value="@client" selected="@(string.Equals(query.Client, client, StringComparison.OrdinalIgnoreCase))">@client</option> }</select></div>
+            <div class="col-6 col-lg-2"><label class="form-label fs-8 fw-bold">Etapa</label><select class="form-select form-select-solid" data-queue-filter="stage"><option value="">Todas</option><option value="triage" selected="@(query.Stage == "triage")">Triagem</option><option value="analysis" selected="@(query.Stage == "analysis")">Análise</option><option value="delivery" selected="@(query.Stage == "delivery")">Em desenvolvimento</option><option value="attention" selected="@(query.Stage == "attention")">Atenção</option></select></div>
+            <div class="col-6 col-lg-2"><label class="form-label fs-8 fw-bold">Prioridade</label><select class="form-select form-select-solid" data-queue-filter="priority"><option value="">Todas</option><option value="Crítica" selected="@(query.Priority == "Crítica")">Crítica</option><option value="Alta" selected="@(query.Priority == "Alta")">Alta</option><option value="Normal" selected="@(query.Priority == "Normal")">Normal</option></select></div>
+            <div class="col-6 col-lg-2"><label class="form-label fs-8 fw-bold">Work Package</label><select class="form-select form-select-solid" data-queue-filter="workPackage"><option value="">Todos</option><option value="without" selected="@(query.WorkPackage == "without")">Sem WP</option><option value="with" selected="@(query.WorkPackage == "with")">Com WP</option><option value="pending-link" selected="@(query.WorkPackage == "pending-link")">Vínculo pendente</option></select></div>
+            <div class="col-6 col-lg-2"><label class="form-label fs-8 fw-bold">Ordenar por</label><select class="form-select form-select-solid" data-queue-filter="sort"><option value="recommended" selected="@(string.IsNullOrWhiteSpace(query.Sort) || query.Sort == "recommended")">Prioridade recomendada</option><option value="oldest" selected="@(query.Sort == "oldest")">Mais antigo</option><option value="newest" selected="@(query.Sort == "newest")">Mais recente</option><option value="client" selected="@(query.Sort == "client")">Cliente</option></select></div>
+            <div class="col-12 col-lg-4 d-flex align-items-end gap-5 pb-2"><label class="form-check form-switch form-check-custom form-check-solid"><input class="form-check-input" type="checkbox" data-queue-filter="onlyRisk" checked="@(query.OnlyRisk ? "checked" : null)" /><span class="form-check-label">Somente em risco</span></label><label class="form-check form-switch form-check-custom form-check-solid"><input class="form-check-input" type="checkbox" data-queue-filter="onlyMine" checked="@(query.OnlyMine ? "checked" : null)" /><span class="form-check-label">Minhas atribuições</span></label></div>
+        </div>
+    </div>
+
+    <div id="queueBulkToolbar" class="d-none alert alert-primary d-flex flex-wrap align-items-center gap-3 py-3 mb-5">
+        <span class="fw-bold"><span data-queue-selected-count>0</span> selecionado(s)</span>
+        <select class="form-select form-select-sm form-select-solid min-w-175px" id="bulkAssignee"><option value="">Responsável: não alterar</option>@foreach (var user in Model.Assignees) { <option value="@user.Id">@user.Name</option> }</select>
+        <select class="form-select form-select-sm form-select-solid min-w-150px" id="bulkPriority"><option value="">Prioridade: não alterar</option><option value="Crítica">Crítica</option><option value="Alta">Alta</option><option value="Normal">Normal</option></select>
+        <select class="form-select form-select-sm form-select-solid min-w-175px" id="bulkStage"><option value="">Etapa: não alterar</option><option value="triage">Triagem</option><option value="analysis">Análise</option><option value="delivery">Em desenvolvimento</option><option value="attention">Atenção necessária</option></select>
+        <input class="form-control form-control-sm form-control-solid min-w-175px" id="bulkClassification" placeholder="Classificação local" />
+        <button type="button" class="btn btn-sm btn-light-primary" id="prepareBulkWorkspaces" title="Cria ou atualiza as áreas de trabalho para a criação ou vinculação individual das WPs">Preparar WPs</button>
+        <button type="button" class="btn btn-sm btn-primary ms-auto" id="applyBulkUpdate">Aplicar</button>
     </div>
 </div>
-<div class="card-body pt-3">
+
+<div class="card-body pt-2">
     @if (Model.Items.Count == 0)
     {
-        <div class="text-center py-15">
-            <i class="ki-duotone ki-folder-added fs-4x text-gray-400 mb-5"><span class="path1"></span><span class="path2"></span></i>
-            <div class="fw-bold fs-4 text-gray-700">Nenhuma solicitação de melhoria encontrada</div>
-            <div class="text-muted mt-2">Verifique a classificação no GLPI ou atualize a lista.</div>
-        </div>
+        <div class="text-center py-15"><i class="ki-duotone ki-folder-added fs-4x text-gray-400 mb-5"><span class="path1"></span><span class="path2"></span></i><div class="fw-bold fs-4 text-gray-700">Nenhuma solicitação encontrada</div><div class="text-muted mt-2">Ajuste os filtros ou atualize as fontes integradas.</div></div>
     }
     else
     {
         <div class="table-responsive">
-            <table class="table align-middle table-row-dashed fs-6 gy-5">
-                <thead>
-                    <tr class="text-start text-gray-500 fw-bold fs-7 text-uppercase gs-0">
-                        <th>Chamado GLPI</th>
-                        <th>Data de abertura</th>
-                        <th>Dias em aberto</th>
-                        <th>Status</th>
-                        <th>Cliente</th>
-                        <th>Work Package</th>
-                        <th>Status User Story</th>
-                        <th>Criador da User Story</th>
-                        <th>Dias da WP</th>
-                        <th class="text-end">Ações</th>
-                    </tr>
-                </thead>
+            <table class="table align-middle table-row-dashed fs-7 gy-4" id="improvementQueueTable">
+                <thead><tr class="text-start text-gray-500 fw-bold fs-8 text-uppercase gs-0"><th class="w-35px"><div class="form-check form-check-sm form-check-custom form-check-solid"><input class="form-check-input" type="checkbox" id="selectAllQueueTickets" /></div></th><th>Chamado</th><th data-service-desk-column="client">Cliente</th><th data-service-desk-column="status">Status GLPI</th><th data-service-desk-column="stage">Etapa</th><th data-service-desk-column="assignee">Responsável</th><th data-service-desk-column="wp">Work Package</th><th data-service-desk-column="age">Idade</th><th data-service-desk-column="signals">Sinais</th><th class="text-end">Ações</th></tr></thead>
                 <tbody class="fw-semibold text-gray-700">
-                    @foreach (var ticket in Model.Items)
-                    {
-                        <tr data-ticket-id="@ticket.GlpiTicketId">
-                            <td class="min-w-225px">
-                                <a href="@ticket.GlpiTicketUrl" target="_blank" rel="noopener noreferrer" class="text-primary fw-bold d-inline-flex align-items-center gap-1">#@ticket.GlpiTicketId <i class="ki-duotone ki-exit-right-corner fs-6"></i></a>
-                                <div class="text-muted text-truncate mw-250px" title="@ticket.Subject">@ticket.Subject</div>
-                            </td>
-                            <td>@(ticket.OpenedAt?.ToLocalTime().ToString("dd/MM/yyyy") ?? "—")</td>
-                            <td><span class="badge badge-light-info">@ticket.DaysOpen dia(s)</span></td>
-                            <td><span class="badge badge-light-primary">@ticket.GlpiStatusName</span></td>
-                            <td>@(ticket.ClientEntityName ?? "—")</td>
-                            <td>
-                                @if (ticket.WorkPackageId.HasValue)
-                                {
-                                    @if (!string.IsNullOrWhiteSpace(ticket.WorkPackageUrl))
-                                    {
-                                        <a href="@ticket.WorkPackageUrl" target="_blank" rel="noopener noreferrer" class="badge badge-light-primary">#@ticket.WorkPackageId <i class="ki-duotone ki-exit-right-corner fs-7"></i></a>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge badge-light-primary">#@ticket.WorkPackageId</span>
-                                    }
-                                }
-                            </td>
-                            <td>@(ticket.WorkPackageStatus ?? "—")</td>
-                            <td>@(ticket.WorkPackageCreator ?? "—")</td>
-                            <td>@(ticket.WorkPackageDaysOpen?.ToString() ?? "—")</td>
-                            <td class="text-end">
-                                <button type="button" class="btn btn-icon btn-light-primary" data-treat-ticket="@ticket.GlpiTicketId" title="Tratar chamado" aria-label="Tratar chamado #@ticket.GlpiTicketId">
-                                    <i class="ki-duotone ki-notepad-edit fs-2"><span class="path1"></span><span class="path2"></span></i>
-                                </button>
-                            </td>
-                        </tr>
-                    }
+                @foreach (var ticket in Model.Items)
+                {
+                    var priorityClass = ticket.Priority == "Crítica" ? "danger" : ticket.Priority == "Alta" ? "warning" : "primary";
+                    var stageClass = ticket.Stage == "attention" ? "danger" : ticket.Stage == "delivery" ? "success" : ticket.Stage == "analysis" ? "warning" : "primary";
+                    <tr data-ticket-id="@ticket.GlpiTicketId" data-preview-ticket data-subject="@ticket.Subject" data-client="@ticket.ClientEntityName" data-status="@ticket.GlpiStatusName" data-stage="@ticket.StageLabel" data-priority="@ticket.Priority" data-reason="@ticket.PriorityReason" data-assignee="@ticket.AssignedUserName" data-wp="@ticket.WorkPackageId" data-wp-status="@ticket.WorkPackageStatus" data-age="@ticket.DaysOpen" data-workspace-id="@ticket.WorkspaceId">
+                        <td><div class="form-check form-check-sm form-check-custom form-check-solid"><input class="form-check-input" type="checkbox" data-queue-ticket-select value="@ticket.GlpiTicketId" /></div></td>
+                        <td class="min-w-250px"><a href="@ticket.GlpiTicketUrl" target="_blank" rel="noopener noreferrer" class="text-primary fw-bold">#@ticket.GlpiTicketId <i class="ki-duotone ki-exit-right-corner fs-7"></i></a><div class="text-gray-700 text-truncate mw-300px" title="@ticket.Subject">@ticket.Subject</div><span class="badge badge-light-@priorityClass mt-2" title="@ticket.PriorityReason">@ticket.Priority</span></td>
+                        <td data-service-desk-column="client">@(ticket.ClientEntityName ?? "—")</td>
+                        <td data-service-desk-column="status"><span class="badge badge-light-primary">@ticket.GlpiStatusName</span></td>
+                        <td data-service-desk-column="stage"><span class="badge badge-light-@stageClass">@ticket.StageLabel</span></td>
+                        <td data-service-desk-column="assignee">@if (!string.IsNullOrWhiteSpace(ticket.AssignedUserName)) { @ticket.AssignedUserName } else { <span class="text-muted">Não atribuído</span> }</td>
+                        <td data-service-desk-column="wp">@if (ticket.WorkPackageId.HasValue) { <a href="@ticket.WorkPackageUrl" target="_blank" rel="noopener" class="badge badge-light-success">#@ticket.WorkPackageId <i class="ki-duotone ki-exit-right-corner fs-7"></i></a><div class="text-muted fs-8 mt-1">@ticket.WorkPackageStatus</div> } else { <span class="badge badge-light-warning">Sem WP</span> }</td>
+                        <td data-service-desk-column="age"><span class="badge badge-light-info">@ticket.DaysOpen dia(s)</span></td>
+                        <td data-service-desk-column="signals"><div class="d-flex flex-wrap gap-1">@if (ticket.IsAtRisk) { <span class="badge badge-light-danger">Risco</span> } @if (ticket.IsGlpiLinkPending) { <span class="badge badge-light-warning">Vínculo pendente</span> } @if (!ticket.WorkPackageId.HasValue) { <span class="badge badge-light-info">Aguardando WP</span> }</div></td>
+                        <td class="text-end"><button type="button" class="btn btn-icon btn-sm btn-light" data-preview-queue-ticket title="Prévia rápida"><i class="ki-duotone ki-eye fs-3"><span class="path1"></span><span class="path2"></span><span class="path3"></span></i></button><button type="button" class="btn btn-icon btn-sm btn-light-primary ms-1" data-treat-ticket="@ticket.GlpiTicketId" title="Tratar chamado"><i class="ki-duotone ki-notepad-edit fs-3"><span class="path1"></span><span class="path2"></span></i></button></td>
+                    </tr>
+                }
                 </tbody>
             </table>
         </div>
-
-        <div class="d-flex flex-stack flex-wrap pt-6 gap-4">
-            <div class="d-flex align-items-center gap-3 text-muted fs-7">
-                <span>Exibir</span>
-                <select class="form-select form-select-sm form-select-solid w-90px" data-improvements-page-size aria-label="Registros por página">
-                    @foreach (var pageSize in new[] { 10, 25, 50, 100 })
-                    {
-                        <option value="@pageSize" selected="@(pageSize == Model.PageSize ? "selected" : null)">@pageSize</option>
-                    }
-                </select>
-                <span>por página. Mostrando @firstRecord–@lastRecord de @Model.TotalCount.</span>
-            </div>
-            <ul class="pagination mb-0">
-                <li class="page-item previous @(Model.Page == 1 ? "disabled" : "")">
-                    <button type="button" class="page-link" data-improvements-page="@(Model.Page - 1)" data-page-size="@Model.PageSize" @(Model.Page == 1 ? "disabled" : null)><i class="previous"></i></button>
-                </li>
-                @for (var currentPage = firstPage; currentPage <= lastPage; currentPage++)
-                {
-                    <li class="page-item @(currentPage == Model.Page ? "active" : "")">
-                        <button type="button" class="page-link" data-improvements-page="@currentPage" data-page-size="@Model.PageSize">@currentPage</button>
-                    </li>
-                }
-                <li class="page-item next @(Model.Page >= Model.TotalPages ? "disabled" : "")">
-                    <button type="button" class="page-link" data-improvements-page="@(Model.Page + 1)" data-page-size="@Model.PageSize" @(Model.Page >= Model.TotalPages ? "disabled" : null)><i class="next"></i></button>
-                </li>
-            </ul>
-        </div>
+        <div class="d-flex flex-stack flex-wrap pt-5 gap-4"><div class="d-flex align-items-center gap-3 text-muted fs-7"><span>Exibir</span><select class="form-select form-select-sm form-select-solid w-90px" data-improvements-page-size>@foreach (var pageSize in new[] { 10, 25, 50, 100 }) { <option value="@pageSize" selected="@(pageSize == Model.PageSize)">@pageSize</option> }</select><span>por página. Mostrando @firstRecord–@lastRecord de @Model.TotalCount.</span></div><ul class="pagination mb-0"><li class="page-item previous @(Model.Page == 1 ? "disabled" : "")"><button type="button" class="page-link" data-improvements-page="@(Model.Page - 1)" @(Model.Page == 1 ? "disabled" : null)><i class="previous"></i></button></li>@for (var currentPage = firstPage; currentPage <= lastPage; currentPage++) { <li class="page-item @(currentPage == Model.Page ? "active" : "")"><button type="button" class="page-link" data-improvements-page="@currentPage">@currentPage</button></li> }<li class="page-item next @(Model.Page >= Model.TotalPages ? "disabled" : "")"><button type="button" class="page-link" data-improvements-page="@(Model.Page + 1)" @(Model.Page >= Model.TotalPages ? "disabled" : null)><i class="next"></i></button></li></ul></div>
     }
 </div>

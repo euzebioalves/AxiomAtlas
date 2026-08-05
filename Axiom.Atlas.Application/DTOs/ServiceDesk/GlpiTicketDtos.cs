@@ -38,6 +38,27 @@ namespace Axiom.Atlas.Application.DTOs.ServiceDesk
         public string Url { get; set; } = string.Empty;
     }
 
+    public class OpenProjectWorkPackageLookupResponseDto
+    {
+        public string Query { get; set; } = string.Empty;
+        public int ScannedWorkPackages { get; set; }
+        public bool IsTruncated { get; set; }
+        public List<OpenProjectWorkPackageLookupItemDto> Items { get; set; } = new();
+    }
+
+    public class OpenProjectWorkPackageLookupItemDto
+    {
+        public int Id { get; set; }
+        public string Subject { get; set; } = string.Empty;
+        public string? Url { get; set; }
+        public string? Type { get; set; }
+        public string? Status { get; set; }
+        public string? Project { get; set; }
+        public string? Responsible { get; set; }
+        public DateTime? UpdatedAt { get; set; }
+        public List<string> MatchedIn { get; set; } = new();
+    }
+
     public class CreateOpenProjectUserStoryRequest
     {
         public int ProjectId { get; set; }
@@ -54,6 +75,10 @@ namespace Axiom.Atlas.Application.DTOs.ServiceDesk
     public class GlpiImprovementTicketsResponse
     {
         public List<GlpiImprovementTicketDto> Items { get; set; } = new();
+        public ServiceDeskQueueQueryDto Query { get; set; } = new();
+        public ServiceDeskQueueSummaryDto Summary { get; set; } = new();
+        public List<string> Clients { get; set; } = new();
+        public List<ServiceDeskUserOptionDto> Assignees { get; set; } = new();
         public int TotalCount { get; set; }
         public int Page { get; set; } = 1;
         public int PageSize { get; set; } = 25;
@@ -62,6 +87,52 @@ namespace Axiom.Atlas.Application.DTOs.ServiceDesk
         public bool SynchronizationPending { get; set; }
         public int SynchronizationIntervalSeconds { get; set; } = 300;
         public int TotalPages => Math.Max(1, (int)Math.Ceiling(TotalCount / (double)Math.Max(1, PageSize)));
+    }
+
+    public class ServiceDeskQueueQueryDto
+    {
+        public int Page { get; set; } = 1;
+        public int PageSize { get; set; } = 25;
+        public string? Status { get; set; }
+        public string? Search { get; set; }
+        public string? Client { get; set; }
+        public string? Stage { get; set; }
+        public string? Priority { get; set; }
+        public string? WorkPackage { get; set; }
+        public bool OnlyRisk { get; set; }
+        public bool OnlyMine { get; set; }
+        public string? Sort { get; set; }
+    }
+
+    public class ServiceDeskQueueSummaryDto
+    {
+        public int Total { get; set; }
+        public int WithoutWorkPackage { get; set; }
+        public int AtRisk { get; set; }
+        public int PendingLinks { get; set; }
+        public int InProgress { get; set; }
+        public int MyAssignments { get; set; }
+    }
+
+    public class ServiceDeskUserOptionDto
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; } = string.Empty;
+    }
+
+    public class ServiceDeskBulkUpdateRequest
+    {
+        public List<long> TicketIds { get; set; } = new();
+        public Guid? AssignedUserId { get; set; }
+        public bool ClearAssignment { get; set; }
+        public string? Priority { get; set; }
+        public string? Stage { get; set; }
+        public string? Classification { get; set; }
+    }
+
+    public class ServiceDeskBulkPrepareRequest
+    {
+        public List<long> TicketIds { get; set; } = new();
     }
 
     public class GlpiImprovementTicketDto
@@ -79,6 +150,16 @@ namespace Axiom.Atlas.Application.DTOs.ServiceDesk
         public string? WorkPackageCreator { get; set; }
         public DateTime? WorkPackageCreatedAt { get; set; }
         public int? WorkPackageDaysOpen { get; set; }
+        public Guid? WorkspaceId { get; set; }
+        public string Stage { get; set; } = "triage";
+        public string StageLabel { get; set; } = "Triagem GLPI";
+        public string Priority { get; set; } = "Normal";
+        public string PriorityReason { get; set; } = string.Empty;
+        public bool IsAtRisk { get; set; }
+        public bool IsGlpiLinkPending { get; set; }
+        public Guid? AssignedUserId { get; set; }
+        public string? AssignedUserName { get; set; }
+        public string? Classification { get; set; }
     }
 
     /// <summary>
@@ -115,6 +196,7 @@ namespace Axiom.Atlas.Application.DTOs.ServiceDesk
     public class UnifiedBacklogItemDto
     {
         public long GlpiTicketId { get; set; }
+        public int? GlpiStatusCode { get; set; }
         public string Subject { get; set; } = string.Empty;
         public string? GlpiTicketUrl { get; set; }
         public DateTime? OpenedAt { get; set; }
@@ -135,6 +217,9 @@ namespace Axiom.Atlas.Application.DTOs.ServiceDesk
         public string PriorityReason { get; set; } = string.Empty;
         public bool IsAtRisk { get; set; }
         public bool IsGlpiLinkPending { get; set; }
+        public Guid? AssignedUserId { get; set; }
+        public string? AssignedUserName { get; set; }
+        public string? Classification { get; set; }
         public decimal LoggedHours { get; set; }
         public decimal SyncedHours { get; set; }
         public decimal PendingSyncHours { get; set; }

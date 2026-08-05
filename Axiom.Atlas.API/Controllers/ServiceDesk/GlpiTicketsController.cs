@@ -35,9 +35,7 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
 
         [HttpGet("improvements")]
         public async Task<IActionResult> GetImprovementTickets(
-            [FromQuery] int page = 1,
-            [FromQuery] int pageSize = 25,
-            [FromQuery] string? status = null,
+            [FromQuery] ServiceDeskQueueQueryDto request,
             [FromQuery] bool refresh = false)
         {
             try
@@ -50,7 +48,9 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
                         User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name);
                 }
 
-                var tickets = await _glpiService.GetImprovementTicketsAsync(page, pageSize, status);
+                var tickets = await _glpiService.GetImprovementTicketsAsync(
+                    request,
+                    User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name);
                 tickets.SynchronizationPending = await _synchronizationQueue.IsSynchronizationPendingAsync();
                 tickets.SynchronizationIntervalSeconds = Math.Clamp(
                     _configuration.GetValue<int?>("GlpiSynchronization:IntervalSeconds") ?? 300,
@@ -115,6 +115,75 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
 
         [HttpGet("{id:guid}")]
         public async Task<IActionResult> Get(Guid id) => (await _glpiService.GetWorkspaceAsync(id)) is { } workspace ? Ok(workspace) : NotFound();
+
+        [HttpGet("{id:guid}/openproject-work-packages")]
+        public async Task<IActionResult> SearchExistingWorkPackages(Guid id, [FromQuery] string? query, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(query)) return BadRequest(new { message = "Informe um termo para pesquisar no OpenProject." });
+            try
+            {
+                return Ok(await _glpiService.SearchExistingWorkPackagesAsync(id, query, cancellationToken));
+            }
+            catch (KeyNotFoundException) { return NotFound(); }
+            catch (Exception exception)
+            {
+                return BadRequest(new { message = exception.Message });
+            }
+        }
+
+        [HttpPost("improvements/bulk-update")]
+        public async Task<IActionResult> BulkUpdateImprovementTickets(
+            [FromBody] ServiceDeskBulkUpdateRequest request,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                var updated = await _glpiService.BulkUpdateImprovementTicketsAsync(
+                    request,
+                    User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name,
+                    cancellationToken);
+                return Ok(new { updated, message = $"{updated} chamado(s) atualizado(s) na fila do Axiom Atlas." });
+            }
+            catch (Exception exception)
+            {
+                return BadRequest(new { message = exception.Message });
+            }
+        }
+
+        [HttpPost("improvements/prepare-workspaces")]
+        public async Task<IActionResult> PrepareImprovementTicketWorkspaces(
+            [FromBody] ServiceDeskBulkPrepareRequest request,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                var workspaces = await _glpiService.PrepareImprovementTicketWorkspacesAsync(
+                    request,
+                    User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "Sistema",
+                    cancellationToken);
+                return Ok(new { count = workspaces.Count, workspaces, message = $"{workspaces.Count} área(s) de trabalho preparada(s) para criar ou vincular Work Packages." });
+            }
+            catch (Exception exception)
+            {
+                return BadRequest(new { message = exception.Message });
+            }
+        }
+
+        [HttpPost("{id:guid}/openproject-work-packages/{workPackageId:int}/glpi-link")]
+        public async Task<IActionResult> LinkExistingWorkPackage(Guid id, int workPackageId, CancellationToken cancellationToken)
+        {
+            try { return Ok(await _glpiService.LinkExistingWorkPackageAsync(id, workPackageId, cancellationToken)); }
+            catch (KeyNotFoundException) { return NotFound(); }
+            catch (Exception exception) { return BadRequest(new { message = exception.Message }); }
+        }
+
+        [HttpPost("{id:guid}/openproject-work-packages/{workPackageId:int}/private-comment")]
+        public async Task<IActionResult> AddExistingWorkPackagePrivateComment(Guid id, int workPackageId, CancellationToken cancellationToken)
+        {
+            try { return Ok(await _glpiService.AddExistingWorkPackagePrivateCommentAsync(id, workPackageId, cancellationToken)); }
+            catch (KeyNotFoundException) { return NotFound(); }
+            catch (Exception exception) { return BadRequest(new { message = exception.Message }); }
+        }
 
         [HttpPut("{id:guid}/draft")]
         public async Task<IActionResult> SaveDraft(Guid id, [FromBody] SaveRequirementDraftRequest request)
