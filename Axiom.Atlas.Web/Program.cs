@@ -6,7 +6,9 @@ using Axiom.Atlas.Web.Services.Releases;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Mvc;
+using QuestPDF.Infrastructure;
 
+QuestPDF.Settings.License = LicenseType.Community;
 var builder = WebApplication.CreateBuilder(args);
 ProductionConfigurationValidator.Validate(builder.Configuration, builder.Environment);
 var apiBaseUrl = builder.Configuration["ApiSettings:BaseUrl"]
