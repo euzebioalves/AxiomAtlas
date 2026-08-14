@@ -12,7 +12,7 @@ services:
       context: ..
       dockerfile: Axiom.Atlas.Web/Dockerfile
       args:
-        VERSION: local
+        VERSION: 0.0.0-local
         REVISION: local
     image: axiom-atlas-web:local
   api:
@@ -20,7 +20,7 @@ services:
       context: ..
       dockerfile: Axiom.Atlas.API/Dockerfile
       args:
-        VERSION: local
+        VERSION: 0.0.0-local
         REVISION: local
     image: axiom-atlas-api:local
   migrate:
@@ -28,7 +28,7 @@ services:
       context: ..
       dockerfile: Axiom.Atlas.Migrator/Dockerfile
       args:
-        VERSION: local
+        VERSION: 0.0.0-local
         REVISION: local
     image: axiom-atlas-migrator:local
   bootstrap-admin:
@@ -36,6 +36,6 @@ services:
       context: ..
       dockerfile: Axiom.Atlas.Migrator/Dockerfile
       args:
-        VERSION: local
+        VERSION: 0.0.0-local
         REVISION: local
     image: axiom-atlas-migrator:local
