@@ -96,6 +96,8 @@ jobs:
 
       - name: Validate Compose files
         run: |
+          # The runner uses localhost; containers must resolve PostgreSQL by its internal service name.
+          unset ConnectionStrings__DefaultConnection
           cp deploy/.env.example .env
           sed -i \
             -e 's/CHANGE_ME.example.com/localhost/g' \
@@ -115,6 +117,7 @@ jobs:
 
       - name: Start disposable production-like stack
         run: |
+          unset ConnectionStrings__DefaultConnection
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml build
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml up -d --wait postgres
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml run --rm migrate
