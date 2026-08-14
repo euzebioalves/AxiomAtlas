@@ -100,7 +100,7 @@ jobs:
           unset ConnectionStrings__DefaultConnection
           cp deploy/.env.example .env
           sed -i \
-            -e 's/CHANGE_ME.example.com/localhost/g' \
+            -e 's/CHANGE_ME.example.com/ci.example.test/g' \
             -e 's/CHANGE_ME_GENERATE_A_LONG_RANDOM_VALUE/ci-postgres-password/g' \
             -e 's/CHANGE_ME_GENERATE_AT_LEAST_32_RANDOM_CHARACTERS/ci-secret-with-at-least-thirty-two-characters/g' \
             -e 's/CHANGE_ME:axiom-atlas/local:axiom-atlas/g' \
