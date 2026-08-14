@@ -11,7 +11,7 @@ ARG REVISION=unknown
 RUN dotnet publish "Axiom.Atlas.Migrator/Axiom.Atlas.Migrator.csproj" --configuration Release --no-restore --output /app/publish \
     /p:Version=$VERSION /p:InformationalVersion=$VERSION+$REVISION /p:IncludeSourceRevisionInInformationalVersion=false
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0.9-noble AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.9-noble AS final
 WORKDIR /app
 RUN mkdir -p /tmp && chown -R app:app /app /tmp
 COPY --from=build --chown=app:app /app/publish .
