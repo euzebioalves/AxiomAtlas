@@ -1,13 +1,35 @@
+using Axiom.Atlas.Web.Configuration;
 using Axiom.Atlas.Web.Handlers.Auth;
+using Axiom.Atlas.Web.Health;
 using Axiom.Atlas.Web.Services.Auth;
 using Axiom.Atlas.Web.Services.Releases;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
-var apiBaseUrl = builder.Configuration["ApiSettings:BaseUrl"] ?? "https://localhost:7255/";
+ProductionConfigurationValidator.Validate(builder.Configuration, builder.Environment);
+var apiBaseUrl = builder.Configuration["ApiSettings:BaseUrl"]
+    ?? throw new InvalidOperationException("ApiSettings:BaseUrl não configurada.");
 var acceptDevelopmentCertificates = builder.Environment.IsDevelopment();
+var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
+if (string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+{
+    dataProtectionKeysPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "ASP.NET",
+        "AxiomAtlas-Web-DataProtection-Keys");
+}
+
+Directory.CreateDirectory(dataProtectionKeysPath);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
+    .SetApplicationName("Axiom.Atlas.Web");
 
 // 1. Registros Básicos do MVC
-builder.Services.AddControllersWithViews();
+builder.Services.AddControllersWithViews(options =>
+    options.Filters.Add(new AutoValidateAntiforgeryTokenAttribute()));
+builder.Services.AddAntiforgery(options => options.HeaderName = "RequestVerificationToken");
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddMemoryCache();
 builder.Services.Configure<ReleaseNotesOptions>(
@@ -52,7 +74,8 @@ authClientBuilder.AddHttpMessageHandler<AuthHeaderHandler>();
 builder.Services.AddAuthentication("CookieAuth")
     .AddCookie("CookieAuth", options =>
     {
-        options.Cookie.Name = "AxiomAtlas_AuthToken";
+        options.Cookie.Name = acceptDevelopmentCertificates ? "AxiomAtlas.Auth" : "__Host-AxiomAtlas.Auth";
+        options.Cookie.Path = "/";
         options.LoginPath = "/Auth/Login";
         options.AccessDeniedPath = "/Auth/AccessDenied";
         options.SlidingExpiration = true;
@@ -61,6 +84,7 @@ builder.Services.AddAuthentication("CookieAuth")
         options.Cookie.SecurePolicy = acceptDevelopmentCertificates
             ? CookieSecurePolicy.SameAsRequest
             : CookieSecurePolicy.Always;
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(builder.Configuration.GetValue("Authentication:CookieExpirationMinutes", 480));
     });
 
 builder.Services.AddAuthorization(options =>
@@ -75,12 +99,24 @@ builder.Services.AddAuthorization(options =>
                          role.Equals("Administrador", StringComparison.OrdinalIgnoreCase)));
     });
 });
+builder.Services.AddHealthChecks()
+    .AddCheck<ApiReadinessHealthCheck>("api-ready", tags: ["ready"])
+    .AddCheck<PdfRuntimeHealthCheck>("pdf-runtime", tags: ["ready"]);
 
 var app = builder.Build();
 
 // 5. Configurações de Pipeline
 if (!app.Environment.IsDevelopment())
 {
+    var forwardedHeadersOptions = new ForwardedHeadersOptions
+    {
+        ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto,
+        ForwardLimit = 1
+    };
+    forwardedHeadersOptions.KnownIPNetworks.Clear();
+    forwardedHeadersOptions.KnownProxies.Clear();
+    forwardedHeadersOptions.KnownProxies.Add(System.Net.IPAddress.Parse("172.30.0.2"));
+    app.UseForwardedHeaders(forwardedHeadersOptions);
     app.UseExceptionHandler("/Home/Error");
     app.UseHsts();
 }
@@ -89,11 +125,19 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
 
-// 🚨 Muito importante: Autenticação SEMPRE antes da Autorização
+// Authentication must be registered before authorization.
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapStaticAssets();
+app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => false
+}).AllowAnonymous();
+app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("ready")
+}).AllowAnonymous();
 
 try
 {
@@ -105,8 +149,7 @@ try
 }
 catch (System.Reflection.ReflectionTypeLoadException ex)
 {
-    var errosReais = string.Join(" | ", ex.LoaderExceptions.Select(e => e?.Message));
-    throw new Exception($"O CULPADO É: {errosReais}");
+    throw new InvalidOperationException("Não foi possível inicializar as rotas MVC.", ex);
 }
 
 app.Run();

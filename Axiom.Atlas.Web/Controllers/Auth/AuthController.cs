@@ -11,11 +11,13 @@ namespace Axiom.Atlas.Web.Controllers.Auth
     {
         private readonly IAuthService _authService;
         private readonly IHttpClientFactory _httpClientFactory;
+        private readonly IConfiguration _configuration;
 
-        public AuthController(IAuthService authService, IHttpClientFactory httpClientFactory)
+        public AuthController(IAuthService authService, IHttpClientFactory httpClientFactory, IConfiguration configuration)
         {
             _authService = authService;
             _httpClientFactory = httpClientFactory;
+            _configuration = configuration;
         }
 
         [HttpGet]
@@ -56,7 +58,7 @@ namespace Axiom.Atlas.Web.Controllers.Auth
                 var authProperties = new AuthenticationProperties
                 {
                     IsPersistent = true,
-                    ExpiresUtc = DateTimeOffset.UtcNow.AddHours(8)
+                    ExpiresUtc = DateTimeOffset.UtcNow.AddMinutes(_configuration.GetValue("Authentication:CookieExpirationMinutes", 480))
                 };
 
                 authProperties.StoreTokens(new[]

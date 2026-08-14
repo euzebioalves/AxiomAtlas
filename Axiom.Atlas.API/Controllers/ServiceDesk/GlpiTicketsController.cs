@@ -14,14 +14,17 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
         private readonly GlpiService _glpiService;
         private readonly GlpiImprovementTicketSynchronizationQueue _synchronizationQueue;
         private readonly IConfiguration _configuration;
+        private readonly ILogger<GlpiTicketsController> _logger;
         public GlpiTicketsController(
             GlpiService glpiService,
             GlpiImprovementTicketSynchronizationQueue synchronizationQueue,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            ILogger<GlpiTicketsController> logger)
         {
             _glpiService = glpiService;
             _synchronizationQueue = synchronizationQueue;
             _configuration = configuration;
+            _logger = logger;
         }
 
         [HttpPost("import")]
@@ -30,7 +33,7 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
             if (string.IsNullOrWhiteSpace(request.Query)) return BadRequest(new { message = "Informe o número ou assunto do chamado." });
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name ?? "Sistema";
             try { return Ok(await _glpiService.ImportTicketAsync(request.Query, userId)); }
-            catch (Exception exception) { return BadRequest(new { message = exception.Message }); }
+            catch (Exception exception) { return IntegrationFailure(exception); }
         }
 
         [HttpGet("improvements")]
@@ -60,7 +63,7 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
             }
             catch (Exception exception)
             {
-                return BadRequest(new { message = exception.Message });
+                return IntegrationFailure(exception);
             }
         }
 
@@ -80,7 +83,7 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
             }
             catch (Exception exception)
             {
-                return BadRequest(new { message = exception.Message });
+                return IntegrationFailure(exception);
             }
         }
 
@@ -101,7 +104,7 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
             }
             catch (Exception exception)
             {
-                return BadRequest(new { message = exception.Message });
+                return IntegrationFailure(exception);
             }
         }
 
@@ -127,7 +130,7 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
             catch (KeyNotFoundException) { return NotFound(); }
             catch (Exception exception)
             {
-                return BadRequest(new { message = exception.Message });
+                return IntegrationFailure(exception);
             }
         }
 
@@ -146,7 +149,7 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
             }
             catch (Exception exception)
             {
-                return BadRequest(new { message = exception.Message });
+                return IntegrationFailure(exception);
             }
         }
 
@@ -165,7 +168,7 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
             }
             catch (Exception exception)
             {
-                return BadRequest(new { message = exception.Message });
+                return IntegrationFailure(exception);
             }
         }
 
@@ -174,7 +177,7 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
         {
             try { return Ok(await _glpiService.LinkExistingWorkPackageAsync(id, workPackageId, cancellationToken)); }
             catch (KeyNotFoundException) { return NotFound(); }
-            catch (Exception exception) { return BadRequest(new { message = exception.Message }); }
+            catch (Exception exception) { return IntegrationFailure(exception); }
         }
 
         [HttpPost("{id:guid}/openproject-work-packages/{workPackageId:int}/private-comment")]
@@ -182,7 +185,7 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
         {
             try { return Ok(await _glpiService.AddExistingWorkPackagePrivateCommentAsync(id, workPackageId, cancellationToken)); }
             catch (KeyNotFoundException) { return NotFound(); }
-            catch (Exception exception) { return BadRequest(new { message = exception.Message }); }
+            catch (Exception exception) { return IntegrationFailure(exception); }
         }
 
         [HttpPut("{id:guid}/draft")]
@@ -214,7 +217,7 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
             }
             catch (Exception exception)
             {
-                return BadRequest(new { message = exception.Message });
+                return IntegrationFailure(exception);
             }
         }
 
@@ -232,7 +235,7 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
         public async Task<IActionResult> GetOpenProjectProjects()
         {
             try { return Ok(await _glpiService.GetOpenProjectProjectsAsync()); }
-            catch (Exception exception) { return BadRequest(new { message = exception.Message }); }
+            catch (Exception exception) { return IntegrationFailure(exception); }
         }
 
         [HttpPost("{id:guid}/user-story")]
@@ -240,7 +243,7 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
         {
             try { return Ok(await _glpiService.CreateUserStoryAsync(id, request)); }
             catch (KeyNotFoundException) { return NotFound(); }
-            catch (Exception exception) { return BadRequest(new { message = exception.Message }); }
+            catch (Exception exception) { return IntegrationFailure(exception); }
         }
 
         [HttpPost("{id:guid}/glpi-link/reprocess")]
@@ -271,7 +274,16 @@ namespace Axiom.Atlas.API.Controllers.ServiceDesk
         {
             try { var file = await _glpiService.DownloadAttachmentAsync(id, documentId); return File(file.Content, file.ContentType); }
             catch (KeyNotFoundException) { return NotFound(); }
-            catch (Exception exception) { return BadRequest(new { message = exception.Message }); }
+            catch (Exception exception) { return IntegrationFailure(exception); }
+        }
+
+        private IActionResult IntegrationFailure(Exception exception)
+        {
+            _logger.LogError(exception, "Falha ao processar uma operação de integração do Service Desk.");
+            return StatusCode(StatusCodes.Status502BadGateway, new
+            {
+                message = "A integração não pôde concluir a operação. Tente novamente mais tarde."
+            });
         }
     }
 }

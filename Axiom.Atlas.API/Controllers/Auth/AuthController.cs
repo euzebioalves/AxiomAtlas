@@ -8,8 +8,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.WebUtilities;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 using System.Text;
+using System.Text.Encodings.Web;
 
 namespace Axiom.Atlas.API.Controllers.Auth
 {
@@ -20,12 +22,21 @@ namespace Axiom.Atlas.API.Controllers.Auth
         private readonly IAuthService _authService;
         private readonly UserManager<User> _userManager;
         private readonly IEmailService _emailService;
+        private readonly IConfiguration _configuration;
+        private readonly ILogger<AuthController> _logger;
 
-        public AuthController(IAuthService authService, UserManager<User> userManager, IEmailService emailService)
+        public AuthController(
+            IAuthService authService,
+            UserManager<User> userManager,
+            IEmailService emailService,
+            IConfiguration configuration,
+            ILogger<AuthController> logger)
         {
             _authService = authService;
             _userManager = userManager;
             _emailService = emailService;
+            _configuration = configuration;
+            _logger = logger;
         }
 
         //[HttpPost("login")]
@@ -45,6 +56,7 @@ namespace Axiom.Atlas.API.Controllers.Auth
         //}
 
         [HttpPost("login")]
+        [EnableRateLimiting("SensitiveAuth")]
         public async Task<IActionResult> Login([FromBody] LoginRequest model)
         {
             // Criamos o escopo de auditoria para monitorar esta tentativa de acesso
@@ -64,8 +76,7 @@ namespace Axiom.Atlas.API.Controllers.Auth
                     }
                     catch (Exception ex)
                     {
-                        // Se cair aqui, o erro vai aparecer no console da API!
-                        Console.WriteLine($"[ERRO AUDIT]: {ex.Message}");
+                        _logger.LogWarning(ex, "Não foi possível registrar uma auditoria de autenticação.");
                     }
                     return Unauthorized(new { message = "Credenciais inválidas" });
                 }
@@ -82,8 +93,7 @@ namespace Axiom.Atlas.API.Controllers.Auth
                     }
                     catch (Exception ex)
                     {
-                        // Se cair aqui, o erro vai aparecer no console da API!
-                        Console.WriteLine($"[ERRO AUDIT]: {ex.Message}");
+                        _logger.LogWarning(ex, "Não foi possível registrar uma auditoria de autenticação.");
                     }
                     return Unauthorized(new { message = "Esta conta está desativada. Entre em contato com o administrador do Axiom Atlas." });
                 }
@@ -97,14 +107,14 @@ namespace Axiom.Atlas.API.Controllers.Auth
                 }
                 catch (Exception ex)
                 {
-                    // Se cair aqui, o erro vai aparecer no console da API!
-                    Console.WriteLine($"[ERRO AUDIT]: {ex.Message}");
+                    _logger.LogWarning(ex, "Não foi possível registrar uma auditoria de autenticação.");
                 }
                 return Ok(authResult);
             }
         }
 
         [HttpPost("forgot-password")]
+        [EnableRateLimiting("SensitiveAuth")]
         public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest model)
         {
             // 1. Busca o usuário pelo e-mail
@@ -125,9 +135,17 @@ namespace Axiom.Atlas.API.Controllers.Auth
             var token = await _userManager.GeneratePasswordResetTokenAsync(user);
             var encodedToken = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(token));
 
-            // 4. Monta a URL que o usuário vai clicar no e-mail (Ajuste a URL do seu Front)
-            var frontendUrl = "https://localhost:7204"; // Mude para a porta do seu projeto Web
-            var resetLink = $"{frontendUrl}/Auth/ResetPassword?email={model.Email}&token={encodedToken}";
+            // A URL pública é configurada pelo operador e nunca depende do Host enviado pelo cliente.
+            var webBaseUrl = _configuration["PublicUrls:WebBaseUrl"]
+                ?? throw new InvalidOperationException("PublicUrls:WebBaseUrl não configurada.");
+            var frontendUrl = webBaseUrl.TrimEnd('/');
+            var resetLink = QueryHelpers.AddQueryString(
+                $"{frontendUrl}/Auth/ResetPassword",
+                new Dictionary<string, string?>
+                {
+                    ["email"] = user.Email,
+                    ["token"] = encodedToken
+                });
 
             // 5. Template Metronic Adaptado
             // ATENÇÃO: Substitua as URLs das tags <img> pelas URLs completas de onde suas imagens estarão hospedadas
@@ -148,7 +166,7 @@ namespace Axiom.Atlas.API.Controllers.Auth
                                             </div>                                                         
                             
                                             <div style='font-size: 14px; font-weight: 500; margin-bottom: 27px; font-family:Arial,Helvetica,sans-serif;'>                                
-                                                <p style='margin-bottom:9px; color:#181C32; font-size: 22px; font-weight:700'>Olá, {user.FullName}!</p>                                
+                                                <p style='margin-bottom:9px; color:#181C32; font-size: 22px; font-weight:700'>Olá, {HtmlEncoder.Default.Encode(user.FullName)}!</p>
                                                 <p style='margin-bottom:2px; color:#7E8299'>Recebemos uma solicitação para redefinir a senha da sua conta.</p>                                
                                                 <p style='margin-bottom:2px; color:#7E8299'>Clique no botão abaixo para escolher uma nova senha.</p>                              
                                             </div>                                                              
@@ -176,14 +194,15 @@ namespace Axiom.Atlas.API.Controllers.Auth
             }
             catch (Exception ex)
             {
-                // Se a configuração do Gmail falhar, cai aqui
-                return StatusCode(500, new { message = "Erro ao enviar o e-mail de recuperação. Verifique as configurações do servidor SMTP.", error = ex.Message });
+                _logger.LogError(ex, "Falha ao enviar e-mail de recuperação de senha.");
+                return StatusCode(500, new { message = "Não foi possível processar a solicitação neste momento. Tente novamente mais tarde." });
             }
 
             return Ok(new { message = "Se o e-mail existir em nossa base, um link de recuperação será enviado em instantes." });
         }
 
         [HttpPost("reset-password")]
+        [EnableRateLimiting("SensitiveAuth")]
         public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest model)
         {
             // 1. Busca o usuário

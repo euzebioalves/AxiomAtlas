@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Axiom.Atlas.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260710034706_AddDesktopNotificationReasonComment")]
-    partial class AddDesktopNotificationReasonComment
+    [Migration("20260814004905_InitialProductionBaseline")]
+    partial class InitialProductionBaseline
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -194,6 +194,279 @@ namespace Axiom.Atlas.Persistence.Migrations
                     b.ToTable("UserDesktopNotificationSettings");
                 });
 
+            modelBuilder.Entity("Axiom.Atlas.Domain.Entities.ServiceDesk.GlpiImprovementTicket", b =>
+                {
+                    b.Property<long>("GlpiTicketId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ClientEntityName")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("EntityPath")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("GlpiTicketUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<bool>("IsInImprovementQueue")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("LastSynchronizedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("OpenedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("StatusCode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StatusName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("WorkPackageCreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("WorkPackageCreator")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<int?>("WorkPackageId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("WorkPackageStatus")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("WorkPackageUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.HasKey("GlpiTicketId");
+
+                    b.HasIndex("IsInImprovementQueue", "StatusCode", "OpenedAt");
+
+                    b.ToTable("GlpiImprovementTickets");
+                });
+
+            modelBuilder.Entity("Axiom.Atlas.Domain.Entities.ServiceDesk.GlpiTicketManagement", b =>
+                {
+                    b.Property<long>("GlpiTicketId")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("AssignedUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Classification")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Priority")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("Stage")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UpdatedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("GlpiTicketId");
+
+                    b.HasIndex("AssignedUserId");
+
+                    b.ToTable("GlpiTicketManagement");
+                });
+
+            modelBuilder.Entity("Axiom.Atlas.Domain.Entities.ServiceDesk.GlpiTicketWorkspace", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AttachmentsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Classification")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("ClientEntityName")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("EntityPath")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("FollowUpsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("GlpiDevOpsFieldId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("GlpiDevOpsUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<long>("GlpiTicketId")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("OpenProjectWorkPackageId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OpenProjectWorkPackageUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("RequirementMarkdown")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Subject")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("TicketPayloadJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GlpiTicketId")
+                        .IsUnique();
+
+                    b.ToTable("GlpiTicketWorkspaces");
+                });
+
+            modelBuilder.Entity("Axiom.Atlas.Domain.Entities.ServiceDesk.GlpiTicketWorkspaceImage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<Guid>("WorkspaceId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.ToTable("GlpiTicketWorkspaceImages");
+                });
+
+            modelBuilder.Entity("Axiom.Atlas.Domain.Entities.ServiceDesk.IntegrationSynchronizationJob", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("AvailableAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CorrelationKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("GlpiTicketId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text");
+
+                    b.Property<int>("MaxAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("OpenProjectWorkPackageId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RequestedByUserId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("WorkspaceId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("WorkspaceId");
+
+                    b.HasIndex("Status", "AvailableAt");
+
+                    b.HasIndex("Type", "CorrelationKey", "CreatedAt");
+
+                    b.ToTable("IntegrationSynchronizationJobs");
+                });
+
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.TimeClock.GlobalTimeClockSetting", b =>
                 {
                     b.Property<Guid>("Id")
@@ -229,6 +502,28 @@ namespace Axiom.Atlas.Persistence.Migrations
                     b.Property<TimeSpan?>("EndTime")
                         .HasColumnType("interval");
 
+                    b.Property<string>("ExternalRecordId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ExternalUserId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("ImportBatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ImportFileHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ImportFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTime?>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Observation")
                         .HasColumnType("text");
 
@@ -236,6 +531,12 @@ namespace Axiom.Atlas.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime?>("SourceCreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SourceUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("StartDate")
                         .HasColumnType("timestamp with time zone");
@@ -254,6 +555,9 @@ namespace Axiom.Atlas.Persistence.Migrations
                         .HasColumnType("character varying(100)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("UserId", "ExternalRecordId")
+                        .IsUnique();
 
                     b.ToTable("TimeClockAbsences");
                 });
@@ -303,6 +607,28 @@ namespace Axiom.Atlas.Persistence.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("ExternalRecordId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ExternalUserId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("ImportBatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ImportFileHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ImportFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTime?>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Nsr")
                         .HasMaxLength(9)
                         .HasColumnType("character varying(9)");
@@ -315,6 +641,12 @@ namespace Axiom.Atlas.Persistence.Migrations
 
                     b.Property<TimeSpan>("PunchTime")
                         .HasColumnType("interval");
+
+                    b.Property<DateTime?>("SourceCreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SourceUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Type")
                         .IsRequired()
@@ -330,6 +662,9 @@ namespace Axiom.Atlas.Persistence.Migrations
                         .HasColumnType("character varying(100)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("UserId", "ExternalRecordId")
+                        .IsUnique();
 
                     b.HasIndex("UserId", "PunchDate", "Type")
                         .IsUnique();
@@ -352,8 +687,36 @@ namespace Axiom.Atlas.Persistence.Migrations
                     b.Property<TimeSpan?>("EndTime")
                         .HasColumnType("interval");
 
+                    b.Property<string>("ExternalRecordId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ExternalUserId")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("ImportBatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ImportFileHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ImportFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<DateTime?>("ImportedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("Observation")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("SourceCreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SourceUpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<TimeSpan?>("StartTime")
                         .HasColumnType("interval");
@@ -376,6 +739,9 @@ namespace Axiom.Atlas.Persistence.Migrations
                     b.HasIndex("UserId", "AbsenceDate")
                         .IsUnique();
 
+                    b.HasIndex("UserId", "ExternalRecordId")
+                        .IsUnique();
+
                     b.ToTable("TimeClockUnjustifiedAbsences");
                 });
 
@@ -396,6 +762,9 @@ namespace Axiom.Atlas.Persistence.Migrations
 
                     b.Property<int>("LunchIntervalMinutes")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("ShowWorkPackagesInCalendar")
+                        .HasColumnType("boolean");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -551,6 +920,10 @@ namespace Axiom.Atlas.Persistence.Migrations
                     b.Property<byte[]>("ProfilePicture")
                         .HasColumnType("bytea");
 
+                    b.Property<string>("ProfilePictureContentType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
 
@@ -703,6 +1076,17 @@ namespace Axiom.Atlas.Persistence.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("Axiom.Atlas.Domain.Entities.ServiceDesk.GlpiTicketWorkspaceImage", b =>
+                {
+                    b.HasOne("Axiom.Atlas.Domain.Entities.ServiceDesk.GlpiTicketWorkspace", "Workspace")
+                        .WithMany("Images")
+                        .HasForeignKey("WorkspaceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Workspace");
+                });
+
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.TimeClock.TimeClockAbsenceAttachment", b =>
                 {
                     b.HasOne("Axiom.Atlas.Domain.Entities.TimeClock.TimeClockAbsence", "Absence")
@@ -774,6 +1158,11 @@ namespace Axiom.Atlas.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Axiom.Atlas.Domain.Entities.ServiceDesk.GlpiTicketWorkspace", b =>
+                {
+                    b.Navigation("Images");
                 });
 
             modelBuilder.Entity("Axiom.Atlas.Domain.Entities.TimeClock.TimeClockAbsence", b =>

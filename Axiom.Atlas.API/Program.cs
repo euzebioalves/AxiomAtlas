@@ -1,5 +1,6 @@
 using Audit.Core;
 using Axiom.Atlas.Api.Transformers;
+using Axiom.Atlas.API.Configuration;
 using Axiom.Atlas.Application.Interfaces;
 using Axiom.Atlas.Application.Services;
 using Axiom.Atlas.Application.Services.TimeClock;
@@ -18,12 +19,17 @@ using Axiom.Atlas.Infrastructure.Services.TimeEntries;
 using Axiom.Atlas.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.Threading.RateLimiting;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+ProductionConfigurationValidator.Validate(builder.Configuration, builder.Environment);
 
 var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
 if (string.IsNullOrWhiteSpace(dataProtectionKeysPath))
@@ -52,12 +58,28 @@ builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath))
     .SetApplicationName("Axiom.Atlas");
 builder.Services.AddControllers();
+builder.Services.AddProblemDetails();
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(connectionString));
-builder.Services.AddIdentityApiEndpoints<User>()
+builder.Services.AddIdentityCore<User>(options =>
+    {
+        options.User.RequireUniqueEmail = true;
+        options.Password.RequiredLength = 10;
+        options.Password.RequireUppercase = true;
+        options.Password.RequireLowercase = true;
+        options.Password.RequireDigit = true;
+        options.Password.RequireNonAlphanumeric = true;
+        options.Lockout.AllowedForNewUsers = true;
+        options.Lockout.MaxFailedAccessAttempts = 5;
+        options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+    })
     .AddRoles<IdentityRole<Guid>>()
-    .AddEntityFrameworkStores<AppDbContext>();
+    .AddEntityFrameworkStores<AppDbContext>()
+    .AddDefaultTokenProviders();
+builder.Services.Configure<DataProtectionTokenProviderOptions>(options =>
+    options.TokenLifespan = TimeSpan.FromMinutes(Math.Clamp(
+        builder.Configuration.GetValue("Identity:PasswordResetTokenLifetimeMinutes", 60), 1, 60)));
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ITimeConverterService, TimeConverterService>();
 builder.Services.AddSingleton<TimeClockCsvImportParser>();
@@ -87,18 +109,20 @@ builder.Services.AddAuthentication(options =>
         ValidateIssuerSigningKey = true,
         ValidIssuer = jwtSettings["Issuer"],
         ValidAudience = jwtSettings["Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretKey))
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretKey)),
+        ClockSkew = TimeSpan.FromMinutes(1)
     };
     options.Events = new JwtBearerEvents
     {
         OnAuthenticationFailed = context =>
         {
-            Console.WriteLine($"\n🚨 [ERRO JWT] Falha na Autenticação: {context.Exception.Message}\n");
+            context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+                .CreateLogger("Axiom.Atlas.Authentication")
+                .LogWarning("Falha na validação de token JWT.");
             return Task.CompletedTask;
         },
         OnTokenValidated = context =>
         {
-            Console.WriteLine($"\n✅ [SUCESSO JWT] Token validado para o usuário: {context.Principal?.Identity?.Name}\n");
             return Task.CompletedTask;
         }
     };
@@ -115,14 +139,30 @@ builder.Services.AddAuthorization(options =>
                          role.Equals("Administrador", StringComparison.OrdinalIgnoreCase)));
     });
 });
-builder.Services.AddCors(options =>
+if (builder.Environment.IsDevelopment())
 {
-    options.AddPolicy("AxiomAtlasPolicy", policy =>
+    builder.Services.AddCors(options =>
     {
-        policy.WithOrigins("http://localhost:7255")
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+        options.AddPolicy("DevelopmentOnly", policy =>
+        {
+            policy.WithOrigins("https://localhost:7204", "http://localhost:5238")
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        });
     });
+}
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("SensitiveAuth", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(5),
+            QueueLimit = 0,
+            QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+        }));
 });
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -140,6 +180,7 @@ builder.Services.AddScoped<IEmailService, EmailService>();
 
 // Injeta o HttpContextAccessor para permitir acesso ao contexto HTTP (e.g., para pegar o usuário logado) dentro do Audit.NET
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddHealthChecks();
 
 var app = builder.Build();
 
@@ -240,18 +281,44 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
-    app.UseExceptionHandler();
+    var forwardedHeadersOptions = new ForwardedHeadersOptions
+    {
+        ForwardedHeaders = ForwardedHeaders.XForwardedFor,
+        ForwardLimit = 1
+    };
+    forwardedHeadersOptions.KnownIPNetworks.Clear();
+    forwardedHeadersOptions.KnownProxies.Clear();
+    forwardedHeadersOptions.KnownProxies.Add(System.Net.IPAddress.Parse("172.31.0.2"));
+    app.UseForwardedHeaders(forwardedHeadersOptions);
+    app.UseExceptionHandler(exceptionApp => exceptionApp.Run(async context =>
+    {
+        var traceId = context.TraceIdentifier;
+        var logger = context.RequestServices.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("Axiom.Atlas.Errors");
+        var error = context.Features.Get<IExceptionHandlerFeature>()?.Error;
+        logger.LogError(error, "Erro não tratado. TraceId: {TraceId}", traceId);
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        await Results.Problem(
+            title: "Ocorreu um erro inesperado.",
+            statusCode: StatusCodes.Status500InternalServerError,
+            extensions: new Dictionary<string, object?> { ["traceId"] = traceId })
+            .ExecuteAsync(context);
+    }));
     app.UseHsts();
 }
 app.UseRouting();
 
-app.UseCors("AxiomAtlasPolicy");
-
-app.UseHttpsRedirection();
+if (app.Environment.IsDevelopment())
+{
+    app.UseCors("DevelopmentOnly");
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthentication();
 
 app.UseAuthorization();
+
+app.UseRateLimiter();
 
 app.UseStaticFiles();
 
@@ -291,9 +358,10 @@ app.MapGet("/health/ready", async (AppDbContext context, ILoggerFactory loggerFa
 }).AllowAnonymous();
 
 app.MapControllers();
-app.MapOpenApi("/openapi/{documentName}.json");
-
-app.MapIdentityApi<User>();
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi("/openapi/{documentName}.json");
+}
 
 app.Run();
 
