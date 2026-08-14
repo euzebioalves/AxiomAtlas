@@ -13,7 +13,7 @@ RUN dotnet publish "Axiom.Atlas.Web/Axiom.Atlas.Web.csproj" --configuration Rele
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.9-noble AS final
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates fontconfig fonts-dejavu-core \
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates fontconfig fonts-dejavu-core libgssapi-krb5-2 \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /var/lib/axiom-atlas/keys /tmp \
     && chown -R app:app /app /var/lib/axiom-atlas /tmp
