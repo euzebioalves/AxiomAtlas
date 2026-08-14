@@ -90,9 +90,9 @@ jobs:
 
       - name: Build container images
         run: |
-          docker build -f Axiom.Atlas.API/Dockerfile -t axiom-atlas-api:ci --build-arg VERSION=ci --build-arg REVISION=${GITHUB_SHA} .
-          docker build -f Axiom.Atlas.Web/Dockerfile -t axiom-atlas-web:ci --build-arg VERSION=ci --build-arg REVISION=${GITHUB_SHA} .
-          docker build -f Axiom.Atlas.Migrator/Dockerfile -t axiom-atlas-migrator:ci --build-arg VERSION=ci --build-arg REVISION=${GITHUB_SHA} .
+          docker build -f Axiom.Atlas.API/Dockerfile -t axiom-atlas-api:ci --build-arg VERSION=0.0.0-ci --build-arg REVISION=${GITHUB_SHA} .
+          docker build -f Axiom.Atlas.Web/Dockerfile -t axiom-atlas-web:ci --build-arg VERSION=0.0.0-ci --build-arg REVISION=${GITHUB_SHA} .
+          docker build -f Axiom.Atlas.Migrator/Dockerfile -t axiom-atlas-migrator:ci --build-arg VERSION=0.0.0-ci --build-arg REVISION=${GITHUB_SHA} .
 
       - name: Validate Compose files
         run: |
