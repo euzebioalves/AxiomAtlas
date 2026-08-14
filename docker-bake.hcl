@@ -12,6 +12,8 @@ target "common" {
     "org.opencontainers.image.revision" = "${REVISION}"
   }
   attest = ["type=provenance,mode=max", "type=sbom"]
+  cache-from = ["type=gha"]
+  cache-to = ["type=gha,mode=max"]
 }
 
 target "api" {
