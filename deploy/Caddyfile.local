@@ -1,0 +1,11 @@
+{
+    auto_https off
+    admin off
+}
+
+http:// {
+    encode zstd gzip
+    reverse_proxy web:8080 {
+        health_uri /health/live
+    }
+}

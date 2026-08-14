@@ -2,14 +2,44 @@ name: Continuous Integration
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main]
   push:
-    branches: [ main ]
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
-  build-and-test:
-    name: Build and test
-    runs-on: ubuntu-latest
+  validate:
+    name: Validate application and production stack
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17.5-bookworm
+        env:
+          POSTGRES_DB: axiom_atlas_ci
+          POSTGRES_USER: axiom_ci
+          POSTGRES_PASSWORD: ci-only-password
+        options: >-
+          --health-cmd "pg_isready -U axiom_ci -d axiom_atlas_ci"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+        ports:
+          - 5432:5432
+    env:
+      ConnectionStrings__DefaultConnection: Host=localhost;Port=5432;Database=axiom_atlas_ci;Username=axiom_ci;Password=ci-only-password
+      JwtSettings__SecretKey: ci-only-secret-with-at-least-thirty-two-characters
+      JwtSettings__Issuer: AxiomAtlasApi
+      JwtSettings__Audience: AxiomAtlasWeb
+      JwtSettings__ExpirationMinutes: 480
+      DataProtection__KeysPath: /tmp/axiom-atlas-ci-keys
+      PublicUrls__WebBaseUrl: https://ci.example.test
+      EmailSettings__SmtpServer: smtp.example.test
+      EmailSettings__SmtpPort: 587
+      EmailSettings__SenderName: Axiom Atlas CI
+      EmailSettings__SenderEmail: ci@example.test
+      EmailSettings__Username: ci@example.test
+      EmailSettings__Password: ci-only-password
+      Authentication__CookieExpirationMinutes: 480
 
     steps:
       - name: Checkout
@@ -23,8 +53,76 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore Axiom.Atlas.slnx
 
-      - name: Build
+      - name: Build Release
         run: dotnet build Axiom.Atlas.slnx --configuration Release --no-restore
 
-      - name: Run tests
+      - name: Run automated tests
         run: dotnet test Axiom.Atlas.slnx --configuration Release --no-build --no-restore
+
+      - name: Apply production baseline to an empty PostgreSQL database
+        run: dotnet run --project Axiom.Atlas.Migrator/Axiom.Atlas.Migrator.csproj -- migrate
+
+      - name: Verify schema and migration history
+        env:
+          PGPASSWORD: ci-only-password
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+          psql -h localhost -U axiom_ci -d axiom_atlas_ci -v ON_ERROR_STOP=1 -c 'SELECT "MigrationId" FROM "__EFMigrationsHistory";'
+          psql -h localhost -U axiom_ci -d axiom_atlas_ci -v ON_ERROR_STOP=1 -c 'SELECT 1 FROM "AspNetUsers" LIMIT 1;'
+          psql -h localhost -U axiom_ci -d axiom_atlas_ci -v ON_ERROR_STOP=1 -c 'SELECT 1 FROM "TimeEntries" LIMIT 1;'
+
+      - name: Check EF model consistency
+        run: dotnet ef migrations has-pending-model-changes --project Axiom.Atlas.Persistence/Axiom.Atlas.Persistence.csproj --startup-project Axiom.Atlas.API/Axiom.Atlas.API.csproj
+
+      - name: Start API and validate health/security endpoints
+        run: |
+          dotnet run --project Axiom.Atlas.API/Axiom.Atlas.API.csproj --configuration Release --no-build --urls http://127.0.0.1:18080 > /tmp/axiom-api.log 2>&1 &
+          echo $! > /tmp/axiom-api.pid
+          for i in {1..30}; do curl --fail --silent http://127.0.0.1:18080/health/ready && break || sleep 1; done
+          curl --fail --silent http://127.0.0.1:18080/health/live
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/register)" = "404"
+
+      - name: Build container images
+        run: |
+          docker build -f Axiom.Atlas.API/Dockerfile -t axiom-atlas-api:ci --build-arg VERSION=ci --build-arg REVISION=${GITHUB_SHA} .
+          docker build -f Axiom.Atlas.Web/Dockerfile -t axiom-atlas-web:ci --build-arg VERSION=ci --build-arg REVISION=${GITHUB_SHA} .
+          docker build -f Axiom.Atlas.Migrator/Dockerfile -t axiom-atlas-migrator:ci --build-arg VERSION=ci --build-arg REVISION=${GITHUB_SHA} .
+
+      - name: Validate Compose files
+        run: |
+          cp deploy/.env.example .env
+          sed -i \
+            -e 's/CHANGE_ME.example.com/localhost/g' \
+            -e 's/CHANGE_ME_GENERATE_A_LONG_RANDOM_VALUE/ci-postgres-password/g' \
+            -e 's/CHANGE_ME_GENERATE_AT_LEAST_32_RANDOM_CHARACTERS/ci-secret-with-at-least-thirty-two-characters/g' \
+            -e 's/CHANGE_ME:axiom-atlas/local:axiom-atlas/g' \
+            -e 's/^EmailSettings__SmtpServer=.*/EmailSettings__SmtpServer=smtp.example.test/' \
+            -e 's/^EmailSettings__SenderEmail=.*/EmailSettings__SenderEmail=ci@example.test/' \
+            -e 's/^EmailSettings__Username=.*/EmailSettings__Username=ci@example.test/' \
+            -e 's/^EmailSettings__Password=.*/EmailSettings__Password=ci-password/' \
+            -e 's/^BOOTSTRAP_ADMIN_USERNAME=.*/BOOTSTRAP_ADMIN_USERNAME=ciadmin/' \
+            -e 's/^BOOTSTRAP_ADMIN_EMAIL=.*/BOOTSTRAP_ADMIN_EMAIL=ciadmin@example.test/' \
+            -e 's/^BOOTSTRAP_ADMIN_FULL_NAME=.*/BOOTSTRAP_ADMIN_FULL_NAME=CI Administrator/' \
+            -e 's/^BOOTSTRAP_ADMIN_PASSWORD=.*/BOOTSTRAP_ADMIN_PASSWORD=Ci-Only!Password123/' .env
+          docker compose --env-file .env -f deploy/compose.prod.yml config >/dev/null
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml config >/dev/null
+
+      - name: Start disposable production-like stack
+        run: |
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml build
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml up -d postgres
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml run --rm migrate
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml --profile bootstrap run --rm bootstrap-admin
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml up -d api web caddy
+          for i in {1..45}; do bash deploy/scripts/smoke-local.sh && exit 0 || sleep 2; done
+          exit 1
+
+      - name: Dependency vulnerability report
+        run: dotnet list Axiom.Atlas.slnx package --vulnerable --include-transitive
+
+      - name: Cleanup
+        if: always()
+        run: |
+          test -f /tmp/axiom-api.pid && kill "$(cat /tmp/axiom-api.pid)" || true
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml down --remove-orphans || true
