@@ -103,7 +103,7 @@ builder.Services.AddAuthorization(options =>
 });
 builder.Services.AddHealthChecks()
     .AddCheck<ApiReadinessHealthCheck>("api-ready", tags: ["ready"])
-    .AddCheck<PdfRuntimeHealthCheck>("pdf-runtime", tags: ["ready"]);
+    .AddCheck<PdfRuntimeHealthCheck>("pdf-runtime", tags: ["pdf"]);
 
 var app = builder.Build();
 
@@ -139,6 +139,10 @@ app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthC
 app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
     Predicate = registration => registration.Tags.Contains("ready")
+}).AllowAnonymous();
+app.MapHealthChecks("/health/pdf", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = registration => registration.Tags.Contains("pdf")
 }).AllowAnonymous();
 
 try

@@ -60,7 +60,7 @@ services:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health/ready"]
+      test: ["CMD", "curl", "--fail", "--silent", "--header", "Host: ${AXIOM_DOMAIN}", "http://localhost:8080/health/ready"]
       interval: 15s
       timeout: 5s
       retries: 8

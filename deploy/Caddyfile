@@ -25,6 +25,7 @@
     }
 
     reverse_proxy web:8080 {
+        header_up Host {http.request.host}
         health_uri /health/live
         health_interval 15s
         health_timeout 3s

@@ -3,7 +3,6 @@ services:
     ports: !override
       - "127.0.0.1:8088:80"
     environment:
-      AXIOM_DOMAIN: localhost
       CADDY_EMAIL: ""
     volumes:
       - ./Caddyfile.local:/etc/caddy/Caddyfile:ro

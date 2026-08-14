@@ -123,9 +123,21 @@ jobs:
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml up -d --wait postgres
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml run --rm migrate
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml --profile bootstrap run --rm bootstrap-admin
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml --profile bootstrap run --rm bootstrap-admin
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml up -d api web caddy
-          for i in {1..45}; do bash deploy/scripts/smoke-local.sh && exit 0 || sleep 2; done
-          exit 1
+          export AXIOM_DOMAIN=ci.example.test
+          for i in {1..45}; do bash deploy/scripts/smoke-local.sh && break || sleep 2; done
+          bash deploy/scripts/smoke-local.sh
+          curl --resolve "${AXIOM_DOMAIN}:8088:127.0.0.1" --fail --silent --show-error "http://${AXIOM_DOMAIN}:8088/health/pdf" >/dev/null
+          before_keys="$(docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml exec -T web find /var/lib/axiom-atlas/keys -name 'key-*.xml' -printf '%f\n' | sort)"
+          test -n "$before_keys"
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml restart web
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml up -d --wait web
+          after_keys="$(docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml exec -T web find /var/lib/axiom-atlas/keys -name 'key-*.xml' -printf '%f\n' | sort)"
+          test "$before_keys" = "$after_keys"
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > /tmp/axiom-atlas-ci-backup.sql
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml exec -T postgres sh -c 'createdb -U "$POSTGRES_USER" axiom_atlas_restore_ci && psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d axiom_atlas_restore_ci' < /tmp/axiom-atlas-ci-backup.sql
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d axiom_atlas_restore_ci -c "SELECT count(*) FROM \"__EFMigrationsHistory\";"'
 
       - name: Dependency vulnerability report
         run: dotnet list Axiom.Atlas.slnx package --vulnerable --include-transitive
