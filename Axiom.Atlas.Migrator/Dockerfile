@@ -13,7 +13,10 @@ RUN dotnet publish "Axiom.Atlas.Migrator/Axiom.Atlas.Migrator.csproj" --configur
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.9-noble AS final
 WORKDIR /app
-RUN mkdir -p /tmp && chown -R app:app /app /tmp
+RUN apt-get update && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /tmp \
+    && chown -R app:app /app /tmp
 COPY --from=build --chown=app:app /app/publish .
 USER app
 ENTRYPOINT ["dotnet", "Axiom.Atlas.Migrator.dll"]

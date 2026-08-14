@@ -6,7 +6,7 @@ using QuestPDF.Infrastructure;
 namespace Axiom.Atlas.Web.Health;
 
 /// <summary>Exercises the minimum QuestPDF path so a missing font/runtime dependency fails readiness before traffic is accepted.</summary>
-public sealed class PdfRuntimeHealthCheck : IHealthCheck
+public sealed class PdfRuntimeHealthCheck(ILogger<PdfRuntimeHealthCheck> logger) : IHealthCheck
 {
     public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
@@ -23,8 +23,9 @@ public sealed class PdfRuntimeHealthCheck : IHealthCheck
                 ? HealthCheckResult.Healthy("A geração de PDF está disponível.")
                 : HealthCheckResult.Unhealthy("A geração de PDF não produziu conteúdo."));
         }
-        catch (Exception)
+        catch (Exception exception)
         {
+            logger.LogError(exception, "A verificação de prontidão da geração de PDF falhou.");
             return Task.FromResult(HealthCheckResult.Unhealthy("A geração de PDF não está disponível."));
         }
     }
