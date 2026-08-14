@@ -118,6 +118,7 @@ jobs:
       - name: Start disposable production-like stack
         run: |
           unset ConnectionStrings__DefaultConnection
+          trap 'docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml ps || true; docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml logs --no-color || true' ERR
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml build
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml up -d --wait postgres
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml run --rm migrate
