@@ -116,7 +116,7 @@ jobs:
       - name: Start disposable production-like stack
         run: |
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml build
-          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml up -d postgres
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml up -d --wait postgres
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml run --rm migrate
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml --profile bootstrap run --rm bootstrap-admin
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml up -d api web caddy

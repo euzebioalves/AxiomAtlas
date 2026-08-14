@@ -26,6 +26,7 @@ for image in "ghcr.io/euzebioalves/axiomatlas-api:$version" "ghcr.io/euzebioalve
   docker image inspect "$image" >/dev/null
 done
 
+APP_VERSION="$version" compose up -d --wait postgres
 APP_VERSION="$version" compose run --rm migrate
 APP_VERSION="$version" compose up -d --remove-orphans postgres api web caddy
 "$SCRIPT_DIR/healthcheck.sh"
