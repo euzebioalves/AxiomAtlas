@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM mcr.microsoft.com/dotnet/sdk:10.0.9-noble AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.103-noble AS build
 WORKDIR /src
 COPY ["Axiom.Atlas.Web/Axiom.Atlas.Web.csproj", "Axiom.Atlas.Web/"]
 COPY ["Axiom.Atlas.Application/Axiom.Atlas.Application.csproj", "Axiom.Atlas.Application/"]
