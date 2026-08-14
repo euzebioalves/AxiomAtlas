@@ -2,7 +2,9 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 
 namespace Axiom.Atlas.Web.Health;
 
-public sealed class ApiReadinessHealthCheck(IHttpClientFactory httpClientFactory) : IHealthCheck
+public sealed class ApiReadinessHealthCheck(
+    IHttpClientFactory httpClientFactory,
+    ILogger<ApiReadinessHealthCheck> logger) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
@@ -14,8 +16,9 @@ public sealed class ApiReadinessHealthCheck(IHttpClientFactory httpClientFactory
                 ? HealthCheckResult.Healthy("A API está pronta.")
                 : HealthCheckResult.Unhealthy("A API não está pronta.");
         }
-        catch (HttpRequestException)
+        catch (Exception exception)
         {
+            logger.LogError(exception, "A verificação de prontidão da API falhou.");
             return HealthCheckResult.Unhealthy("A API não está acessível.");
         }
     }
