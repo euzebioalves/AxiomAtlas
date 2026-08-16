@@ -3,7 +3,7 @@
     admin off
 }
 
-{$AXIOM_DOMAIN} {
+http://{$AXIOM_DOMAIN} {
     encode zstd gzip
 
     @pdfHealth path /health/pdf
