@@ -119,7 +119,7 @@ jobs:
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml config >/dev/null
           docker run --rm \
             --env AXIOM_DOMAIN=ci.example.test \
-            --env CADDY_EMAIL= \
+            --env CADDY_EMAIL=ci@example.test \
             --volume "$GITHUB_WORKSPACE/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
             caddy:2.10.0-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
           docker run --rm \
