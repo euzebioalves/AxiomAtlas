@@ -3,9 +3,16 @@
     admin off
 }
 
-http:// {
+{$AXIOM_DOMAIN} {
     encode zstd gzip
+
+    @pdfHealth path /health/pdf
+    respond @pdfHealth 404
+
     reverse_proxy web:8080 {
         health_uri /health/live
+        health_headers {
+            Host {$AXIOM_DOMAIN}
+        }
     }
 }

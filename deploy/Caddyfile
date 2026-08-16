@@ -15,6 +15,10 @@
 {$AXIOM_DOMAIN} {
     encode zstd gzip
 
+    # Este endpoint é diagnóstico interno do processo Web e não deve ser exposto pela borda.
+    @pdfHealth path /health/pdf
+    respond @pdfHealth 404
+
     header {
         -Server
         X-Content-Type-Options "nosniff"
@@ -25,8 +29,12 @@
     }
 
     reverse_proxy web:8080 {
-        header_up Host {http.request.host}
+        # Caddy preserva o Host original das requisições encaminhadas por padrão.
+        # Somente o health check ativo recebe o Host do domínio configurado.
         health_uri /health/live
+        health_headers {
+            Host {$AXIOM_DOMAIN}
+        }
         health_interval 15s
         health_timeout 3s
     }

@@ -40,13 +40,15 @@ jobs:
       EmailSettings__Username: ci@example.test
       EmailSettings__Password: ci-only-password
       Authentication__CookieExpirationMinutes: 480
+      AXIOM_DOMAIN: ci.example.test
+      AXIOM_LOCAL_PORT: 8088
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configure .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
 
@@ -94,8 +96,9 @@ jobs:
           docker build -f Axiom.Atlas.Web/Dockerfile -t axiom-atlas-web:ci --build-arg VERSION=0.0.0-ci --build-arg REVISION=${GITHUB_SHA} .
           docker build -f Axiom.Atlas.Migrator/Dockerfile -t axiom-atlas-migrator:ci --build-arg VERSION=0.0.0-ci --build-arg REVISION=${GITHUB_SHA} .
 
-      - name: Validate Compose files
+      - name: Prepare production-like environment
         run: |
+          set -Eeuo pipefail
           # The runner uses localhost; containers must resolve PostgreSQL by its internal service name.
           unset ConnectionStrings__DefaultConnection
           cp deploy/.env.example .env
@@ -114,30 +117,161 @@ jobs:
             -e 's/^BOOTSTRAP_ADMIN_PASSWORD=.*/BOOTSTRAP_ADMIN_PASSWORD=Ci-Only!Password123/' .env
           docker compose --env-file .env -f deploy/compose.prod.yml config >/dev/null
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml config >/dev/null
+          docker run --rm \
+            --env AXIOM_DOMAIN=ci.example.test \
+            --env CADDY_EMAIL= \
+            --volume "$GITHUB_WORKSPACE/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.10.0-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          docker run --rm \
+            --env AXIOM_DOMAIN=ci.example.test \
+            --env CADDY_EMAIL= \
+            --volume "$GITHUB_WORKSPACE/deploy/Caddyfile.local:/etc/caddy/Caddyfile:ro" \
+            caddy:2.10.0-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 
-      - name: Start disposable production-like stack
+      - name: Start PostgreSQL
         run: |
+          set -Eeuo pipefail
           unset ConnectionStrings__DefaultConnection
-          trap 'docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml ps || true; docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml logs --no-color || true' ERR
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml build
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml up -d --wait postgres
+
+      - name: Run production migration
+        run: |
+          set -Eeuo pipefail
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml run --rm migrate
+
+      - name: Validate idempotent administrator bootstrap
+        run: |
+          set -Eeuo pipefail
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml --profile bootstrap run --rm bootstrap-admin
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml --profile bootstrap run --rm bootstrap-admin
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml exec -T postgres \
+            sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM \"AspNetUsers\" WHERE \"Email\" = '\''ciadmin@example.test'\'';"' \
+            | tr -d '[:space:]' | grep -Fx '1'
+
+      - name: Start API, Web and Caddy
+        run: |
+          set -Eeuo pipefail
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml up -d api web caddy
-          export AXIOM_DOMAIN=ci.example.test
-          for i in {1..45}; do bash deploy/scripts/smoke-local.sh && break || sleep 2; done
+
+      - name: Validate container health
+        run: |
+          set -Eeuo pipefail
+          compose=(docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml)
+          wait_for_health() {
+            local service="$1"
+            local container status
+            for _ in {1..45}; do
+              container="$("${compose[@]}" ps -q "$service")"
+              status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing-healthcheck{{end}}' "$container")"
+              if [[ "$status" == "healthy" ]]; then
+                printf '%s: healthy\n' "$service"
+                return 0
+              fi
+              printf '%s: %s\n' "$service" "$status"
+              sleep 2
+            done
+            echo "O contêiner $service não se tornou saudável." >&2
+            exit 1
+          }
+          wait_for_health api
+          wait_for_health web
+          "${compose[@]}" ps
+
+      - name: Validate Web directly
+        run: |
+          set -Eeuo pipefail
+          compose=(docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml)
+          "${compose[@]}" exec -T web curl --include --fail --silent --show-error \
+            --header 'Host: ci.example.test' http://127.0.0.1:8080/health/live
+          "${compose[@]}" exec -T web curl --include --fail --silent --show-error \
+            --header 'Host: ci.example.test' http://127.0.0.1:8080/health/ready
+
+      - name: Validate Web to API communication
+        run: |
+          set -Eeuo pipefail
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml exec -T web \
+            curl --include --fail --silent --show-error http://api:8080/health/ready
+
+      - name: Validate Caddy smoke test
+        run: |
+          set -Eeuo pipefail
+          for _ in {1..30}; do
+            if bash deploy/scripts/smoke-local.sh; then
+              exit 0
+            fi
+            sleep 2
+          done
           bash deploy/scripts/smoke-local.sh
-          curl --resolve "${AXIOM_DOMAIN}:8088:127.0.0.1" --fail --silent --show-error "http://${AXIOM_DOMAIN}:8088/health/pdf" >/dev/null
-          before_keys="$(docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml exec -T web find /var/lib/axiom-atlas/keys -name 'key-*.xml' -printf '%f\n' | sort)"
-          test -n "$before_keys"
-          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml restart web
-          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml up -d --wait web
-          after_keys="$(docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml exec -T web find /var/lib/axiom-atlas/keys -name 'key-*.xml' -printf '%f\n' | sort)"
-          test "$before_keys" = "$after_keys"
-          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > /tmp/axiom-atlas-ci-backup.sql
-          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml exec -T postgres sh -c 'createdb -U "$POSTGRES_USER" axiom_atlas_restore_ci && psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d axiom_atlas_restore_ci' < /tmp/axiom-atlas-ci-backup.sql
-          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d axiom_atlas_restore_ci -c "SELECT count(*) FROM \"__EFMigrationsHistory\";"'
+
+      - name: Validate PDF runtime internally
+        run: |
+          set -Eeuo pipefail
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml exec -T web \
+            curl --include --fail --silent --show-error --header 'Host: ci.example.test' \
+            http://127.0.0.1:8080/health/pdf
+
+      - name: Validate public PDF endpoint is blocked
+        run: |
+          set -Eeuo pipefail
+          status="$(curl --resolve 'ci.example.test:8088:127.0.0.1' --silent --show-error \
+            --output /tmp/axiom-public-pdf-health.txt --write-out '%{http_code}' \
+            http://ci.example.test:8088/health/pdf)"
+          test "$status" = '404'
+
+      - name: Validate Data Protection key persistence
+        run: |
+          set -Eeuo pipefail
+          compose=(docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml)
+          key_fingerprint() {
+            local service="$1"
+            "${compose[@]}" exec -T "$service" sh -c \
+              'set -eu; find /var/lib/axiom-atlas/keys -type f -name "key-*.xml" -print -exec sha256sum {} \; | sort'
+          }
+          wait_for_health() {
+            local service="$1" container status
+            for _ in {1..30}; do
+              container="$("${compose[@]}" ps -q "$service")"
+              status="$(docker inspect --format '{{.State.Health.Status}}' "$container")"
+              [[ "$status" == 'healthy' ]] && return 0
+              sleep 2
+            done
+            echo "$service não ficou saudável após reinício." >&2
+            exit 1
+          }
+          for service in web api; do
+            before="$(key_fingerprint "$service")"
+            test -n "$before"
+            "${compose[@]}" restart "$service"
+            wait_for_health "$service"
+            after="$(key_fingerprint "$service")"
+            test "$before" = "$after"
+          done
+
+      - name: Validate PostgreSQL backup and restoration
+        run: |
+          set -Eeuo pipefail
+          compose=(docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml)
+          "${compose[@]}" exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > /tmp/axiom-atlas-ci-backup.sql
+          "${compose[@]}" exec -T postgres sh -c \
+            'createdb -U "$POSTGRES_USER" axiom_atlas_restore_ci && psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d axiom_atlas_restore_ci' \
+            < /tmp/axiom-atlas-ci-backup.sql
+          "${compose[@]}" exec -T postgres sh -c \
+            'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d axiom_atlas_restore_ci -c "SELECT count(*) FROM \"__EFMigrationsHistory\";"'
+
+      - name: Collect stack diagnostics on failure
+        if: failure()
+        run: |
+          compose=(docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml)
+          "${compose[@]}" ps || true
+          for service in caddy web api; do
+            "${compose[@]}" logs --no-color "$service" || true
+          done
+          web_id="$("${compose[@]}" ps -q web || true)"
+          [[ -z "$web_id" ]] || docker inspect "$web_id" || true
+          "${compose[@]}" exec -T web curl --include --header 'Host: ci.example.test' http://127.0.0.1:8080/health/ready || true
+          "${compose[@]}" exec -T web curl --include http://api:8080/health/ready || true
+          curl --resolve 'ci.example.test:8088:127.0.0.1' --include http://ci.example.test:8088/health/ready || true
 
       - name: Dependency vulnerability report
         run: dotnet list Axiom.Atlas.slnx package --vulnerable --include-transitive

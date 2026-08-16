@@ -329,11 +329,19 @@ app.MapGet("/health/live", () => Results.Ok(new
     timestamp = DateTimeOffset.UtcNow
 })).AllowAnonymous();
 
-app.MapGet("/health/ready", async (AppDbContext context, ILoggerFactory loggerFactory, CancellationToken cancellationToken) =>
+app.MapGet("/health/ready", async (
+    AppDbContext context,
+    IDataProtectionProvider dataProtectionProvider,
+    ILoggerFactory loggerFactory,
+    CancellationToken cancellationToken) =>
 {
     var logger = loggerFactory.CreateLogger("Axiom.Atlas.Health");
     try
     {
+        // Materializa a chave no armazenamento configurado; assim a prontidão também
+        // detecta um volume de Data Protection indisponível ou somente leitura.
+        _ = dataProtectionProvider.CreateProtector("Axiom.Atlas.API.Health").Protect("ready");
+
         if (!await context.Database.CanConnectAsync(cancellationToken))
         {
             return Results.Problem(
