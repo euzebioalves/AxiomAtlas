@@ -53,7 +53,8 @@ services:
     volumes:
       - web_dataprotection:/var/lib/axiom-atlas/keys
     networks:
-      edge: {}
+      edge:
+        ipv4_address: 172.30.0.3
       application:
         ipv4_address: 172.31.0.2
     depends_on:
