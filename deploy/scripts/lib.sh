@@ -4,7 +4,9 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DEPLOY_DIR="$ROOT_DIR/deploy"
 ENV_FILE="$ROOT_DIR/.env"
+# shellcheck disable=SC2034 # Referenciado pelos scripts operacionais que importam esta biblioteca.
 STATE_DIR="$ROOT_DIR/state"
+# shellcheck disable=SC2034 # Referenciado pelos scripts operacionais que importam esta biblioteca.
 BACKUP_DIR="$ROOT_DIR/backups"
 COMPOSE_FILE="$DEPLOY_DIR/compose.prod.yml"
 
