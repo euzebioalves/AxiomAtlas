@@ -127,7 +127,10 @@ jobs:
           set -Eeuo pipefail
           dotnet run --project Axiom.Atlas.API/Axiom.Atlas.API.csproj --configuration Release --no-build --urls http://127.0.0.1:18080 > /tmp/axiom-api.log 2>&1 &
           echo $! > /tmp/axiom-api.pid
-          for _ in {1..30}; do curl --fail --silent http://127.0.0.1:18080/health/ready && break || sleep 1; done
+          for _ in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:18080/health/ready; then break; fi
+            sleep 1
+          done
           curl --fail --silent http://127.0.0.1:18080/health/live
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/register)" = "404"
 
@@ -192,7 +195,8 @@ jobs:
           compose=(docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml)
           "${compose[@]}" --profile bootstrap run --rm bootstrap-admin
           "${compose[@]}" --profile bootstrap run --rm bootstrap-admin
-          "${compose[@]}" exec -T postgres sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "SELECT count(*) FROM \"AspNetUsers\" WHERE \"Email\" = '\''ciadmin@example.test'\'';"' \
+          sql='SELECT count(*) FROM "AspNetUsers" WHERE "Email" = $$ciadmin@example.test$$;'
+          "${compose[@]}" exec -T postgres sh -c "psql -v ON_ERROR_STOP=1 -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -tAc '$sql'" \
             | tr -d '[:space:]' | grep -Fx '1'
 
       - name: Start API, Web and Caddy
@@ -229,7 +233,10 @@ jobs:
       - name: Validate Caddy smoke test and PDF boundaries
         run: |
           set -Eeuo pipefail
-          for _ in {1..30}; do bash deploy/scripts/smoke-local.sh && break || sleep 2; done
+          for _ in {1..30}; do
+            if bash deploy/scripts/smoke-local.sh; then break; fi
+            sleep 2
+          done
           bash deploy/scripts/smoke-local.sh
           compose=(docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml)
           "${compose[@]}" exec -T web curl --include --fail --silent --show-error --header 'Host: ci.example.test' http://127.0.0.1:8080/health/pdf
@@ -297,6 +304,6 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          test -f /tmp/axiom-api.pid && kill "$(cat /tmp/axiom-api.pid)" || true
+          if test -f /tmp/axiom-api.pid; then kill "$(cat /tmp/axiom-api.pid)" || true; fi
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml down --remove-orphans || true
           rm -rf backups state /tmp/axiom-release-preparation
