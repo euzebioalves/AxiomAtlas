@@ -65,7 +65,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes age postgresql-client shellcheck unzip zip
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
-          go install github.com/gitleaks/gitleaks/v8@v8.28.0
+          go install github.com/zricethezav/gitleaks/v8@v8.28.0
           "$HOME/go/bin/actionlint" .github/workflows/ci.yml .github/workflows/release.yml .github/workflows/deploy-production.yml .github/workflows/rollback-production.yml
           mapfile -t scripts < <(find deploy/scripts scripts -type f -name '*.sh' -print | sort)
           bash -n "${scripts[@]}"
