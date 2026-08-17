@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.7
-FROM mcr.microsoft.com/dotnet/sdk:10.0.103-noble AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.400-noble AS build
 WORKDIR /src
 COPY ["Axiom.Atlas.Migrator/Axiom.Atlas.Migrator.csproj", "Axiom.Atlas.Migrator/"]
 COPY ["Axiom.Atlas.Persistence/Axiom.Atlas.Persistence.csproj", "Axiom.Atlas.Persistence/"]
@@ -13,7 +13,7 @@ RUN assembly_version="${VERSION%%-*}" && dotnet publish "Axiom.Atlas.Migrator/Ax
     /p:InformationalVersion=$VERSION+$REVISION /p:SourceRevisionId=$REVISION /p:Revision=$REVISION \
     /p:IncludeSourceRevisionInInformationalVersion=false /p:ContinuousIntegrationBuild=true
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.9-noble AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.11-noble AS final
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
     && rm -rf /var/lib/apt/lists/* \
