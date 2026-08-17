@@ -144,7 +144,7 @@ jobs:
         run: |
           set -Eeuo pipefail
           for image in axiom-atlas-api:ci axiom-atlas-web:ci axiom-atlas-migrator:ci; do
-            docker run --rm --pull=always aquasec/trivy:0.58.1 image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 "$image"
+            docker run --rm --pull=always -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.58.1 image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 "$image"
           done
 
       - name: Prepare production-like environment
