@@ -47,7 +47,7 @@ publish_project() {
   local name="$2"
   local label="$3"
   local target="$artifacts_dir/$name"
-  dotnet publish "$ROOT_DIR/$project" --configuration Release --no-restore --output "$target" "${properties[@]}"
+  dotnet publish "$ROOT_DIR/$project" --configuration Release --no-restore --output "$target" "${properties[@]}" >&2
   (cd "$target" && zip -qr "$release_dir/AxiomAtlas-${label}-${release_version}.zip" .)
 }
 
