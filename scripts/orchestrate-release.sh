@@ -42,6 +42,7 @@ release_view() {
 
 release_has_expected_assets() {
   local release_json="$1"
+  # shellcheck disable=SC2016 # Template literals devem permanecer literais para o processo Node.js.
   node -e '
     const version = process.argv[1];
     const release = JSON.parse(require("fs").readFileSync(0, "utf8"));
