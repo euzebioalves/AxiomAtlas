@@ -45,14 +45,15 @@ properties=(
 publish_project() {
   local project="$1"
   local name="$2"
+  local label="$3"
   local target="$artifacts_dir/$name"
   dotnet publish "$ROOT_DIR/$project" --configuration Release --no-restore --output "$target" "${properties[@]}"
-  (cd "$target" && zip -qr "$release_dir/AxiomAtlas-${name^}-${release_version}.zip" .)
+  (cd "$target" && zip -qr "$release_dir/AxiomAtlas-${label}-${release_version}.zip" .)
 }
 
-publish_project 'Axiom.Atlas.API/Axiom.Atlas.API.csproj' 'api'
-publish_project 'Axiom.Atlas.Web/Axiom.Atlas.Web.csproj' 'web'
-publish_project 'Axiom.Atlas.Migrator/Axiom.Atlas.Migrator.csproj' 'migrator'
+publish_project 'Axiom.Atlas.API/Axiom.Atlas.API.csproj' 'api' 'API'
+publish_project 'Axiom.Atlas.Web/Axiom.Atlas.Web.csproj' 'web' 'Web'
+publish_project 'Axiom.Atlas.Migrator/Axiom.Atlas.Migrator.csproj' 'migrator' 'Migrator'
 tar --exclude='.env' --exclude='*.local' -C "$ROOT_DIR" -czf \
   "$release_dir/AxiomAtlas-Deployment-${release_version}.tar.gz" deploy docs
 (cd "$release_dir" && sha256sum \
