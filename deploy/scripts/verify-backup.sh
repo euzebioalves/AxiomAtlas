@@ -16,6 +16,11 @@ if [[ -n "${BACKUP_AGE_IDENTITY_FILE:-}" ]]; then
   temporary="$(mktemp)"
   trap 'rm -f "$temporary"' EXIT
   age -d -i "$BACKUP_AGE_IDENTITY_FILE" -o "$temporary" "$backup"
-  if [[ "$backup" == *.dump.age ]]; then pg_restore --list "$temporary" >/dev/null; else tar -tzf "$temporary" >/dev/null; fi
+  if [[ "$backup" == *.dump.age ]]; then
+    require_command docker
+    docker run --rm --network none -i postgres:17.5-bookworm pg_restore --list < "$temporary" >/dev/null
+  else
+    tar -tzf "$temporary" >/dev/null
+  fi
 fi
 printf 'Checksum do backup validado.\n'

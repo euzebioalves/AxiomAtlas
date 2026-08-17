@@ -1,6 +1,6 @@
 # Backup e restauração
 
-O backup diário usa `pg_dump --format=custom --no-owner --no-acl`, valida com `pg_restore --list`, calcula SHA-256, criptografa com a chave pública `age` e envia para `BACKUP_REMOTE` via `rclone`. O backup só é considerado concluído depois da cópia externa. A chave privada de restauração não fica na VPS.
+O backup diário usa `pg_dump --format=custom --no-owner --no-acl`, valida com `pg_restore --list` executado no próprio container PostgreSQL (sempre compatível com o formato do dump), calcula SHA-256, criptografa com a chave pública `age` e envia para `BACKUP_REMOTE` via `rclone`. O backup só é considerado concluído depois da cópia externa. A chave privada de restauração não fica na VPS.
 
 Também são protegidos, em arquivo criptografado separado: chaves Data Protection de API e Web, `.env`, Compose/Caddy e estado de versão. Dados recriáveis do Caddy não são críticos. O CI executa as rotinas reais de backup em modo local com uma chave `age` efêmera, valida checksum, descriptografa, executa `pg_restore --list`, restaura em banco separado e confirma migration e administrador bootstrap.
 

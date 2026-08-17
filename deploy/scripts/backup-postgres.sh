@@ -7,7 +7,6 @@ source "$SCRIPT_DIR/lib.sh"
 require_production_environment
 require_command age
 require_command sha256sum
-require_command pg_restore
 if [[ "${BACKUP_LOCAL_TEST:-false}" != "true" ]]; then require_command rclone; fi
 mkdir -p "$BACKUP_DIR/postgres"
 chmod 700 "$BACKUP_DIR"
@@ -20,7 +19,7 @@ cleanup() { rm -f "$temporary" "$plain"; }
 trap cleanup EXIT
 
 compose exec -T postgres pg_dump --format=custom --no-owner --no-acl -U "$POSTGRES_USER" "$POSTGRES_DB" > "$temporary"
-pg_restore --list "$temporary" >/dev/null
+compose exec -T postgres pg_restore --list < "$temporary" >/dev/null
 mv "$temporary" "$plain"
 sha256sum "$plain" > "${plain}.sha256"
 age -r "$BACKUP_AGE_RECIPIENT" -o "$encrypted" "$plain"

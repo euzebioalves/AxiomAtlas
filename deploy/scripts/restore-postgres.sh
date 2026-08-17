@@ -14,7 +14,7 @@ require_file "${backup}.sha256"
 temporary="$(mktemp "$BACKUP_DIR/.restore.XXXXXX.dump")"
 trap 'rm -f "$temporary"' EXIT
 age -d -i "$BACKUP_AGE_IDENTITY_FILE" -o "$temporary" "$backup"
-pg_restore --list "$temporary" >/dev/null
+compose exec -T postgres pg_restore --list < "$temporary" >/dev/null
 "$SCRIPT_DIR/backup-postgres.sh"
 compose stop web api
 compose exec -T postgres pg_restore --clean --if-exists --no-owner --no-acl -U "$POSTGRES_USER" -d "$POSTGRES_DB" < "$temporary"
