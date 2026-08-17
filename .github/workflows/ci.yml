@@ -266,7 +266,7 @@ jobs:
           rm -rf backups state
           mkdir -p state
           printf '%s\n' '0.0.0-ci' > state/current-version
-          age_key="$(mktemp)"; trap 'rm -f "$age_key" /tmp/axiom-restored.dump /tmp/axiom-restored-state.tar.gz' EXIT
+          age_key="$(mktemp)"; rm -f "$age_key"; trap 'rm -f "$age_key" /tmp/axiom-restored.dump /tmp/axiom-restored-state.tar.gz' EXIT
           age-keygen -o "$age_key" >/dev/null
           recipient="$(awk '/^# public key: / { print $4 }' "$age_key")"
           export BACKUP_LOCAL_TEST=true BACKUP_AGE_RECIPIENT="$recipient" COMPOSE_ADDITIONAL_FILE="$GITHUB_WORKSPACE/deploy/compose.local.yml"
