@@ -6,6 +6,7 @@ source "$SCRIPT_DIR/lib.sh"
 
 require_production_environment
 require_command age
+require_command docker
 if [[ "${BACKUP_LOCAL_TEST:-false}" != "true" ]]; then require_command rclone; fi
 mkdir -p "$BACKUP_DIR/state" "$STATE_DIR"
 
@@ -20,9 +21,20 @@ cp "$ENV_FILE" "$work/.env"
 cp "$COMPOSE_FILE" "$work/compose.prod.yml"
 cp "$DEPLOY_DIR/Caddyfile" "$work/Caddyfile"
 cp -a "$STATE_DIR/." "$work/state/" 2>/dev/null || true
-docker run --rm -v axiom-atlas_api_dataprotection:/source:ro -v "$work/volumes/api:/backup" alpine:3.21 sh -c 'cp -a /source/. /backup/'
-docker run --rm -v axiom-atlas_web_dataprotection:/source:ro -v "$work/volumes/web:/backup" alpine:3.21 sh -c 'cp -a /source/. /backup/'
-tar -C "$work" -czf "$archive" .
+docker run --rm \
+  -v "$work:/host:ro" \
+  -v axiom-atlas_api_dataprotection:/api:ro \
+  -v axiom-atlas_web_dataprotection:/web:ro \
+  alpine:3.21 sh -c '
+    set -eu
+    backup="$(mktemp -d)"
+    cleanup() { rm -rf "$backup"; }
+    trap cleanup EXIT
+    cp -a /host/. "$backup/"
+    cp -a /api/. "$backup/volumes/api/"
+    cp -a /web/. "$backup/volumes/web/"
+    tar -C "$backup" -czf - .
+  ' > "$archive"
 sha256sum "$archive" > "${archive}.sha256"
 age -r "$BACKUP_AGE_RECIPIENT" -o "$encrypted" "$archive"
 sha256sum "$encrypted" > "${encrypted}.sha256"
