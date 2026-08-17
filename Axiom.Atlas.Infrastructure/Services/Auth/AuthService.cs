@@ -33,15 +33,21 @@ namespace Axiom.Atlas.Infrastructure.Services.Auth
         public async Task<LoginResponse?> AuthenticateAsync(string username, string password)
         {
             var user = await _userRepository.GetByUsernameAsync(username);
-            if (user == null || !VerifyPassword(user, password))
+            if (user == null || !user.IsActive || await _userManager.IsLockedOutAsync(user))
             {
                 return null;
             }
 
+            if (!VerifyPassword(user, password))
+            {
+                await _userManager.AccessFailedAsync(user);
+                return null;
+            }
+
+            await _userManager.ResetAccessFailedCountAsync(user);
+
             var roles = await _userManager.GetRolesAsync(user);
             var token = GenerateJwtToken(user, roles);
-            var safeUsername = Uri.EscapeDataString(user.UserName ?? string.Empty);
-
             return new LoginResponse
             {
                 Token = token,
@@ -51,7 +57,8 @@ namespace Axiom.Atlas.Infrastructure.Services.Auth
                 PhoneNumber = user.PhoneNumber ?? string.Empty,
                 JobTitle = user.JobTitle,
                 IsActive = user.IsActive,
-                ProfilePictureUrl = $"https://localhost:7255/api/Users/profile-picture/{safeUsername}",
+                // The browser receives the protected same-origin Web proxy route.
+                ProfilePictureUrl = "/Users/GetAvatar",
                 Roles = roles.ToArray()
             };
         }
@@ -95,7 +102,7 @@ namespace Axiom.Atlas.Infrastructure.Services.Auth
                 issuer: _configuration["JwtSettings:Issuer"],
                 audience: _configuration["JwtSettings:Audience"],
                 claims: claims,
-                expires: DateTime.UtcNow.AddHours(8),
+                expires: DateTime.UtcNow.AddMinutes(_configuration.GetValue("JwtSettings:ExpirationMinutes", 480)),
                 signingCredentials: creds
             );
 

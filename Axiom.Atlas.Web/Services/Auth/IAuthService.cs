@@ -12,17 +12,30 @@ namespace Axiom.Atlas.Web.Services.Auth
     {
         private readonly HttpClient _httpClient;
         private readonly IConfiguration _configuration;
+        private readonly IHttpContextAccessor _httpContextAccessor;
 
-        public AuthService(HttpClient httpClient, IConfiguration configuration)
+        public AuthService(HttpClient httpClient, IConfiguration configuration, IHttpContextAccessor httpContextAccessor)
         {
             _httpClient = httpClient;
             _configuration = configuration;
-            _httpClient.BaseAddress = new Uri(_configuration["ApiSettings:BaseUrl"] ?? "https://localhost:7255");
+            _httpContextAccessor = httpContextAccessor;
+            _httpClient.BaseAddress = new Uri(_configuration["ApiSettings:BaseUrl"]
+                ?? throw new InvalidOperationException("ApiSettings:BaseUrl não configurada."));
         }
 
         public async Task<(LoginResultViewModel? Data, string? ErrorMessage)> LoginAsync(LoginViewModel model)
         {
-            var response = await _httpClient.PostAsJsonAsync("api/Auth/login", model);
+            using var request = new HttpRequestMessage(HttpMethod.Post, "api/Auth/login")
+            {
+                Content = JsonContent.Create(model)
+            };
+            var sourceAddress = _httpContextAccessor.HttpContext?.Connection.RemoteIpAddress?.ToString();
+            if (!string.IsNullOrWhiteSpace(sourceAddress))
+            {
+                request.Headers.TryAddWithoutValidation("X-Forwarded-For", sourceAddress);
+            }
+
+            var response = await _httpClient.SendAsync(request);
 
             if (response.IsSuccessStatusCode)
             {

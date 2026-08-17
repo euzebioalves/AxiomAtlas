@@ -24,6 +24,8 @@ x86/
 .run/
 logs/
 *.log
+backups/
+state/
 
 # ASP.NET/local database files
 *.db

@@ -1,0 +1,16 @@
+.git
+.github
+.vs
+**/bin
+**/obj
+**/*.user
+.env
+.env.*
+!.env.example
+deploy/.env
+deploy/.env.*
+!deploy/.env.example
+logs
+artifacts
+release
+README.md

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+const { execFileSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
@@ -11,18 +12,11 @@ const defaultProjectPath = path.resolve(
 
 let projectPath = defaultProjectPath;
 let minimumVersion;
-let dryRun = false;
-
-for (let index = 0; index < process.argv.length - 2; index += 1) {
-    const argument = process.argv[index + 2];
-
-    if (argument === "--dry-run") {
-        dryRun = true;
-        continue;
-    }
+for (let index = 2; index < process.argv.length; index += 1) {
+    const argument = process.argv[index];
 
     if (argument === "--file" || argument === "--minimum") {
-        const value = process.argv[index + 3];
+        const value = process.argv[index + 1];
 
         if (!value) {
             console.error(`Missing value for ${argument}.`);
@@ -68,16 +62,15 @@ function compareVersions(left, right) {
 }
 
 function incrementPatch(version) {
-    let { major, minor, patch } = version;
+    return `${version.major}.${version.minor}.${version.patch + 1}`;
+}
 
-    patch += 1;
-
-    if (patch > 99) {
-        patch = 0;
-        minor += 1;
-    }
-
-    return `${major}.${minor}.${patch}`;
+function stableTags() {
+    return execFileSync("git", ["tag", "--list", "v*"], { encoding: "utf8" })
+        .split(/\r?\n/)
+        .filter(Boolean)
+        .filter((tag) => /^v\d+\.\d+\.\d+$/.test(tag))
+        .map((tag) => parseVersion(tag.slice(1), `Git tag ${tag}`));
 }
 
 try {
@@ -90,27 +83,17 @@ try {
         throw new Error("VersionPrefix was not found in the project file.");
     }
 
-    const projectVersion = parseVersion(versionMatch[1], "VersionPrefix");
-    const minimum = minimumVersion
-        ? parseVersion(minimumVersion, "Minimum version")
-        : undefined;
-    const baseline =
-        minimum && compareVersions(projectVersion, minimum) < 0
-            ? minimum
-            : projectVersion;
-    const nextVersion = incrementPatch(baseline);
-
-    if (!dryRun) {
-        const updatedProjectFile = projectFile.replace(
-            versionMatch[0],
-            `<VersionPrefix>${nextVersion}</VersionPrefix>`
-        );
-
-        fs.writeFileSync(projectPath, updatedProjectFile);
+    const candidates = [parseVersion(versionMatch[1], "VersionPrefix"), ...stableTags()];
+    if (minimumVersion) {
+        candidates.push(parseVersion(minimumVersion, "Minimum version"));
     }
+    const baseline = candidates.reduce((latest, candidate) =>
+        compareVersions(candidate, latest) > 0 ? candidate : latest
+    );
+    const nextVersion = incrementPatch(baseline);
 
     process.stdout.write(nextVersion);
 } catch (error) {
-    console.error(`Could not update the Axiom Atlas version: ${error.message}`);
+    console.error(`Could not calculate the next Axiom Atlas version: ${error.message}`);
     process.exit(1);
 }

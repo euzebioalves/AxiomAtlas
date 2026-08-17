@@ -1,5 +1,6 @@
 @using System.Reflection
 @using System.Security.Claims
+@inject Microsoft.AspNetCore.Antiforgery.IAntiforgery Antiforgery
 @{
     // A versao informativa inclui o hash do commit quando o projeto esta em um repositorio Git.
     // O rodape deve apresentar somente a versao publicada do produto.
@@ -21,6 +22,7 @@
         .Select(claim => claim.Value)
         .Any(role => string.Equals(role, "Admin", StringComparison.OrdinalIgnoreCase)
                   || string.Equals(role, "Administrador", StringComparison.OrdinalIgnoreCase)) ?? false;
+    var antiforgeryToken = Antiforgery.GetAndStoreTokens(Context).RequestToken;
 
     string Active(string controller, string action = "")
     {
@@ -49,6 +51,7 @@
     <meta property="og:site_name" content="Axiom Atlas" />
     <meta name="application-name" content="Axiom Atlas" />
     <meta name="theme-color" content="#1b1b29" />
+    <meta name="request-verification-token" content="@antiforgeryToken" />
     <link rel="shortcut icon" href="~/favicon.ico" />
     <link rel="manifest" href="~/manifest.webmanifest" />
 
@@ -71,6 +74,23 @@
     data-kt-app-sidebar-push-footer="true"
     data-kt-app-toolbar-enabled="true"
     class="app-default">
+
+    <script>
+        (() => {
+            const token = document.querySelector('meta[name="request-verification-token"]')?.content;
+            const originalFetch = window.fetch.bind(window);
+            window.fetch = (input, init = {}) => {
+                const method = (init.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+                const target = new URL(typeof input === 'string' ? input : input.url, window.location.origin);
+                if (token && ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method) && target.origin === window.location.origin) {
+                    const headers = new Headers(init.headers || (input instanceof Request ? input.headers : undefined));
+                    headers.set('RequestVerificationToken', token);
+                    init = { ...init, headers };
+                }
+                return originalFetch(input, init);
+            };
+        })();
+    </script>
 
     <script>
         var defaultThemeMode = "dark";

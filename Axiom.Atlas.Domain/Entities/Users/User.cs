@@ -8,6 +8,7 @@ namespace Axiom.Atlas.Domain.Entities.Users
         public string JobTitle { get; set; } = string.Empty;
         public override string? PhoneNumber { get; set; } = string.Empty;
         public byte[]? ProfilePicture { get; set; }
+        public string? ProfilePictureContentType { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public bool IsActive { get; set; } = true;
     }

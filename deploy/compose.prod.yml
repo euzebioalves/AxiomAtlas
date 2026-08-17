@@ -1,0 +1,198 @@
+name: axiom-atlas
+
+x-logging: &default-logging
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+x-security: &app-security
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  read_only: true
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,size=64m
+  stop_grace_period: 30s
+
+services:
+  caddy:
+    image: caddy:2.10.0-alpine
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      AXIOM_DOMAIN: ${AXIOM_DOMAIN}
+      CADDY_EMAIL: ${CADDY_EMAIL:-}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+      - caddy_logs:/var/log/caddy
+    networks:
+      edge:
+        ipv4_address: 172.30.0.2
+    depends_on:
+      web:
+        condition: service_healthy
+    logging: *default-logging
+
+  web:
+    image: ghcr.io/euzebioalves/axiomatlas-web:${APP_VERSION}
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ApiSettings__BaseUrl: http://api:8080/
+      DataProtection__KeysPath: /var/lib/axiom-atlas/keys
+      AllowedHosts: ${AXIOM_DOMAIN}
+    volumes:
+      - web_dataprotection:/var/lib/axiom-atlas/keys
+    networks:
+      edge:
+        ipv4_address: 172.30.0.3
+      application:
+        ipv4_address: 172.31.0.2
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "--header", "Host: ${AXIOM_DOMAIN}", "http://localhost:8080/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+    logging: *default-logging
+    <<: *app-security
+
+  api:
+    image: ghcr.io/euzebioalves/axiomatlas-api:${APP_VERSION}
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      DataProtection__KeysPath: /var/lib/axiom-atlas/keys
+    volumes:
+      - api_dataprotection:/var/lib/axiom-atlas/keys
+    networks:
+      application:
+        ipv4_address: 172.31.0.3
+      database:
+        ipv4_address: 172.32.0.3
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 20s
+    logging: *default-logging
+    <<: *app-security
+
+  postgres:
+    image: postgres:17.5-bookworm
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: UTC
+      PGTZ: UTC
+    command:
+      - postgres
+      - -c
+      - max_connections=50
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - effective_cache_size=1536MB
+      - -c
+      - maintenance_work_mem=128MB
+      - -c
+      - work_mem=8MB
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      database:
+        ipv4_address: 172.32.0.2
+    shm_size: 256mb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    stop_grace_period: 60s
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+
+  migrate:
+    image: ghcr.io/euzebioalves/axiomatlas-migrator:${APP_VERSION}
+    profiles: ["maintenance"]
+    env_file: ../.env
+    environment:
+      ConnectionStrings__DefaultConnection: ${ConnectionStrings__DefaultConnection}
+    command: ["migrate"]
+    networks:
+      - database
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging: *default-logging
+
+  bootstrap-admin:
+    image: ghcr.io/euzebioalves/axiomatlas-migrator:${APP_VERSION}
+    profiles: ["bootstrap"]
+    env_file: ../.env
+    environment:
+      ConnectionStrings__DefaultConnection: ${ConnectionStrings__DefaultConnection}
+    command: ["bootstrap-admin"]
+    networks:
+      - database
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging: *default-logging
+
+volumes:
+  postgres_data:
+  api_dataprotection:
+  web_dataprotection:
+  caddy_data:
+  caddy_config:
+  caddy_logs:
+
+networks:
+  edge:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+  application:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.31.0.0/24
+  database:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.32.0.0/24

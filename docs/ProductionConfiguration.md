@@ -1,37 +1,13 @@
-# Configuracao de producao
+# Configuração de produção
 
-O Axiom Atlas nao versiona credenciais. Configure os valores abaixo no provedor de hospedagem, no cofre de segredos ou em um `appsettings.Production.json` local, que e ignorado pelo Git.
+Copie `deploy/.env.example` para `/opt/axiom-atlas/.env`, preencha valores reais e aplique `chmod 600 /opt/axiom-atlas/.env`. O `.env` é ignorado pelo Git e não deve ser copiado para tickets, logs ou releases. Como ele também é carregado pelos scripts operacionais, valores que contêm espaços devem permanecer entre aspas duplas, como no arquivo de exemplo.
 
-## API
+Gere senhas e o segredo JWT com fonte criptograficamente segura. `JwtSettings__SecretKey` deve ter ao menos 32 caracteres. `PublicUrls__WebBaseUrl` deve ser uma URL HTTPS pública; `ApiSettings__BaseUrl` da Web é automaticamente `http://api:8080/` no Compose e nunca deve ser uma URL pública.
 
-Defina as seguintes variaveis de ambiente para a API:
+As aplicações falham cedo em produção quando faltam connection string, JWT, Data Protection, URL pública, SMTP ou cookie. Placeholders `CHANGE_ME`, URLs públicas em HTTP e `localhost` na URL pública são rejeitados.
 
-```text
-ConnectionStrings__DefaultConnection=<connection string PostgreSQL>
-JwtSettings__SecretKey=<segredo exclusivo com pelo menos 32 caracteres>
-JwtSettings__Issuer=AxiomAtlasApi
-JwtSettings__Audience=AxiomAtlasWeb
-DataProtection__KeysPath=<diretorio persistente e restrito para as chaves>
-```
+`AXIOM_DOMAIN` é o host canônico do ambiente: Caddy, `AllowedHosts`, health checks de Web e smoke tests usam esse mesmo domínio. Endereços `localhost` ou `127.0.0.1` só são usados como destino local de processo/container, nunca como Host público.
 
-`DataProtection__KeysPath` deve apontar para um volume persistente, compartilhado entre instancias da API quando houver escalonamento horizontal. Essas chaves protegem os tokens das integracoes cadastradas e devem ser preservadas em atualizacoes e reinicializacoes. Em desenvolvimento, o Axiom Atlas preserva o anel de chaves padrao do ASP.NET para manter legiveis as configuracoes locais ja criptografadas.
+Após o bootstrap inicial, remova `BOOTSTRAP_ADMIN_PASSWORD` do `.env`. Use o painel administrativo para criar os demais usuários. O processo de bootstrap é idempotente e não substitui um administrador existente.
 
-Os valores de e-mail seguem o mesmo padrao de variaveis hierarquicas, por exemplo `EmailSettings__Username` e `EmailSettings__Password`.
-
-## Web
-
-Configure a URL da API pela variavel:
-
-```text
-ApiSettings__BaseUrl=https://api.seu-dominio.example/
-```
-
-Em producao, o Web valida certificados TLS normalmente e o cookie de autenticacao exige HTTPS. A ignorancia de certificados autoassinados fica restrita ao ambiente `Development`.
-
-## Publicacao segura
-
-- Mantenha `ASPNETCORE_ENVIRONMENT=Production` na publicacao.
-- Utilize apenas HTTPS entre navegador, Web e API.
-- Restrinja permissao de leitura/escrita do diretorio de Data Protection a conta da aplicacao.
-- Armazene senhas, tokens e connection strings em um cofre de segredos ou em variaveis protegidas pelo provedor de hospedagem.
-- Execute os endpoints `GET /health/live` e `GET /health/ready` no monitoramento da aplicacao.
+O cookie público chama-se `__Host-AxiomAtlas.Auth`, é `Secure`, `HttpOnly`, `SameSite=Lax`, sem domínio e com `Path=/`. A API recebe apenas Bearer token internamente; CORS não é habilitado na produção.
