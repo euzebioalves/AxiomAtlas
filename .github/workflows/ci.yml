@@ -70,6 +70,7 @@ jobs:
           mapfile -t scripts < <(find deploy/scripts scripts -type f -name '*.sh' -print | sort)
           bash -n "${scripts[@]}"
           shellcheck -x "${scripts[@]}"
+          bash scripts/test-release-orchestration.sh
           "$HOME/go/bin/gitleaks" git --log-opts="origin/main..HEAD" --no-banner
           "$HOME/go/bin/gitleaks" dir . --no-banner
 

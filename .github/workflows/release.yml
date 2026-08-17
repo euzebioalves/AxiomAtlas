@@ -194,7 +194,7 @@ jobs:
           fi
           test "$(git rev-list -n 1 "$TAG")" = "$GITHUB_SHA"
 
-      - name: Create or repair the draft release
+      - name: Create or classify the release
         id: draft
         env:
           GH_TOKEN: ${{ github.token }}
@@ -202,18 +202,15 @@ jobs:
           VERSION: ${{ steps.release.outputs.version }}
         run: |
           set -Eeuo pipefail
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json id,isDraft > /tmp/axiom-release.json 2>/dev/null; then
-            release_id="$(jq -r '.id' /tmp/axiom-release.json)"
-            if [[ "$(jq -r '.isDraft' /tmp/axiom-release.json)" != true ]]; then
-              gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" -f draft=true >/dev/null
-            fi
-          else
-            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title "Axiom Atlas $VERSION" --notes "Release gerada a partir do commit $GITHUB_SHA." >/dev/null
-            release_id="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json id --jq '.id')"
-          fi
-          printf 'id=%s\n' "$release_id" >> "$GITHUB_OUTPUT"
+          bash scripts/orchestrate-release.sh \
+            --tag "$TAG" \
+            --version "$VERSION" \
+            --revision "$GITHUB_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --output "$GITHUB_OUTPUT"
 
       - name: Upload and verify release assets
+        if: steps.draft.outputs.mode == 'draft'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.release.outputs.tag }}
@@ -233,10 +230,11 @@ jobs:
           done
 
       - name: Publish the verified release
+        if: steps.draft.outputs.mode == 'draft'
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_ID: ${{ steps.draft.outputs.id }}
+          TAG: ${{ steps.release.outputs.tag }}
         run: |
           set -Eeuo pipefail
-          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -f draft=false >/dev/null
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
           git diff --exit-code
