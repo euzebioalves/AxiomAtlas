@@ -65,14 +65,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes age postgresql-client shellcheck unzip zip
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+          go install github.com/gitleaks/gitleaks/v8@v8.28.0
           "$HOME/go/bin/actionlint" .github/workflows/ci.yml .github/workflows/release.yml .github/workflows/deploy-production.yml .github/workflows/rollback-production.yml
           mapfile -t scripts < <(find deploy/scripts scripts -type f -name '*.sh' -print | sort)
           bash -n "${scripts[@]}"
           shellcheck -x "${scripts[@]}"
-          docker run --rm -v "$GITHUB_WORKSPACE:/repo:ro" -w /repo zricethezav/gitleaks:8.28.0 \
-            git --log-opts="origin/main..HEAD" --no-banner
-          docker run --rm -v "$GITHUB_WORKSPACE:/repo:ro" -w /repo zricethezav/gitleaks:8.28.0 \
-            dir . --no-banner
+          "$HOME/go/bin/gitleaks" git --log-opts="origin/main..HEAD" --no-banner
+          "$HOME/go/bin/gitleaks" dir . --no-banner
 
       - name: Restore dependencies
         run: dotnet restore Axiom.Atlas.slnx
