@@ -3,18 +3,18 @@ name: Release
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 concurrency:
   group: release-main
   cancel-in-progress: false
 
 jobs:
-  validate-build-and-release:
-    if: github.actor != 'github-actions[bot]'
+  validate:
+    name: Validate release source
     runs-on: ubuntu-24.04
     services:
       postgres:
@@ -42,12 +42,12 @@ jobs:
       EmailSettings__Username: release@example.test
       EmailSettings__Password: release-only-password
       Authentication__CookieExpirationMinutes: 480
-
     steps:
       - name: Check out source and tags
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ github.sha }}
 
       - name: Set up .NET
         uses: actions/setup-dotnet@v5
@@ -59,85 +59,184 @@ jobs:
         with:
           node-version: 24
 
-      - name: Restore, build and test
+      - name: Restore, build, test and validate the production baseline
         run: |
+          set -Eeuo pipefail
           dotnet restore Axiom.Atlas.slnx
           dotnet tool install --global dotnet-ef --version 10.0.9
           echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+          export PATH="$HOME/.dotnet/tools:$PATH"
           dotnet build Axiom.Atlas.slnx --configuration Release --no-restore
           dotnet test Axiom.Atlas.slnx --configuration Release --no-build --no-restore
-
-      - name: Validate empty PostgreSQL baseline
-        run: |
           dotnet run --project Axiom.Atlas.Migrator/Axiom.Atlas.Migrator.csproj -- migrate
           dotnet ef migrations has-pending-model-changes --project Axiom.Atlas.Persistence/Axiom.Atlas.Persistence.csproj --startup-project Axiom.Atlas.API/Axiom.Atlas.API.csproj
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Calculate version without changing source
+        run: |
+          set -Eeuo pipefail
+          node version-update.js >/tmp/axiom-release-candidate
+          git diff --exit-code
+
+  publish:
+    name: Publish immutable release
+    needs: validate
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - name: Check out validated source and tags
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Restore dependencies for publication
+        run: dotnet restore Axiom.Atlas.slnx
 
       - name: Authenticate to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Determine candidate version after validation
-        id: version
-        shell: pwsh
-        run: |
-          $latestTag = git tag --list 'v*' --sort=-version:refname | Where-Object { $_ -match '^v\d+\.\d+\.\d+$' } | Select-Object -First 1
-          $arguments = @()
-          if ($latestTag) { $arguments += '--minimum'; $arguments += $latestTag.TrimStart('v') }
-          $version = & node version-update.js @arguments
-          if ($LASTEXITCODE -ne 0) { throw 'Could not determine the next release version.' }
-          "version=$version" >> $env:GITHUB_OUTPUT
-
-      - name: Publish release images
-        uses: docker/bake-action@v6
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-          REVISION: ${{ github.sha }}
-        with:
-          push: true
-          files: |
-            docker-bake.hcl
-          targets: api,web,migrator
-
-      - name: Publish applications and build release package
-        shell: bash
-        env:
-          RELEASE_VERSION: ${{ steps.version.outputs.version }}
-          REVISION: ${{ github.sha }}
-        run: |
-          set -Eeuo pipefail
-          properties=("/p:Version=${RELEASE_VERSION}" "/p:AssemblyVersion=${RELEASE_VERSION}" "/p:FileVersion=${RELEASE_VERSION}" "/p:InformationalVersion=${RELEASE_VERSION}+${REVISION}" "/p:IncludeSourceRevisionInInformationalVersion=false")
-          dotnet publish Axiom.Atlas.API/Axiom.Atlas.API.csproj --configuration Release --no-restore --output artifacts/api "${properties[@]}"
-          dotnet publish Axiom.Atlas.Web/Axiom.Atlas.Web.csproj --configuration Release --no-restore --output artifacts/web "${properties[@]}"
-          dotnet publish Axiom.Atlas.Migrator/Axiom.Atlas.Migrator.csproj --configuration Release --no-restore --output artifacts/migrator "${properties[@]}"
-          mkdir -p release
-          (cd artifacts/api && zip -qr "../../release/AxiomAtlas-API-${RELEASE_VERSION}.zip" .)
-          (cd artifacts/web && zip -qr "../../release/AxiomAtlas-Web-${RELEASE_VERSION}.zip" .)
-          (cd artifacts/migrator && zip -qr "../../release/AxiomAtlas-Migrator-${RELEASE_VERSION}.zip" .)
-          tar --exclude='.env' --exclude='*.local' -czf "release/AxiomAtlas-Deployment-${RELEASE_VERSION}.tar.gz" deploy docs
-          sha256sum release/* > "release/AxiomAtlas-${RELEASE_VERSION}-SHA256SUMS.txt"
-
-      - name: Persist version only after all validations and publications succeed
-        shell: bash
-        env:
-          RELEASE_VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          set -Eeuo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add Axiom.Atlas.Web/Axiom.Atlas.Web.csproj
-          git commit -m "chore: bump version to ${RELEASE_VERSION} [skip ci]"
-          git push origin HEAD:main
-          git tag --annotate "v${RELEASE_VERSION}" --message "Release ${RELEASE_VERSION}"
-          git push origin "v${RELEASE_VERSION}"
-
-      - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_VERSION: ${{ steps.version.outputs.version }}
-        run: gh release create "v${RELEASE_VERSION}" release/* --title "Axiom Atlas ${RELEASE_VERSION}" --generate-notes --repo "$GITHUB_REPOSITORY"
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Resolve the idempotent release version
+        id: release
+        run: |
+          set -Eeuo pipefail
+          mapfile -t tags_at_commit < <(git tag --points-at "$GITHUB_SHA" --list 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true)
+          if (( ${#tags_at_commit[@]} > 1 )); then
+            printf 'O commit %s já possui mais de uma tag estável: %s\n' "$GITHUB_SHA" "${tags_at_commit[*]}" >&2
+            exit 1
+          fi
+          if (( ${#tags_at_commit[@]} == 1 )); then
+            version="${tags_at_commit[0]#v}"
+          else
+            version="$(node version-update.js)"
+          fi
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          tag="v$version"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            target="$(git rev-list -n 1 "$tag")"
+            [[ "$target" == "$GITHUB_SHA" ]] || { printf 'A tag %s aponta para %s, não para %s.\n' "$tag" "$target" "$GITHUB_SHA" >&2; exit 1; }
+          fi
+          git diff --exit-code
+          printf 'version=%s\ntag=%s\n' "$version" "$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Validate the immutable Docker Bake plan
+        run: bash scripts/validate-bake-plan.sh "${{ steps.release.outputs.version }}" "$GITHUB_SHA"
+
+      - name: Publish or reuse immutable images
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          REVISION: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          inspect_revision() {
+            docker buildx imagetools inspect "$1" --format '{{ index .Image.Config.Labels "org.opencontainers.image.revision" }}' 2>/dev/null
+          }
+          needs_publish=false
+          for component in api web migrator; do
+            for tag in "$VERSION" "sha-$REVISION"; do
+              image="ghcr.io/euzebioalves/axiomatlas-${component}:${tag}"
+              if image_revision="$(inspect_revision "$image")"; then
+                [[ "$image_revision" == "$REVISION" ]] || { printf 'Imagem imutável em conflito: %s contém revisão %s.\n' "$image" "$image_revision" >&2; exit 1; }
+              else
+                needs_publish=true
+              fi
+            done
+          done
+          if [[ "$needs_publish" == true ]]; then
+            VERSION="$VERSION" REVISION="$REVISION" docker buildx bake --file docker-bake.hcl --push api web migrator
+          fi
+          for component in api web migrator; do
+            for tag in "$VERSION" "sha-$REVISION"; do
+              image="ghcr.io/euzebioalves/axiomatlas-${component}:${tag}"
+              test "$(inspect_revision "$image")" = "$REVISION"
+            done
+          done
+
+      - name: Prepare and validate release assets
+        id: assets
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          REVISION: ${{ github.sha }}
+        run: |
+          set -Eeuo pipefail
+          bash scripts/prepare-release.sh --version "$VERSION" --revision "$REVISION" --output /tmp/axiom-release >/tmp/axiom-release-dir
+          release_dir="$(cat /tmp/axiom-release-dir)"
+          bash scripts/validate-release-assets.sh "$VERSION" "$release_dir"
+          git diff --exit-code
+          printf 'directory=%s\n' "$release_dir" >> "$GITHUB_OUTPUT"
+
+      - name: Create or verify the release tag
+        env:
+          TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          set -Eeuo pipefail
+          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            target="$(git rev-list -n 1 "$TAG")"
+            [[ "$target" == "$GITHUB_SHA" ]] || { printf 'A tag %s aponta para outro commit.\n' "$TAG" >&2; exit 1; }
+          else
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git tag --annotate "$TAG" "$GITHUB_SHA" --message "Release ${TAG#v}"
+            git push origin "$TAG"
+          fi
+          test "$(git rev-list -n 1 "$TAG")" = "$GITHUB_SHA"
+
+      - name: Create or repair the draft release
+        id: draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -Eeuo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json id,isDraft > /tmp/axiom-release.json 2>/dev/null; then
+            release_id="$(jq -r '.id' /tmp/axiom-release.json)"
+            if [[ "$(jq -r '.isDraft' /tmp/axiom-release.json)" != true ]]; then
+              gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" -f draft=true >/dev/null
+            fi
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --draft --title "Axiom Atlas $VERSION" --notes "Release gerada a partir do commit $GITHUB_SHA." >/dev/null
+            release_id="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json id --jq '.id')"
+          fi
+          printf 'id=%s\n' "$release_id" >> "$GITHUB_OUTPUT"
+
+      - name: Upload and verify release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_DIR: ${{ steps.assets.outputs.directory }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -Eeuo pipefail
+          gh release upload "$TAG" "$RELEASE_DIR"/* --clobber --repo "$GITHUB_REPOSITORY"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets > /tmp/axiom-release-assets.json
+          for name in \
+            "AxiomAtlas-API-${VERSION}.zip" \
+            "AxiomAtlas-Web-${VERSION}.zip" \
+            "AxiomAtlas-Migrator-${VERSION}.zip" \
+            "AxiomAtlas-Deployment-${VERSION}.tar.gz" \
+            "AxiomAtlas-${VERSION}-SHA256SUMS.txt"; do
+            jq -e --arg name "$name" '.assets[] | select(.name == $name and .size > 0)' /tmp/axiom-release-assets.json >/dev/null
+          done
+
+      - name: Publish the verified release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ steps.draft.outputs.id }}
+        run: |
+          set -Eeuo pipefail
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" -f draft=false >/dev/null
+          git diff --exit-code

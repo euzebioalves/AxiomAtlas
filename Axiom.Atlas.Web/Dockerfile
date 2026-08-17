@@ -8,8 +8,10 @@ RUN dotnet restore "Axiom.Atlas.Web/Axiom.Atlas.Web.csproj"
 COPY . .
 ARG VERSION=0.0.0
 ARG REVISION=unknown
-RUN dotnet publish "Axiom.Atlas.Web/Axiom.Atlas.Web.csproj" --configuration Release --no-restore --output /app/publish \
-    /p:Version=$VERSION /p:InformationalVersion=$VERSION+$REVISION /p:IncludeSourceRevisionInInformationalVersion=false
+RUN assembly_version="${VERSION%%-*}" && dotnet publish "Axiom.Atlas.Web/Axiom.Atlas.Web.csproj" --configuration Release --no-restore --output /app/publish \
+    /p:Version=$VERSION /p:VersionPrefix=$VERSION /p:AssemblyVersion=$assembly_version /p:FileVersion=$assembly_version \
+    /p:InformationalVersion=$VERSION+$REVISION /p:SourceRevisionId=$REVISION /p:Revision=$REVISION \
+    /p:IncludeSourceRevisionInInformationalVersion=false /p:ContinuousIntegrationBuild=true
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0.9-noble AS final
 WORKDIR /app

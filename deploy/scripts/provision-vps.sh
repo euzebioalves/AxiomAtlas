@@ -2,6 +2,7 @@
 set -Eeuo pipefail
 
 [[ "$(id -u)" -eq 0 ]] || { echo 'Execute como root durante o provisionamento inicial.' >&2; exit 1; }
+# shellcheck disable=SC1091
 . /etc/os-release
 [[ "${ID:-}" == "ubuntu" && "${VERSION_ID:-}" == "24.04" ]] || { echo 'Este script requer Ubuntu Server 24.04.' >&2; exit 1; }
 id atlasadmin >/dev/null 2>&1 || { echo 'Crie e valide o usuário atlasadmin antes de executar este script.' >&2; exit 1; }

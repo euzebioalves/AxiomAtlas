@@ -21,7 +21,12 @@ load_environment() {
 }
 
 compose() {
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" "$@"
+  local compose_files=(--env-file "$ENV_FILE" -f "$COMPOSE_FILE")
+  if [[ -n "${COMPOSE_ADDITIONAL_FILE:-}" ]]; then
+    require_file "$COMPOSE_ADDITIONAL_FILE"
+    compose_files+=(-f "$COMPOSE_ADDITIONAL_FILE")
+  fi
+  docker compose "${compose_files[@]}" "$@"
 }
 
 require_production_environment() {
