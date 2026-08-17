@@ -1,6 +1,6 @@
 # Configuração de produção
 
-Copie `deploy/.env.example` para `/opt/axiom-atlas/.env`, preencha valores reais e aplique `chmod 600 /opt/axiom-atlas/.env`. O `.env` é ignorado pelo Git e não deve ser copiado para tickets, logs ou releases.
+Copie `deploy/.env.example` para `/opt/axiom-atlas/.env`, preencha valores reais e aplique `chmod 600 /opt/axiom-atlas/.env`. O `.env` é ignorado pelo Git e não deve ser copiado para tickets, logs ou releases. Como ele também é carregado pelos scripts operacionais, valores que contêm espaços devem permanecer entre aspas duplas, como no arquivo de exemplo.
 
 Gere senhas e o segredo JWT com fonte criptograficamente segura. `JwtSettings__SecretKey` deve ter ao menos 32 caracteres. `PublicUrls__WebBaseUrl` deve ser uma URL HTTPS pública; `ApiSettings__BaseUrl` da Web é automaticamente `http://api:8080/` no Compose e nunca deve ser uma URL pública.
 

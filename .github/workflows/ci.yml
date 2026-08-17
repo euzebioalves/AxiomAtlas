@@ -163,7 +163,7 @@ jobs:
             -e 's/^EmailSettings__Password=.*/EmailSettings__Password=ci-password/' \
             -e 's/^BOOTSTRAP_ADMIN_USERNAME=.*/BOOTSTRAP_ADMIN_USERNAME=ciadmin/' \
             -e 's/^BOOTSTRAP_ADMIN_EMAIL=.*/BOOTSTRAP_ADMIN_EMAIL=ciadmin@example.test/' \
-            -e 's/^BOOTSTRAP_ADMIN_FULL_NAME=.*/BOOTSTRAP_ADMIN_FULL_NAME=CI Administrator/' \
+            -e 's/^BOOTSTRAP_ADMIN_FULL_NAME=.*/BOOTSTRAP_ADMIN_FULL_NAME="CI Administrator"/' \
             -e 's/^BOOTSTRAP_ADMIN_PASSWORD=.*/BOOTSTRAP_ADMIN_PASSWORD=Ci-Only!Password123/' .env
           docker compose --env-file .env -f deploy/compose.prod.yml config >/dev/null
           docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml config >/dev/null
