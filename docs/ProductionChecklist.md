@@ -22,6 +22,9 @@
 - [ ] teste de backup executado
 - [ ] teste de restauração executado
 - [ ] imagens da release disponíveis
+- [ ] tag `v*` protegida contra alteração, force update e exclusão
+- [ ] release e checksums validados
+- [ ] processo de recuperação de release parcial revisado
 - [ ] migration executada em banco vazio
 - [ ] administrador inicial criado
 - [ ] Caddy iniciou

@@ -6,6 +6,8 @@ Gere senhas e o segredo JWT com fonte criptograficamente segura. `JwtSettings__S
 
 As aplicações falham cedo em produção quando faltam connection string, JWT, Data Protection, URL pública, SMTP ou cookie. Placeholders `CHANGE_ME`, URLs públicas em HTTP e `localhost` na URL pública são rejeitados.
 
+`AXIOM_DOMAIN` é o host canônico do ambiente: Caddy, `AllowedHosts`, health checks de Web e smoke tests usam esse mesmo domínio. Endereços `localhost` ou `127.0.0.1` só são usados como destino local de processo/container, nunca como Host público.
+
 Após o bootstrap inicial, remova `BOOTSTRAP_ADMIN_PASSWORD` do `.env`. Use o painel administrativo para criar os demais usuários. O processo de bootstrap é idempotente e não substitui um administrador existente.
 
 O cookie público chama-se `__Host-AxiomAtlas.Auth`, é `Secure`, `HttpOnly`, `SameSite=Lax`, sem domínio e com `Path=/`. A API recebe apenas Bearer token internamente; CORS não é habilitado na produção.
