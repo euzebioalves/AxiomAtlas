@@ -276,10 +276,10 @@ jobs:
           sha256sum --check "${postgres_backup}.sha256"
           age -d -i "$age_key" -o /tmp/axiom-restored.dump "$postgres_backup"
           "${compose[@]}" exec -T postgres pg_restore --list < /tmp/axiom-restored.dump >/dev/null
-          "${compose[@]}" exec -T postgres createdb -U axiom_atlas axiom_atlas_restore_ci
-          "${compose[@]}" exec -T postgres pg_restore --no-owner --no-acl -U axiom_atlas -d axiom_atlas_restore_ci < /tmp/axiom-restored.dump
-          "${compose[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U axiom_atlas -d axiom_atlas_restore_ci -tAc 'SELECT count(*) FROM "__EFMigrationsHistory";' | grep -Eq '^[1-9][0-9]*$'
-          "${compose[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U axiom_atlas -d axiom_atlas_restore_ci -tAc "SELECT count(*) FROM \"AspNetUsers\" WHERE \"Email\" = 'ciadmin@example.test';" | tr -d '[:space:]' | grep -Fx '1'
+          "${compose[@]}" exec -T postgres createdb -U axiomatlas axiom_atlas_restore_ci
+          "${compose[@]}" exec -T postgres pg_restore --no-owner --no-acl -U axiomatlas -d axiom_atlas_restore_ci < /tmp/axiom-restored.dump
+          "${compose[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U axiomatlas -d axiom_atlas_restore_ci -tAc 'SELECT count(*) FROM "__EFMigrationsHistory";' | grep -Eq '^[1-9][0-9]*$'
+          "${compose[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U axiomatlas -d axiom_atlas_restore_ci -tAc "SELECT count(*) FROM \"AspNetUsers\" WHERE \"Email\" = 'ciadmin@example.test';" | tr -d '[:space:]' | grep -Fx '1'
           bash deploy/scripts/backup-state.sh
           state_backup="$(find backups/state -name '*.tar.gz.age' -type f -print -quit)"; test -n "$state_backup"
           sha256sum --check "${state_backup}.sha256"
