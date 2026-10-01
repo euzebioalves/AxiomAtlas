@@ -21,16 +21,9 @@ namespace Axiom.Atlas.Web.Controllers.Users
         }
 
         [HttpGet("/Users/GetAvatar")]
-        [AllowAnonymous]
-        public async Task<IActionResult> GetAvatar([FromQuery] string username)
+        public async Task<IActionResult> GetAvatar()
         {
             var defaultImagePath = Path.Combine(_env.WebRootPath, "resources", "images", "1.png");
-
-            if (string.IsNullOrEmpty(username))
-            {
-                System.Diagnostics.Debug.WriteLine("---> PROXY: Username chegou vazio.");
-                return PhysicalFile(defaultImagePath, "image/png");
-            }
 
             try
             {
@@ -38,35 +31,21 @@ namespace Axiom.Atlas.Web.Controllers.Users
 
                 var token = User.FindFirst("JWToken")?.Value;
 
-                if (string.IsNullOrEmpty(token))
-                {
-                    System.Diagnostics.Debug.WriteLine("---> PROXY: JWToken NÃO encontrado nas Claims do usuário logado.");
-                }
-                else
+                if (!string.IsNullOrEmpty(token))
                 {
                     client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
                 }
 
-                System.Diagnostics.Debug.WriteLine($"---> PROXY: Chamando API para o usuário: {username}");
-
-                var safeUsername = Uri.EscapeDataString(username.Trim());
-
-                var response = await client.GetAsync($"api/Users/profile-picture/{safeUsername}");
+                var response = await client.GetAsync("api/Users/profile-picture/me");
 
                 if (response.IsSuccessStatusCode)
                 {
-                    System.Diagnostics.Debug.WriteLine("---> PROXY: Sucesso! A API retornou a imagem.");
                     var imageBytes = await response.Content.ReadAsByteArrayAsync();
-                    return File(imageBytes, "image/jpeg");
-                }
-                else
-                {
-                    System.Diagnostics.Debug.WriteLine($"---> PROXY: A API recusou a requisição. StatusCode: {response.StatusCode}");
+                    return File(imageBytes, response.Content.Headers.ContentType?.MediaType ?? "image/jpeg");
                 }
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                System.Diagnostics.Debug.WriteLine($"---> PROXY: Exceção (Crash) ao tentar falar com a API: {ex.Message}");
             }
 
             return PhysicalFile(defaultImagePath, "image/png");

@@ -2,29 +2,309 @@ name: Continuous Integration
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main]
   push:
-    branches: [ main ]
+    branches: [main]
+
+permissions:
+  contents: read
 
 jobs:
-  build-and-test:
-    name: Build and test
-    runs-on: ubuntu-latest
+  validate:
+    name: Validate application and production stack
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17.5-bookworm
+        env:
+          POSTGRES_DB: axiom_atlas_ci
+          POSTGRES_USER: axiom_ci
+          POSTGRES_PASSWORD: ci-only-password
+        options: >-
+          --health-cmd "pg_isready -U axiom_ci -d axiom_atlas_ci"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+        ports:
+          - 5432:5432
+    env:
+      ConnectionStrings__DefaultConnection: Host=localhost;Port=5432;Database=axiom_atlas_ci;Username=axiom_ci;Password=ci-only-password
+      JwtSettings__SecretKey: ci-only-secret-with-at-least-thirty-two-characters
+      JwtSettings__Issuer: AxiomAtlasApi
+      JwtSettings__Audience: AxiomAtlasWeb
+      JwtSettings__ExpirationMinutes: 480
+      DataProtection__KeysPath: /tmp/axiom-atlas-ci-keys
+      PublicUrls__WebBaseUrl: https://ci.example.test
+      EmailSettings__SmtpServer: smtp.example.test
+      EmailSettings__SmtpPort: 587
+      EmailSettings__SenderName: Axiom Atlas CI
+      EmailSettings__SenderEmail: ci@example.test
+      EmailSettings__Username: ci@example.test
+      EmailSettings__Password: ci-only-password
+      Authentication__CookieExpirationMinutes: 480
+      AXIOM_DOMAIN: ci.example.test
+      AXIOM_LOCAL_PORT: 8088
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Configure .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.x
+
+      - name: Configure Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Validate workflow, shell and secret hygiene
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes age postgresql-client shellcheck unzip zip
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+          go install github.com/zricethezav/gitleaks/v8@v8.28.0
+          "$HOME/go/bin/actionlint" .github/workflows/ci.yml .github/workflows/release.yml .github/workflows/deploy-production.yml .github/workflows/rollback-production.yml
+          mapfile -t scripts < <(find deploy/scripts scripts -type f -name '*.sh' -print | sort)
+          bash -n "${scripts[@]}"
+          shellcheck -x "${scripts[@]}"
+          bash scripts/test-release-orchestration.sh
+          "$HOME/go/bin/gitleaks" git --log-opts="origin/main..HEAD" --no-banner
+          "$HOME/go/bin/gitleaks" dir . --no-banner
 
       - name: Restore dependencies
         run: dotnet restore Axiom.Atlas.slnx
 
-      - name: Build
+      - name: Install EF Core tools
+        run: |
+          dotnet tool install --global dotnet-ef --version 10.0.9
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: Build Release
         run: dotnet build Axiom.Atlas.slnx --configuration Release --no-restore
 
-      - name: Run tests
+      - name: Run automated tests
         run: dotnet test Axiom.Atlas.slnx --configuration Release --no-build --no-restore
+
+      - name: Enforce dependency vulnerability policy
+        run: |
+          set -Eeuo pipefail
+          dotnet list Axiom.Atlas.slnx package --vulnerable --include-transitive --format json > /tmp/axiom-vulnerabilities.json
+          node scripts/check-vulnerabilities.js /tmp/axiom-vulnerabilities.json
+
+      - name: Validate non-publishing release preparation
+        run: |
+          set -Eeuo pipefail
+          release_version="$(node version-update.js)"
+          [[ "$release_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          git diff --exit-code
+          bash scripts/prepare-release.sh --version 0.0.0-ci --revision "$GITHUB_SHA" --output /tmp/axiom-release-preparation >/tmp/axiom-release-dir
+          release_dir="$(cat /tmp/axiom-release-dir)"
+          bash scripts/validate-release-assets.sh 0.0.0-ci "$release_dir"
+          bash scripts/validate-bake-plan.sh 0.0.0-ci "$GITHUB_SHA"
+          git diff --exit-code
+          test -z "$(git status --porcelain --untracked-files=all)"
+
+      - name: Apply production baseline to an empty PostgreSQL database
+        run: dotnet run --project Axiom.Atlas.Migrator/Axiom.Atlas.Migrator.csproj -- migrate
+
+      - name: Verify schema and migration history
+        env:
+          PGPASSWORD: ci-only-password
+        run: |
+          set -Eeuo pipefail
+          psql -h localhost -U axiom_ci -d axiom_atlas_ci -v ON_ERROR_STOP=1 -c 'SELECT "MigrationId" FROM "__EFMigrationsHistory";'
+          psql -h localhost -U axiom_ci -d axiom_atlas_ci -v ON_ERROR_STOP=1 -c 'SELECT 1 FROM "AspNetUsers" LIMIT 1;'
+          psql -h localhost -U axiom_ci -d axiom_atlas_ci -v ON_ERROR_STOP=1 -c 'SELECT 1 FROM "TimeEntries" LIMIT 1;'
+
+      - name: Check EF model consistency
+        run: dotnet ef migrations has-pending-model-changes --project Axiom.Atlas.Persistence/Axiom.Atlas.Persistence.csproj --startup-project Axiom.Atlas.API/Axiom.Atlas.API.csproj
+
+      - name: Start API and validate health/security endpoints
+        run: |
+          set -Eeuo pipefail
+          dotnet run --project Axiom.Atlas.API/Axiom.Atlas.API.csproj --configuration Release --no-build --urls http://127.0.0.1:18080 > /tmp/axiom-api.log 2>&1 &
+          echo $! > /tmp/axiom-api.pid
+          for _ in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:18080/health/ready; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:18080/health/live
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:18080/register)" = "404"
+
+      - name: Build container images
+        run: |
+          set -Eeuo pipefail
+          docker build -f Axiom.Atlas.API/Dockerfile -t axiom-atlas-api:ci --build-arg VERSION=0.0.0-ci --build-arg REVISION="$GITHUB_SHA" .
+          docker build -f Axiom.Atlas.Web/Dockerfile -t axiom-atlas-web:ci --build-arg VERSION=0.0.0-ci --build-arg REVISION="$GITHUB_SHA" .
+          docker build -f Axiom.Atlas.Migrator/Dockerfile -t axiom-atlas-migrator:ci --build-arg VERSION=0.0.0-ci --build-arg REVISION="$GITHUB_SHA" .
+
+      - name: Enforce container vulnerability policy
+        run: |
+          set -Eeuo pipefail
+          for image in axiom-atlas-api:ci axiom-atlas-web:ci axiom-atlas-migrator:ci; do
+            docker run --rm --pull=always -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.58.1 image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 "$image"
+          done
+
+      - name: Prepare production-like environment
+        run: |
+          set -Eeuo pipefail
+          unset ConnectionStrings__DefaultConnection
+          cp deploy/.env.example .env
+          sed -i \
+            -e 's/CHANGE_ME.example.com/ci.example.test/g' \
+            -e 's/CHANGE_ME_GENERATE_A_LONG_RANDOM_VALUE/ci-postgres-password/g' \
+            -e 's/CHANGE_ME_GENERATE_AT_LEAST_32_RANDOM_CHARACTERS/ci-secret-with-at-least-thirty-two-characters/g' \
+            -e 's/CHANGE_ME:axiom-atlas/local:axiom-atlas/g' \
+            -e 's/^EmailSettings__SmtpServer=.*/EmailSettings__SmtpServer=smtp.example.test/' \
+            -e 's/^EmailSettings__SenderEmail=.*/EmailSettings__SenderEmail=ci@example.test/' \
+            -e 's/^EmailSettings__Username=.*/EmailSettings__Username=ci@example.test/' \
+            -e 's/^EmailSettings__Password=.*/EmailSettings__Password=ci-password/' \
+            -e 's/^BOOTSTRAP_ADMIN_USERNAME=.*/BOOTSTRAP_ADMIN_USERNAME=ciadmin/' \
+            -e 's/^BOOTSTRAP_ADMIN_EMAIL=.*/BOOTSTRAP_ADMIN_EMAIL=ciadmin@example.test/' \
+            -e 's/^BOOTSTRAP_ADMIN_FULL_NAME=.*/BOOTSTRAP_ADMIN_FULL_NAME="CI Administrator"/' \
+            -e 's/^BOOTSTRAP_ADMIN_PASSWORD=.*/BOOTSTRAP_ADMIN_PASSWORD=Ci-Only!Password123/' .env
+          docker compose --env-file .env -f deploy/compose.prod.yml config >/dev/null
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml config >/dev/null
+          docker run --rm --env AXIOM_DOMAIN=ci.example.test --env CADDY_EMAIL=ci@example.test \
+            --volume "$GITHUB_WORKSPACE/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.10.0-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+          docker run --rm --env AXIOM_DOMAIN=ci.example.test --env CADDY_EMAIL= \
+            --volume "$GITHUB_WORKSPACE/deploy/Caddyfile.local:/etc/caddy/Caddyfile:ro" \
+            caddy:2.10.0-alpine caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+
+      - name: Start PostgreSQL
+        run: |
+          set -Eeuo pipefail
+          unset ConnectionStrings__DefaultConnection
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml build
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml up -d --wait postgres
+
+      - name: Run production migration
+        run: |
+          set -Eeuo pipefail
+          unset ConnectionStrings__DefaultConnection
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml run --rm migrate
+
+      - name: Validate idempotent administrator bootstrap
+        run: |
+          set -Eeuo pipefail
+          unset ConnectionStrings__DefaultConnection
+          compose=(docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml)
+          "${compose[@]}" --profile bootstrap run --rm bootstrap-admin
+          "${compose[@]}" --profile bootstrap run --rm bootstrap-admin
+          sql="SELECT count(*) FROM \"AspNetUsers\" WHERE \"Email\" = \$\$ciadmin@example.test\$\$;"
+          "${compose[@]}" exec -T postgres sh -c "psql -v ON_ERROR_STOP=1 -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -tAc '$sql'" \
+            | tr -d '[:space:]' | grep -Fx '1'
+
+      - name: Start API, Web and Caddy
+        run: docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml up -d api web caddy
+
+      - name: Validate container health
+        run: |
+          set -Eeuo pipefail
+          compose=(docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml)
+          wait_for_health() {
+            local service="$1" container status
+            for _ in {1..45}; do
+              container="$("${compose[@]}" ps -q "$service")"
+              status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing-healthcheck{{end}}' "$container")"
+              [[ "$status" == "healthy" ]] && return 0
+              printf '%s: %s\n' "$service" "$status"
+              sleep 2
+            done
+            printf 'O contêiner %s não se tornou saudável.\n' "$service" >&2
+            exit 1
+          }
+          wait_for_health api
+          wait_for_health web
+          "${compose[@]}" ps
+
+      - name: Validate Web directly and Web to API communication
+        run: |
+          set -Eeuo pipefail
+          compose=(docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml)
+          "${compose[@]}" exec -T web curl --include --fail --silent --show-error --header 'Host: ci.example.test' http://127.0.0.1:8080/health/live
+          "${compose[@]}" exec -T web curl --include --fail --silent --show-error --header 'Host: ci.example.test' http://127.0.0.1:8080/health/ready
+          "${compose[@]}" exec -T web curl --include --fail --silent --show-error http://api:8080/health/ready
+
+      - name: Validate Caddy smoke test and PDF boundaries
+        run: |
+          set -Eeuo pipefail
+          for _ in {1..30}; do
+            if bash deploy/scripts/smoke-local.sh; then break; fi
+            sleep 2
+          done
+          bash deploy/scripts/smoke-local.sh
+          compose=(docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml)
+          "${compose[@]}" exec -T web curl --include --fail --silent --show-error --header 'Host: ci.example.test' http://127.0.0.1:8080/health/pdf
+          status="$(curl --resolve 'ci.example.test:8088:127.0.0.1' --silent --show-error --output /tmp/axiom-public-pdf-health.txt --write-out '%{http_code}' http://ci.example.test:8088/health/pdf)"
+          test "$status" = '404'
+
+      - name: Validate Data Protection persistence and backup routines
+        run: |
+          set -Eeuo pipefail
+          compose=(docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml)
+          key_fingerprint() { "${compose[@]}" exec -T "$1" sh -c 'set -eu; find /var/lib/axiom-atlas/keys -type f -name "key-*.xml" -print -exec sha256sum {} \; | sort'; }
+          wait_for_health() {
+            local service="$1" container status
+            for _ in {1..30}; do
+              container="$("${compose[@]}" ps -q "$service")"
+              status="$(docker inspect --format '{{.State.Health.Status}}' "$container")"
+              [[ "$status" == healthy ]] && return 0
+              sleep 2
+            done
+            printf '%s não ficou saudável após reinício.\n' "$service" >&2
+            exit 1
+          }
+          for service in web api; do
+            before="$(key_fingerprint "$service")"; test -n "$before"
+            "${compose[@]}" restart "$service"; wait_for_health "$service"
+            test "$before" = "$(key_fingerprint "$service")"
+          done
+          rm -rf backups state
+          mkdir -p state
+          printf '%s\n' '0.0.0-ci' > state/current-version
+          age_key="$(mktemp)"; rm -f "$age_key"; trap 'rm -f "$age_key" /tmp/axiom-restored.dump /tmp/axiom-restored-state.tar.gz' EXIT
+          age-keygen -o "$age_key" >/dev/null
+          recipient="$(awk '/^# public key: / { print $4 }' "$age_key")"
+          printf '\nBACKUP_LOCAL_TEST=true\nBACKUP_AGE_RECIPIENT=%s\n' "$recipient" >> .env
+          export COMPOSE_ADDITIONAL_FILE="$GITHUB_WORKSPACE/deploy/compose.local.yml"
+          bash deploy/scripts/backup-postgres.sh
+          postgres_backup="$(find backups/postgres -name '*.dump.age' -type f -print -quit)"; test -n "$postgres_backup"
+          sha256sum --check "${postgres_backup}.sha256"
+          age -d -i "$age_key" -o /tmp/axiom-restored.dump "$postgres_backup"
+          "${compose[@]}" exec -T postgres pg_restore --list < /tmp/axiom-restored.dump >/dev/null
+          "${compose[@]}" exec -T postgres createdb -U axiomatlas axiom_atlas_restore_ci
+          "${compose[@]}" exec -T postgres pg_restore --no-owner --no-acl -U axiomatlas -d axiom_atlas_restore_ci < /tmp/axiom-restored.dump
+          "${compose[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U axiomatlas -d axiom_atlas_restore_ci -tAc 'SELECT count(*) FROM "__EFMigrationsHistory";' | grep -Eq '^[1-9][0-9]*$'
+          "${compose[@]}" exec -T postgres psql -v ON_ERROR_STOP=1 -U axiomatlas -d axiom_atlas_restore_ci -tAc "SELECT count(*) FROM \"AspNetUsers\" WHERE \"Email\" = 'ciadmin@example.test';" | tr -d '[:space:]' | grep -Fx '1'
+          bash deploy/scripts/backup-state.sh
+          state_backup="$(find backups/state -name '*.tar.gz.age' -type f -print -quit)"; test -n "$state_backup"
+          sha256sum --check "${state_backup}.sha256"
+          age -d -i "$age_key" -o /tmp/axiom-restored-state.tar.gz "$state_backup"
+          tar -tzf /tmp/axiom-restored-state.tar.gz | grep -Eq '(^|\./)state/current-version$'
+          tar -tzf /tmp/axiom-restored-state.tar.gz | grep -Eq '(^|\./)\.env$'
+          tar -tzf /tmp/axiom-restored-state.tar.gz | grep -Eq '(^|\./)compose.prod.yml$'
+          tar -tzf /tmp/axiom-restored-state.tar.gz | grep -Eq '(^|\./)volumes/api/key-.*\.xml$'
+          tar -tzf /tmp/axiom-restored-state.tar.gz | grep -Eq '(^|\./)volumes/web/key-.*\.xml$'
+
+      - name: Collect stack diagnostics on failure
+        if: failure()
+        run: |
+          compose=(docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml)
+          "${compose[@]}" ps || true
+          for service in caddy web api; do "${compose[@]}" logs --no-color "$service" || true; done
+          web_id="$("${compose[@]}" ps -q web || true)"; [[ -z "$web_id" ]] || docker inspect "$web_id" || true
+          "${compose[@]}" exec -T web curl --include --header 'Host: ci.example.test' http://127.0.0.1:8080/health/ready || true
+          "${compose[@]}" exec -T web curl --include http://api:8080/health/ready || true
+          curl --resolve 'ci.example.test:8088:127.0.0.1' --include http://ci.example.test:8088/health/ready || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          if test -f /tmp/axiom-api.pid; then kill "$(cat /tmp/axiom-api.pid)" || true; fi
+          docker compose --env-file .env -f deploy/compose.prod.yml -f deploy/compose.local.yml down --remove-orphans || true
+          rm -rf backups state /tmp/axiom-release-preparation

@@ -250,6 +250,10 @@ namespace Axiom.Atlas.Persistence
                 entity.Property(x => x.WorkPackageUrl).HasMaxLength(1000);
                 entity.HasIndex(x => new { x.UserId, x.DeliveredAt });
             });
+
+            builder.Entity<User>()
+                .Property(x => x.ProfilePictureContentType)
+                .HasMaxLength(32);
         }
     }
 }

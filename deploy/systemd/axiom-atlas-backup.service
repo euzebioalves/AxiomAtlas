@@ -1,0 +1,13 @@
+[Unit]
+Description=Axiom Atlas encrypted backup
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=atlasadmin
+Group=atlasadmin
+WorkingDirectory=/opt/axiom-atlas
+ExecStart=/opt/axiom-atlas/deploy/scripts/backup-postgres.sh
+ExecStart=/opt/axiom-atlas/deploy/scripts/backup-state.sh
+Nice=10

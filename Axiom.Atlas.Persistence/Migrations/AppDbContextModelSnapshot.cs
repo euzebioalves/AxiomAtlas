@@ -917,6 +917,10 @@ namespace Axiom.Atlas.Persistence.Migrations
                     b.Property<byte[]>("ProfilePicture")
                         .HasColumnType("bytea");
 
+                    b.Property<string>("ProfilePictureContentType")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
 

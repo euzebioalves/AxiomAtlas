@@ -1,0 +1,40 @@
+services:
+  caddy:
+    ports: !override
+      - "127.0.0.1:8088:80"
+    environment:
+      CADDY_EMAIL: ""
+    volumes:
+      - ./Caddyfile.local:/etc/caddy/Caddyfile:ro
+  web:
+    build:
+      context: ..
+      dockerfile: Axiom.Atlas.Web/Dockerfile
+      args:
+        VERSION: 0.0.0-local
+        REVISION: local
+    image: axiom-atlas-web:local
+  api:
+    build:
+      context: ..
+      dockerfile: Axiom.Atlas.API/Dockerfile
+      args:
+        VERSION: 0.0.0-local
+        REVISION: local
+    image: axiom-atlas-api:local
+  migrate:
+    build:
+      context: ..
+      dockerfile: Axiom.Atlas.Migrator/Dockerfile
+      args:
+        VERSION: 0.0.0-local
+        REVISION: local
+    image: axiom-atlas-migrator:local
+  bootstrap-admin:
+    build:
+      context: ..
+      dockerfile: Axiom.Atlas.Migrator/Dockerfile
+      args:
+        VERSION: 0.0.0-local
+        REVISION: local
+    image: axiom-atlas-migrator:local

@@ -6,7 +6,6 @@ using Axiom.Atlas.Infrastructure.Services.TimeEntries;
 using Axiom.Atlas.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,19 +13,24 @@ namespace Axiom.Atlas.API.Controllers.TimeEntries
 {
     [Route("api/[controller]")]
     [ApiController]
-    [EnableCors("AxiomAtlasPolicy")]
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     public class TimeEntriesController : ControllerBase
     {
         private readonly OpenProjectService _openProjectService;
         private readonly AppDbContext _context;
         private readonly TimeEntryCsvImportParser _timeEntryCsvImportParser;
+        private readonly ILogger<TimeEntriesController> _logger;
 
-        public TimeEntriesController(OpenProjectService openProjectService, AppDbContext context, TimeEntryCsvImportParser timeEntryCsvImportParser)
+        public TimeEntriesController(
+            OpenProjectService openProjectService,
+            AppDbContext context,
+            TimeEntryCsvImportParser timeEntryCsvImportParser,
+            ILogger<TimeEntriesController> logger)
         {
             _openProjectService = openProjectService;
             _context = context;
             _timeEntryCsvImportParser = timeEntryCsvImportParser;
+            _logger = logger;
         }
 
         [HttpPost("import")]
@@ -157,7 +161,7 @@ namespace Axiom.Atlas.API.Controllers.TimeEntries
                 return BadRequest(new { Message = "A hora de término deve ser posterior à hora de início." });
             }
 
-            // 3. A MÁGICA MATEMÁTICA: A API ignora o request.Hours e calcula a verdade
+            // The API calculates the authoritative duration instead of trusting the request value.
             var horasCalculadas = Math.Round((endTime - startTime).TotalHours, 2);
 
             var timeEntry = new TimeEntry
@@ -327,7 +331,7 @@ namespace Axiom.Atlas.API.Controllers.TimeEntries
                 return BadRequest(new { Message = "A hora de término deve ser posterior à hora de início." });
             }
 
-            // 3. A MÁGICA MATEMÁTICA: Calcula as novas horas
+            // Calculate the authoritative updated duration.
             var horasCalculadas = Math.Round((endTime - startTime).TotalHours, 2);
 
             // 4. Atualiza TODOS os campos necessários (incluindo os horários que faltavam)
@@ -395,7 +399,8 @@ namespace Axiom.Atlas.API.Controllers.TimeEntries
             }
             catch (InvalidOperationException exception)
             {
-                return BadRequest(new { message = exception.Message });
+                _logger.LogWarning(exception, "A reconciliação de apontamentos importados não pôde ser executada.");
+                return BadRequest(new { message = "A reconciliação não está disponível no momento." });
             }
             var review = new TimeEntryReconciliationReviewDto { PendingEntriesChecked = pendingEntries.Count };
 

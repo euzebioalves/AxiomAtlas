@@ -8,7 +8,6 @@ using Axiom.Atlas.Infrastructure.Services.TimeEntries;
 using Axiom.Atlas.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -20,7 +19,6 @@ namespace Axiom.Atlas.API.Controllers.TimeClock
 {
     [Route("api/[controller]")]
     [ApiController]
-    [EnableCors("AxiomAtlasPolicy")]
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     public class TimeClockController : ControllerBase
     {

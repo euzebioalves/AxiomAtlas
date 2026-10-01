@@ -1,0 +1,53 @@
+name: Deploy production
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version without the v prefix (for example 1.0.17)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment: production
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Validate version and release assets
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          docker manifest inspect "ghcr.io/euzebioalves/axiomatlas-api:$VERSION" >/dev/null
+          docker manifest inspect "ghcr.io/euzebioalves/axiomatlas-web:$VERSION" >/dev/null
+          docker manifest inspect "ghcr.io/euzebioalves/axiomatlas-migrator:$VERSION" >/dev/null
+
+      - name: Configure SSH
+        env:
+          PRIVATE_KEY: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+          KNOWN_HOSTS: ${{ secrets.PROD_KNOWN_HOSTS }}
+        run: |
+          set -Eeuo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$PRIVATE_KEY" > ~/.ssh/id_ed25519 && chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts && chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy immutable version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: ssh -i ~/.ssh/id_ed25519 -p "${{ secrets.PROD_SSH_PORT }}" "${{ secrets.PROD_USER }}@${{ secrets.PROD_HOST }}" "/opt/axiom-atlas/deploy/scripts/deploy.sh $VERSION"
+
+      - name: Confirm external readiness
+        run: curl --fail --silent --show-error --max-time 20 "https://${{ secrets.PROD_DOMAIN }}/health/ready"

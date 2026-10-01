@@ -89,7 +89,7 @@ namespace Axiom.Atlas.API.Controllers.Integrations
             // Isso evita apagar o token se o form for enviado vazio por engano.
             if (!string.IsNullOrWhiteSpace(dto.PrimaryToken) && dto.PrimaryToken != "********")
             {
-                // A MÁGICA DA SEGURANÇA: Criptografa antes de ir para o banco
+                // Encrypt sensitive integration data before persistence.
                 setting.PrimaryToken = _protector.Protect(dto.PrimaryToken);
             }
         }

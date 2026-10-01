@@ -1,0 +1,47 @@
+# Checklist de primeira publicação
+
+- [ ] VPS contratada
+- [ ] Ubuntu 24.04 instalado
+- [ ] IP anotado
+- [ ] chave SSH criada
+- [ ] acesso por chave testado
+- [ ] usuário administrativo criado
+- [ ] login de root desabilitado depois do teste
+- [ ] autenticação por senha SSH desabilitada depois do teste
+- [ ] UFW configurado
+- [ ] apenas 22, 80 e 443 acessíveis
+- [ ] Docker instalado
+- [ ] Docker Compose validado
+- [ ] domínio apontando para a VPS
+- [ ] `.env` configurado com permissão `600`
+- [ ] segredos gerados de forma segura
+- [ ] GHCR autenticado
+- [ ] backup externo configurado
+- [ ] criptografia de backup configurada
+- [ ] timer de backup ativo
+- [ ] teste de backup executado
+- [ ] teste de restauração executado
+- [ ] imagens da release disponíveis
+- [ ] tag `v*` protegida contra alteração, force update e exclusão
+- [ ] release e checksums validados
+- [ ] processo de recuperação de release parcial revisado
+- [ ] migration executada em banco vazio
+- [ ] administrador inicial criado
+- [ ] Caddy iniciou
+- [ ] certificado HTTPS emitido
+- [ ] API não está publicamente exposta
+- [ ] PostgreSQL não está publicamente exposto
+- [ ] Web `/health/live` retornando 200
+- [ ] Web `/health/ready` retornando 200
+- [ ] login validado
+- [ ] recuperação de senha validada
+- [ ] foto de perfil validada
+- [ ] geração de PDF validada
+- [ ] integração GLPI validada
+- [ ] integração OpenProject validada
+- [ ] persistência das chaves Data Protection validada
+- [ ] reinício dos containers validado
+- [ ] reinício da VPS validado
+- [ ] rollback da aplicação testado
+- [ ] monitoramento configurado
+- [ ] versão implantada registrada

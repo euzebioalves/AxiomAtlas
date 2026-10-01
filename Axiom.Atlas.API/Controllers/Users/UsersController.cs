@@ -21,27 +21,47 @@ namespace Axiom.Atlas.API.Controllers.Users
         private readonly RoleManager<IdentityRole<Guid>> _roleManager;
         private readonly IUserRepository _userRepository;
         private readonly AppDbContext _context;
+        private readonly IConfiguration _configuration;
 
-        public UsersController(UserManager<User> user, RoleManager<IdentityRole<Guid>> roleManager, IUserRepository userRepository, AppDbContext context)
+        public UsersController(
+            UserManager<User> user,
+            RoleManager<IdentityRole<Guid>> roleManager,
+            IUserRepository userRepository,
+            AppDbContext context,
+            IConfiguration configuration)
         {
             _userManager = user;
             _roleManager = roleManager;
             _userRepository = userRepository;
             _context = context;
+            _configuration = configuration;
         }
 
-        [AllowAnonymous]
-        [HttpGet("profile-picture/{username}")]
-        public async Task<IActionResult> GetProfilePicture(string username)
+        [HttpGet("profile-picture/me")]
+        public async Task<IActionResult> GetMyProfilePicture()
         {
-            var user = await _userRepository.GetByUsernameAsync(username);
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var user = string.IsNullOrWhiteSpace(userId) ? null : await _userManager.FindByIdAsync(userId);
 
             if (user == null || user.ProfilePicture == null || user.ProfilePicture.Length == 0)
             {
                 return NotFound();
             }
 
-            return File(user.ProfilePicture, "image/jpeg");
+            return File(user.ProfilePicture, GetProfilePictureContentType(user));
+        }
+
+        [HttpGet("profile-picture/{id:guid}")]
+        [Authorize(Policy = "AdministrationOnly")]
+        public async Task<IActionResult> GetProfilePicture(Guid id)
+        {
+            var user = await _userManager.FindByIdAsync(id.ToString());
+            if (user?.ProfilePicture is not { Length: > 0 })
+            {
+                return NotFound();
+            }
+
+            return File(user.ProfilePicture, GetProfilePictureContentType(user));
         }
 
         [HttpPut("update-profile")]
@@ -61,10 +81,22 @@ namespace Axiom.Atlas.API.Controllers.Users
 
             if (request.ProfilePictureFile != null && request.ProfilePictureFile.Length > 0)
             {
+                var maxBytes = _configuration.GetValue("ProfilePicture:MaxBytes", 2 * 1024 * 1024);
+                if (request.ProfilePictureFile.Length > maxBytes)
+                {
+                    return BadRequest(new { message = "A foto de perfil excede o tamanho permitido." });
+                }
+
                 using var memoryStream = new MemoryStream();
                 await request.ProfilePictureFile.CopyToAsync(memoryStream);
+                var image = memoryStream.ToArray();
+                if (!TryGetImageContentType(image, request.ProfilePictureFile.FileName, request.ProfilePictureFile.ContentType, out var contentType))
+                {
+                    return BadRequest(new { message = "Envie uma imagem JPEG, PNG ou WebP válida." });
+                }
 
-                user.ProfilePicture = memoryStream.ToArray();
+                user.ProfilePicture = image;
+                user.ProfilePictureContentType = contentType;
             }
 
             await _userRepository.UpdateAsync(user);
@@ -332,7 +364,7 @@ namespace Axiom.Atlas.API.Controllers.Users
             // Como vamos pular o UserManager, precisamos girar a chave de concorrência manualmente
             user.ConcurrencyStamp = Guid.NewGuid().ToString();
 
-            // 4. A MÁGICA CIRÚRGICA: 
+            // Save only the expected status changes through the tracked context.
             // Salvamos direto pelo Context. O EF Core vai comparar o objeto e ver que 
             // APENAS IsActive, LockoutEnd e ConcurrencyStamp mudaram!
             await context.SaveChangesAsync();
@@ -365,6 +397,40 @@ namespace Axiom.Atlas.API.Controllers.Users
             }
 
             return BadRequest(result.Errors);
+        }
+
+        private static string GetProfilePictureContentType(User user) =>
+            user.ProfilePictureContentType is "image/jpeg" or "image/png" or "image/webp"
+                ? user.ProfilePictureContentType
+                : "image/jpeg";
+
+        private static bool TryGetImageContentType(byte[] content, string fileName, string declaredContentType, out string contentType)
+        {
+            contentType = string.Empty;
+            var extension = Path.GetExtension(fileName).ToLowerInvariant();
+            var jpeg = content.Length >= 3 && content[0] == 0xFF && content[1] == 0xD8 && content[2] == 0xFF;
+            var png = content.Length >= 8 && content.AsSpan(0, 8).SequenceEqual(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A });
+            var webp = content.Length >= 12 && content.AsSpan(0, 4).SequenceEqual("RIFF"u8) && content.AsSpan(8, 4).SequenceEqual("WEBP"u8);
+
+            if (jpeg && extension is ".jpg" or ".jpeg" && declaredContentType.Equals("image/jpeg", StringComparison.OrdinalIgnoreCase))
+            {
+                contentType = "image/jpeg";
+                return true;
+            }
+
+            if (png && extension == ".png" && declaredContentType.Equals("image/png", StringComparison.OrdinalIgnoreCase))
+            {
+                contentType = "image/png";
+                return true;
+            }
+
+            if (webp && extension == ".webp" && declaredContentType.Equals("image/webp", StringComparison.OrdinalIgnoreCase))
+            {
+                contentType = "image/webp";
+                return true;
+            }
+
+            return false;
         }
     }
 }
