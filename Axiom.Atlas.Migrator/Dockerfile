@@ -13,7 +13,7 @@ RUN assembly_version="${VERSION%%-*}" && dotnet publish "Axiom.Atlas.Migrator/Ax
     /p:InformationalVersion=$VERSION+$REVISION /p:SourceRevisionId=$REVISION /p:Revision=$REVISION \
     /p:IncludeSourceRevisionInInformationalVersion=false /p:ContinuousIntegrationBuild=true
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.11-noble AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.12-noble AS final
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends libgssapi-krb5-2 \
     && rm -rf /var/lib/apt/lists/* \
